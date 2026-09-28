@@ -8,7 +8,7 @@ export const PERMISSIONS = [
   { id: 'submissions.validate', label: 'Validasi submission', category: 'Admin' },
   { id: 'scores.view', label: 'Lihat Scoring & Leaderboard', category: 'Admin' },
   { id: 'members.view', label: 'Lihat daftar member', category: 'Member' },
-  { id: 'members.manage', label: 'Undang, ubah & nonaktifkan member', category: 'Member' },
+  { id: 'members.manage', label: 'Daftarkan, ubah & nonaktifkan member', category: 'Member' },
   { id: 'roles.manage', label: 'Ubah role & hak akses', category: 'Member' },
   { id: 'portal.view', label: 'Buka Game Portal', category: 'Portal' },
   { id: 'portal.submit', label: 'Submit challenge untuk grup', category: 'Portal' },

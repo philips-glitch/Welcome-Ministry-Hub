@@ -10,20 +10,17 @@
 .login-panel { display: flex; justify-content: center; padding: 20px 16px 40px; }
 .login-card { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; }
 .login-title { font: 800 26px var(--display); color: var(--green); }
-.login-google { height: 48px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--paper); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; font-size: 14px; }
-.login-google:hover { border-color: var(--green); }
-.login-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
-.login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
-.login-seg { display: flex; background: #ede6d6; border-radius: 12px; padding: 4px; gap: 4px; }
-.login-seg button { flex: 1; height: 36px; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--muted); }
-.login-seg button.on { background: var(--paper); color: var(--green); }
 .login-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .login-field input { height: 48px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--paper); padding: 0 14px; font: inherit; font-weight: 500; font-size: 15px; color: var(--ink); }
 .login-field input:focus { outline: 2px solid var(--green-2); outline-offset: 1px; border-color: transparent; }
 .login-submit { height: 50px; border-radius: 14px; background: var(--green); color: var(--cream); font-weight: 800; font-size: 15px; }
-.login-submit:disabled, .login-google:disabled { opacity: 0.6; cursor: wait; }
+.login-submit:disabled { opacity: 0.6; cursor: wait; }
 .login-msg { border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 600; line-height: 1.45; }
 .login-msg.ok { background: #e3efe6; color: var(--green); }
+.login-pw { position: relative; }
+.login-pw input { width: 100%; padding-right: 110px; }
+.login-pw button { position: absolute; right: 6px; top: 6px; height: 36px; padding: 0 12px; border-radius: 9px; font-size: 12px; font-weight: 700; color: var(--green); }
+.login-pw button:hover { background: #f3eee2; }
 .login-msg.bad { background: var(--red-bg); color: var(--red); }
 .login-demo { border: 1px dashed #d5cab0; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .login-demo-title { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #7a5410; }

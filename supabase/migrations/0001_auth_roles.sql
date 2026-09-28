@@ -128,7 +128,7 @@ insert into public.permissions (id, label, category, sort) values
   ('submissions.validate', 'Validasi submission',               'Admin',  4),
   ('scores.view',          'Lihat Scoring & Leaderboard',       'Admin',  5),
   ('members.view',         'Lihat daftar member',               'Member', 6),
-  ('members.manage',       'Undang, ubah & nonaktifkan member', 'Member', 7),
+  ('members.manage',       'Daftarkan, ubah & nonaktifkan member', 'Member', 7),
   ('roles.manage',         'Ubah role & hak akses',             'Member', 8),
   ('portal.view',          'Buka Game Portal',                  'Portal', 9),
   ('portal.submit',        'Submit challenge untuk grup',       'Portal', 10);

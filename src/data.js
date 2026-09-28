@@ -149,29 +149,4 @@ export function initialQueue() {
 export const tier = (n) => (n >= 10 ? 10 : n >= 7 ? 6 : 2);
 
 export const pad = (n) => String(n).padStart(2, '0');
-export const memberName = (id) => (id != null ? MEMBERS[id].name : '—');
 
-export function validateGroups(assign, leaders) {
-  const violations = [];
-  const badGroups = new Set();
-  const badMembers = new Set();
-  assign.forEach((ids, gi) => {
-    const nm = GROUPS[gi][0] + ' ' + GROUPS[gi][1];
-    if (ids.length > 14) { violations.push(`Grup ${nm}: ${ids.length} anggota (maks 14)`); badGroups.add(gi); }
-    if (ids.length < 13) { violations.push(`Grup ${nm}: ${ids.length} anggota (min 13)`); badGroups.add(gi); }
-    if (!ids.some((id) => MEMBERS[id].tl)) { violations.push(`Grup ${nm}: belum ada Ministry TL`); badGroups.add(gi); }
-    const ld = leaders[gi];
-    if (ld == null || !ids.includes(ld)) { violations.push(`Grup ${nm}: belum ada Group Leader`); badGroups.add(gi); }
-    else if (MEMBERS[ld].tl) { violations.push(`Grup ${nm}: Group Leader ${MEMBERS[ld].name} adalah Ministry TL`); badMembers.add(ld); badGroups.add(gi); }
-    const byTeam = {};
-    ids.forEach((id) => { const t = MEMBERS[id].team; (byTeam[t] = byTeam[t] || []).push(id); });
-    Object.entries(byTeam).forEach(([t, arr]) => {
-      if (arr.length > 1) {
-        violations.push(`Grup ${nm}: ${arr.map((id) => MEMBERS[id].name).join(' & ')} sama-sama tim ${TEAMS[t]}`);
-        arr.forEach((id) => badMembers.add(id));
-        badGroups.add(gi);
-      }
-    });
-  });
-  return { violations, badGroups, badMembers, ok: violations.length === 0 };
-}

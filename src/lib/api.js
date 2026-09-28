@@ -7,8 +7,6 @@ const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const PROFILE_COLS = 'id,email,full_name,role_id,group_no,service_team,is_ministry_tl,is_committee,ig_handle,active,created_at';
-// Where magic links / OAuth return to. PKCE puts the code in ?code=, leaving our #/ routes alone.
-const redirectTo = () => window.location.origin + window.location.pathname;
 
 function unwrap({ data, error }) {
   if (error) throw new Error(friendly(error.message));
@@ -16,14 +14,23 @@ function unwrap({ data, error }) {
 }
 function friendly(msg) {
   if (/Invalid login credentials/i.test(msg)) return 'Email atau password salah.';
-  if (/Email not confirmed/i.test(msg)) return 'Email belum dikonfirmasi. Cek inbox kamu.';
-  if (/Signups not allowed|not found|User not found/i.test(msg)) return 'Email ini belum diundang. Hubungi panitia.';
   if (/rate limit/i.test(msg)) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
   return msg;
 }
 
 function supabaseApi() {
-  const sb = createClient(URL, KEY, { auth: { flowType: 'pkce', persistSession: true, detectSessionInUrl: true } });
+  const sb = createClient(URL, KEY, { auth: { persistSession: true } });
+  // Account creation / password reset need the service role, so they go through the admin-users Edge Function.
+  const adminUsers = async (body) => {
+    const { data, error } = await sb.functions.invoke('admin-users', { body });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch { /* non-JSON error */ }
+      if (/Failed to send a request|FunctionsFetchError/i.test(msg)) msg = 'Edge Function "admin-users" belum di-deploy. Lihat README.';
+      throw new Error(msg);
+    }
+    return data;
+  };
   return {
     mode: 'supabase',
     async getSessionUserId() { return unwrap(await sb.auth.getSession()).session?.user.id ?? null; },
@@ -33,21 +40,20 @@ function supabaseApi() {
       return () => data.subscription.unsubscribe();
     },
     async signInPassword(email, password) { unwrap(await sb.auth.signInWithPassword({ email, password })); },
-    // Login only — members must be invited first, so no self-signup here.
-    async signInMagicLink(email) { unwrap(await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo() } })); },
-    async signInGoogle() { unwrap(await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo() } })); },
     async signOut() { unwrap(await sb.auth.signOut()); },
     async getProfile(id) { return unwrap(await sb.from('profiles').select(PROFILE_COLS).eq('id', id).maybeSingle()); },
     async listProfiles() { return unwrap(await sb.from('profiles').select(PROFILE_COLS).order('full_name')); },
     async updateProfile(id, patch) { return unwrap(await sb.from('profiles').update(patch).eq('id', id).select(PROFILE_COLS).single()); },
-    // Sends a magic-link invite; the DB trigger creates the profile, then we fill in the admin's fields.
-    async inviteMember({ email, ...fields }) {
-      email = email.trim().toLowerCase();
-      unwrap(await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: redirectTo(), data: { full_name: fields.full_name } } }));
-      const row = unwrap(await sb.from('profiles').select('id').ilike('email', email).maybeSingle());
-      if (!row) throw new Error('Undangan terkirim, tapi profil belum muncul. Muat ulang sebentar lagi.');
-      return this.updateProfile(row.id, fields);
+    // [[id, patch], …] — small batches so a 140-member reshuffle doesn't open 140 requests at once.
+    async updateMany(list) {
+      const out = [];
+      for (let i = 0; i < list.length; i += 10) {
+        out.push(...(await Promise.all(list.slice(i, i + 10).map(([id, patch]) => this.updateProfile(id, patch)))));
+      }
+      return out;
     },
+    async createMember(fields) { return (await adminUsers({ action: 'create', ...fields })).profile; },
+    async setPassword(id, password) { await adminUsers({ action: 'set_password', id, password }); },
     async getGrants() {
       const rows = unwrap(await sb.from('role_permissions').select('role_id,permission_id'));
       return rows.reduce((acc, r) => ((acc[r.role_id] ||= []).push(r.permission_id), acc), {});

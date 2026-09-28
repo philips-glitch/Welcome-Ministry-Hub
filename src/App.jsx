@@ -10,7 +10,8 @@ import Roles from './pages/Roles.jsx';
 import PortalApp from './portal/PortalApp.jsx';
 import Login from './auth/Login.jsx';
 import { useAuth } from './auth/AuthContext.jsx';
-import { initialGroups, initialQueue, standings } from './data.js';
+import { initialQueue, standings } from './data.js';
+import { MembersProvider } from './lib/members.jsx';
 
 // Admin pages: slug, label, permission required to see it.
 export const ADMIN_NAV = [
@@ -35,8 +36,7 @@ function parseHash() {
 export default function App() {
   const auth = useAuth();
   const [loc, setLoc] = useState(parseHash);
-  // Shared game state: groups feed Overview + Queue; queue approvals feed scores (admin + portal).
-  const [groups, setGroups] = useState(initialGroups);
+  // Shared game state: queue approvals feed scores (admin + portal). Members come from MembersProvider.
   const [queue, setQueue] = useState(initialQueue);
   const rows = useMemo(() => standings(queue), [queue]);
 
@@ -77,19 +77,21 @@ export default function App() {
 
   const r = loc.route;
   let content = null;
-  if (r === 'overview') content = <Overview groups={groups} pending={pending} onNavigate={navigate} />;
-  else if (r === 'groups') content = <GroupForming groups={groups} setGroups={setGroups} />;
+  if (r === 'overview') content = <Overview pending={pending} onNavigate={navigate} />;
+  else if (r === 'groups') content = <GroupForming />;
   else if (r === 'challenges') content = <ChallengeBuilder />;
-  else if (r === 'queue') content = <ValidationQueue queue={queue} setQueue={setQueue} groups={groups} />;
+  else if (r === 'queue') content = <ValidationQueue queue={queue} setQueue={setQueue} />;
   else if (r === 'scoring') content = <Scoring rows={rows} pending={pending} />;
   else if (r === 'members') content = <Members />;
   else if (r === 'roles') content = <Roles />;
 
   return (
-    <div className="shell">
-      <Sidebar items={nav} active={r} onNavigate={navigate} badges={badges} />
-      <main className="main">{content}</main>
-    </div>
+    <MembersProvider>
+      <div className="shell">
+        <Sidebar items={nav} active={r} onNavigate={navigate} badges={badges} />
+        <main className="main">{content}</main>
+      </div>
+    </MembersProvider>
   );
 }
 

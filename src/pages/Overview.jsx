@@ -1,4 +1,6 @@
-import { GROUPS, CAPTAINS, R1STAT, R1_DEADLINE, memberName } from '../data.js';
+import { GROUPS, CAPTAINS, R1STAT, R1_DEADLINE } from '../data.js';
+import { useMembers } from '../lib/members.jsx';
+import { leaderName } from '../lib/groups.js';
 import useCountdown from '../useCountdown.js';
 
 const DOT = { V: ['#2F7A55', 'none'], S: ['#6F95CF', 'none'], D: ['#E3A92B', 'none'], N: ['transparent', '1.5px solid #CFC4AA'], X: ['#C4533F', 'none'] };
@@ -34,12 +36,13 @@ const COLS = '1.4fr 1.2fr 110px 70px 70px 80px 1fr';
 const statCard = { padding: 18, display: 'flex', flexDirection: 'column', gap: 6 };
 const bigNum = { font: "800 30px 'Bricolage Grotesque'" };
 
-export default function Overview({ groups, pending, onNavigate }) {
+export default function Overview({ pending, onNavigate }) {
+  const members = useMembers().rows || [];
   const cd = useCountdown(R1_DEADLINE);
   const rows = GROUPS.map(([no, name, color], i) => {
     const st = R1STAT[i];
     const c = (ch) => [...st].filter((x) => x === ch).length;
-    return { no, name, color, captain: CAPTAINS[i], leader: memberName(groups.leaders[i]), dots: [...st], rec: c('V') + c('S') + c('X'), pen: c('S'), val: c('V'), last: LAST_ACT[i] };
+    return { no, name, color, captain: CAPTAINS[i], leader: leaderName(members, no), dots: [...st], rec: c('V') + c('S') + c('X'), pen: c('S'), val: c('V'), last: LAST_ACT[i] };
   });
   const received = rows.reduce((a, r) => a + r.rec, 0);
   const pendingR1 = rows.reduce((a, r) => a + r.pen, 0);

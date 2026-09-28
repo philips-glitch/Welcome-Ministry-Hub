@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { GROUPS, RIDDLES, MEMBERS, tier, pad, memberName } from '../data.js';
+import { GROUPS, RIDDLES, tier, pad } from '../data.js';
+import { useMembers } from '../lib/members.jsx';
+import { isPlayer, leaderName } from '../lib/groups.js';
 
 const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 'Jumlah peserta sesuai tag', 'Aturan diikuti · tanpa nama gereja', 'Tidak ada wajah jemaat tanpa izin'];
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
@@ -8,7 +10,8 @@ const TOAST = { ok: ['#E3EFE6', '#1F4D3A'], warn: ['#F8E9C4', '#7A5410'], bad: [
 const submittedAt = (m) => { const t = 9 * 60 + m * 3; return `Jum ${pad(Math.floor(t / 60) % 24)}:${pad(t % 60)}`; };
 const freshReview = (item) => ({ checks: [true, true, true, true, true], count: item.count, reason: null, override: false, overrideNote: '' });
 
-export default function ValidationQueue({ queue, setQueue, groups }) {
+export default function ValidationQueue({ queue, setQueue }) {
+  const members = useMembers().rows || [];
   const [qi, setQi] = useState(() => Math.max(0, queue.findIndex((q) => q.status === 'pending')));
   const [review, setReview] = useState(() => freshReview(queue[qi]));
   const [toast, setToast] = useState(null);
@@ -60,7 +63,7 @@ export default function ValidationQueue({ queue, setQueue, groups }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const tagged = groups.assign[cur.gi].slice(0, cur.count).map((id) => MEMBERS[id].name.split(' ')[0]).join(', ');
+  const tagged = members.filter((p) => isPlayer(p) && p.group_no === G[0]).slice(0, cur.count).map((p) => (p.full_name || '').split(' ')[0]).join(', ') || '—';
   const toggleCheck = (i) => setReview((r) => { const c = [...r.checks]; c[i] = !c[i]; return { ...r, checks: c }; });
 
   return (
@@ -97,7 +100,7 @@ export default function ValidationQueue({ queue, setQueue, groups }) {
           <div className="row">
             <span style={{ width: 12, height: 12, borderRadius: 4, background: G[2] }} />
             <span style={{ font: "800 20px 'Bricolage Grotesque'" }}>{G[1]} · Riddle {cur.rno}</span>
-            <span className="muted" style={{ fontSize: 12 }}>dikirim {submittedAt(cur.min)} oleh {memberName(groups.leaders[cur.gi])} · v1</span>
+            <span className="muted" style={{ fontSize: 12 }}>dikirim {submittedAt(cur.min)} oleh {leaderName(members, G[0])} · v1</span>
           </div>
           <div className="placeholder-stripes" style={{ height: 380, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, color: '#6B665A' }}>
             <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>foto grup · IMG_2041.jpg · 4.2 MB</span>

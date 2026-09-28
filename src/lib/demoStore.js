@@ -3,7 +3,8 @@
 import { MEMBERS, TEAMS, GROUPS, CAPTAINS, initialGroups } from '../data.js';
 import { DEFAULT_GRANTS } from './permissions.js';
 
-const KEY = 'flourish-demo-v1';
+const KEY = 'flourish-demo-v2';
+export const DEMO_PASSWORD = 'demo1234';
 const slug = (s) => s.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '');
 
 function seed() {
@@ -26,12 +27,18 @@ function seed() {
       service_team: TEAMS[m.team], is_ministry_tl: m.tl, ig_handle: '@' + slug(m.name).replace('.', '_'),
     });
   });
-  // Portal demo users from the design (Vine · 04).
+  // Portal demo users from the design join Vine (04): Nadia takes over as Group Leader, and two
+  // sample members move to "belum ada grup" so Vine stays at 14 and the pool isn't empty.
+  const vine = members.filter((m) => m.group_no === '04');
+  vine.forEach((m) => { if (m.role_id === 'group_leader') m.role_id = 'member'; });
+  vine.filter((m) => !m.is_ministry_tl).slice(0, 2).forEach((m) => { m.group_no = null; });
+  const taken = new Set(vine.filter((m) => m.group_no === '04').map((m) => m.service_team));
+  const [t1, t2] = TEAMS.filter((t) => !taken.has(t));
   const portal = [
-    p('u-nadia', 'Nadia P.', 'group_leader', { group_no: '04', service_team: 'MH2', ig_handle: '@nadia.p' }),
-    p('u-grace', 'Grace L.', 'member', { group_no: '04', service_team: 'LB', ig_handle: '@gracel' }),
+    p('u-nadia', 'Nadia P.', 'group_leader', { group_no: '04', service_team: t1 ?? null, ig_handle: '@nadia.p' }),
+    p('u-grace', 'Grace L.', 'member', { group_no: '04', service_team: t2 ?? null, ig_handle: '@gracel' }),
   ];
-  return { profiles: [...staff, ...portal, ...members], grants: structuredClone(DEFAULT_GRANTS), sessionId: null };
+  return { profiles: [...staff, ...portal, ...members], passwords: {}, grants: structuredClone(DEFAULT_GRANTS), sessionId: null };
 }
 
 let state;
@@ -46,6 +53,7 @@ const listeners = new Set();
 const emit = () => listeners.forEach((fn) => fn());
 const delay = (v) => new Promise((r) => setTimeout(() => r(v), 120));
 const fail = (msg) => Promise.reject(new Error(msg));
+const checkPassword = (pw) => (String(pw || '').length < 8 ? 'Password minimal 8 karakter.' : null);
 
 export const DEMO_ACCOUNTS = ['u-angel', 'u-cindy', 'u-yohan', 'u-nadia', 'u-grace'];
 
@@ -54,9 +62,12 @@ export const demoApi = {
   async getSessionUserId() { return load().sessionId; },
   onAuthChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   async signInDemo(id) { load().sessionId = id; save(); emit(); },
-  signInPassword: () => fail('Mode demo: pilih salah satu akun demo di bawah.'),
-  signInMagicLink: () => fail('Mode demo: magic link butuh Supabase. Pilih akun demo di bawah.'),
-  signInGoogle: () => fail('Mode demo: Google login butuh Supabase. Pilih akun demo di bawah.'),
+  async signInPassword(email, password) {
+    const s = load();
+    const p = s.profiles.find((x) => x.email === email.trim().toLowerCase());
+    if (!p || password !== (s.passwords[p.id] ?? DEMO_PASSWORD)) return fail('Email atau password salah.');
+    s.sessionId = p.id; save(); emit();
+  },
   async signOut() { load().sessionId = null; save(); emit(); },
   async getProfile(id) { return delay(load().profiles.find((p) => p.id === id) || null); },
   async listProfiles() { return delay([...load().profiles].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))); },
@@ -66,17 +77,40 @@ export const demoApi = {
     if (i < 0) return fail('Member tidak ditemukan');
     if (patch.role_id && id === s.sessionId && patch.role_id !== s.profiles[i].role_id) return fail('Tidak bisa mengubah role sendiri');
     s.profiles[i] = { ...s.profiles[i], ...patch };
-    save(); emit();
+    save();
     return delay(s.profiles[i]);
   },
-  async inviteMember(fields) {
+  async updateMany(list) {
     const s = load();
-    const email = fields.email.trim().toLowerCase();
-    if (s.profiles.some((p) => p.email === email)) return fail('Email sudah terdaftar');
-    const row = { id: 'x-' + Date.now(), email, full_name: fields.full_name || email.split('@')[0], role_id: 'member', group_no: null, service_team: null, is_ministry_tl: false, is_committee: false, ig_handle: null, active: true, created_at: new Date().toISOString(), ...fields, email };
+    const out = list.map(([id, patch]) => {
+      const i = s.profiles.findIndex((p) => p.id === id);
+      if (i < 0) throw new Error('Member tidak ditemukan');
+      return (s.profiles[i] = { ...s.profiles[i], ...patch });
+    });
+    save();
+    return delay(out);
+  },
+  async createMember({ password, ...fields }) {
+    const s = load();
+    const email = String(fields.email || '').trim().toLowerCase();
+    const bad = checkPassword(password);
+    if (bad) return fail(bad);
+    if (s.profiles.some((p) => p.email === email)) return fail('Email sudah terdaftar.');
+    const row = {
+      id: 'x-' + Date.now(), role_id: 'member', group_no: null, service_team: null, is_ministry_tl: false,
+      is_committee: false, ig_handle: null, active: true, created_at: new Date().toISOString(), ...fields, email,
+    };
     s.profiles.push(row);
-    save(); emit();
+    s.passwords[row.id] = password;
+    save();
     return delay(row);
+  },
+  async setPassword(id, password) {
+    const bad = checkPassword(password);
+    if (bad) return fail(bad);
+    load().passwords[id] = password;
+    save();
+    return delay();
   },
   async getGrants() { return delay(structuredClone(load().grants)); },
   async setGrant(role, perm, on) {
@@ -84,7 +118,7 @@ export const demoApi = {
     const set = new Set(s.grants[role] || []);
     on ? set.add(perm) : set.delete(perm);
     s.grants[role] = [...set];
-    save(); emit();
+    save();
   },
   resetDemo() { state = seed(); save(); emit(); },
 };
