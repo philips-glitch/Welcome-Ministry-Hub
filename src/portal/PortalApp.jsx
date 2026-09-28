@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './portal.css';
 import { useAuth } from '../auth/AuthContext.jsx';
+import Logo from '../components/Logo.jsx';
 import { roleName } from '../lib/permissions.js';
 import { GROUPS } from '../data.js';
 import { api } from '../lib/api.js';
@@ -68,8 +69,7 @@ export default function PortalApp({ route }) {
     <div className="p-shell">
       <aside className="p-side">
         <div className="p-side-brand">
-          <div style={{ width: 40, height: 40, borderRadius: 13, background: '#1F4D3A', color: '#E3A92B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Leaf size={22} /></div>
-          <div className="col"><span style={{ font: "800 16px 'Bricolage Grotesque'", color: '#1F4D3A' }}>Flourish Hub</span><span className="muted" style={{ fontSize: 11 }}>#flourishdeeperWM2026</span></div>
+          <Logo size={38} gap="#FFFDF8" color="#1F4D3A" sub="#flourishdeeperWM2026" subColor="#56655C" />
         </div>
         {TABS.map(([r, label, icon]) => (
           <button key={r} className={'p-side-item' + (activeTab === r ? ' active' : '')} onClick={() => go(r)}><Icon name={icon} />{label}</button>

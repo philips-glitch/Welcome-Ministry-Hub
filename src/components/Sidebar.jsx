@@ -1,16 +1,13 @@
 import { useAuth } from '../auth/AuthContext.jsx';
 import { roleName } from '../lib/permissions.js';
+import Logo from './Logo.jsx';
 
 export default function Sidebar({ items, active, onNavigate, badges }) {
   const { profile, can, signOut } = useAuth();
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark">F</div>
-        <div className="col">
-          <span className="brand-name">Flourish Hub</span>
-          <span className="brand-sub">Admin · WM 2026</span>
-        </div>
+        <Logo size={36} gap="#14281F" sub="Admin · WM 2026" />
       </div>
       {items.map(([slug, label]) => (
         <button key={slug} className={'nav-item' + (slug === active ? ' active' : '')} onClick={() => onNavigate(slug)}>

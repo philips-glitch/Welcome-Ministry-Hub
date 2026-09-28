@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../lib/demoStore.js';
 import { roleName } from '../lib/permissions.js';
 import './login.css';
+import { LogoMark } from '../components/Logo.jsx';
 
 const DEMO_LABELS = {
   'u-angel': ['Angel', 'super_admin', 'Tim Acara'],
@@ -34,10 +35,10 @@ export default function Login({ notice }) {
   return (
     <div className="login">
       <section className="login-brand">
-        <div className="login-mark">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 21v-9M12 12c0-4 3-7 7-7 0 4-3 7-7 7zM12 14c0-3-2.5-5.5-6-5.5 0 3 2.5 5.5 6 5.5z" /></svg>
+        <div className="login-logo">
+          <LogoMark size={64} gap="#0F4530" />
+          <h1>Flourish Hub</h1>
         </div>
-        <h1>Flourish Hub</h1>
         <p>Welcome UR Outing 2026 · #flourishdeeperWM2026</p>
         <ul className="login-points">
           <li>Challenge mingguan bareng grup kamu</li>
