@@ -2,7 +2,7 @@ import useCountdown from '../useCountdown.js';
 import { R1_DEADLINE } from '../data.js';
 import { MY_RIDDLES, SUB_CHIP } from './portalData.js';
 
-export default function ChallengeDetail({ go, submitted }) {
+export default function ChallengeDetail({ go, me, submitted }) {
   const cd = useCountdown(R1_DEADLINE);
   const riddles = MY_RIDDLES.map((r) => (r[0] === '2' && submitted ? ['2', 'Submitted', r[2], 'Baru saja dikirim oleh Nadia'] : r));
 
@@ -71,7 +71,11 @@ export default function ChallengeDetail({ go, submitted }) {
         </div>
 
         <div className="col" style={{ gap: 8 }}>
-          <button className="p-btn-lg" onClick={() => go('submit')} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{submitted ? 'Lihat submission Riddle 2' : 'Submit Riddle 2'}</button>
+          {me.canSubmit ? (
+            <button className="p-btn-lg" onClick={() => go('submit')} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{submitted ? 'Lihat submission Riddle 2' : 'Submit Riddle 2'}</button>
+          ) : (
+            <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>Submit oleh Group Leader</button>
+          )}
           <span className="muted" style={{ fontSize: 12, textAlign: 'center' }}>Hanya Group Leader yang bisa submit. Anggota bisa upload foto ke draft grup.</span>
         </div>
       </div>

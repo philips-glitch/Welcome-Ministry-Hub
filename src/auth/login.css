@@ -1,0 +1,44 @@
+.login { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--cream); }
+.login-brand { background: var(--green); color: var(--cream); padding: 28px 20px 24px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; }
+.login-brand::after { content: ''; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: var(--green-2); opacity: 0.45; }
+.login-brand > * { position: relative; z-index: 1; }
+.login-mark { width: 48px; height: 48px; border-radius: 15px; background: var(--green-dark); color: var(--gold); display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+.login-brand h1 { margin: 0; font: 800 30px/1.1 var(--display); }
+.login-brand p { margin: 0; font-size: 13px; opacity: 0.85; }
+.login-points { display: none; }
+
+.login-panel { display: flex; justify-content: center; padding: 20px 16px 40px; }
+.login-card { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px; }
+.login-title { font: 800 26px var(--display); color: var(--green); }
+.login-google { height: 48px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--paper); display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; font-size: 14px; }
+.login-google:hover { border-color: var(--green); }
+.login-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.login-seg { display: flex; background: #ede6d6; border-radius: 12px; padding: 4px; gap: 4px; }
+.login-seg button { flex: 1; height: 36px; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.login-seg button.on { background: var(--paper); color: var(--green); }
+.login-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
+.login-field input { height: 48px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--paper); padding: 0 14px; font: inherit; font-weight: 500; font-size: 15px; color: var(--ink); }
+.login-field input:focus { outline: 2px solid var(--green-2); outline-offset: 1px; border-color: transparent; }
+.login-submit { height: 50px; border-radius: 14px; background: var(--green); color: var(--cream); font-weight: 800; font-size: 15px; }
+.login-submit:disabled, .login-google:disabled { opacity: 0.6; cursor: wait; }
+.login-msg { border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 600; line-height: 1.45; }
+.login-msg.ok { background: #e3efe6; color: var(--green); }
+.login-msg.bad { background: var(--red-bg); color: var(--red); }
+.login-demo { border: 1px dashed #d5cab0; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.login-demo-title { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #7a5410; }
+.login-demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.login-demo-grid button { text-align: left; border: 1px solid var(--line); background: var(--paper); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+.login-demo-grid button:hover { border-color: var(--green); }
+.login-demo-grid b { font-size: 14px; }
+
+@media (min-width: 960px) {
+  .login { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) minmax(460px, 1fr); }
+  .login-brand { padding: 56px; justify-content: center; gap: 10px; }
+  .login-brand::after { width: 420px; height: 420px; right: -120px; top: -120px; }
+  .login-brand h1 { font-size: 48px; }
+  .login-brand p { font-size: 15px; }
+  .login-points { display: flex; flex-direction: column; gap: 10px; margin: 24px 0 0; padding: 0; list-style: none; font-size: 15px; }
+  .login-points li::before { content: '✓'; color: var(--gold); font-weight: 900; margin-right: 10px; }
+  .login-panel { align-items: center; padding: 40px; }
+}

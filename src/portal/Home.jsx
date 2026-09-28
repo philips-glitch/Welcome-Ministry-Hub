@@ -8,8 +8,13 @@ const WEEK = [
   ['RAB 21', 'Repost IG', ''],
 ];
 
-export default function Home({ go }) {
+export default function Home({ go, me, standings }) {
   const cd = useCountdown(R1_DEADLINE);
+  // standings arrive sorted by total with ranks.
+  const idx = me.group ? standings.findIndex((g) => g.no === me.group.no) : -1;
+  const mine = standings[idx];
+  const ahead = idx > 0 ? standings.slice(0, idx).reverse().find((g) => g.total > mine.total) : null;
+  const rankHint = !mine ? 'Kamu belum masuk grup.' : mine.rank === 1 ? 'Grup kamu memimpin. Pertahankan!' : `Tinggal ${ahead.total - mine.total} poin lagi ke #${ahead.rank}. Gas!`;
   return (
     <div className="p-cols">
       <div className="p-stack">
@@ -79,9 +84,12 @@ export default function Home({ go }) {
         <button className="p-card p-row-link" onClick={() => go('leaderboard')}>
           <div style={{ width: 56, height: 56, borderRadius: 18, background: '#F8E9C4', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
             <span style={{ fontSize: 10, fontWeight: 800, color: '#7A5410' }}>RANK</span>
-            <span style={{ font: "800 24px/1 'Bricolage Grotesque'" }}>#3</span>
+            <span style={{ font: "800 24px/1 'Bricolage Grotesque'" }}>{mine ? '#' + mine.rank : '—'}</span>
           </div>
-          <div className="col" style={{ gap: 2, flex: 1 }}><span style={{ fontWeight: 700, fontSize: 15 }}>28 poin · dari 10 grup</span><span className="muted" style={{ fontSize: 13 }}>Tinggal 2 poin lagi ke #2. Gas!</span></div>
+          <div className="col" style={{ gap: 2, flex: 1 }}>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>{mine ? `${mine.total} poin · dari ${standings.length} grup` : 'Lihat leaderboard'}</span>
+            <span className="muted" style={{ fontSize: 13 }}>{rankHint}</span>
+          </div>
           <span style={{ fontSize: 20, color: '#1F4D3A' }}>›</span>
         </button>
       </div>

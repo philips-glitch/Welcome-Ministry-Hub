@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import './portal.css';
-import { ME } from './portalData.js';
+import { useAuth } from '../auth/AuthContext.jsx';
+import { roleName } from '../lib/permissions.js';
+import { GROUPS } from '../data.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
 import Submit from './Submit.jsx';
@@ -24,19 +26,29 @@ export const Leaf = ({ size = 24 }) => (
 const TABS = [['home', 'Home', 'home'], ['challenge', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
 const TAB_OF = { home: 'home', challenge: 'challenge', submit: 'challenge', group: 'group', leaderboard: 'leaderboard', me: 'me' };
 
-export default function PortalApp({ route }) {
+export default function PortalApp({ route, standings }) {
+  const { profile, can, signOut } = useAuth();
   const go = (r) => { window.location.hash = '/portal/' + r; window.scrollTo(0, 0); };
   const page = TAB_OF[route] ? route : 'home';
   const activeTab = TAB_OF[page];
   // Submission draft lives here so it survives switching between Detail and Submit.
   const [submitted, setSubmitted] = useState(false);
 
+  const g = profile.group_no ? GROUPS[+profile.group_no - 1] : null;
+  const me = {
+    first: (profile.full_name || profile.email).split(' ')[0],
+    roleName: roleName(profile.role_id),
+    group: g && { no: g[0], name: g[1], color: g[2] },
+    canSubmit: can('portal.submit') && !!g,
+  };
+
   let content;
-  if (page === 'home') content = <Home go={go} />;
-  else if (page === 'challenge') content = <ChallengeDetail go={go} submitted={submitted} />;
-  else if (page === 'submit') content = <Submit go={go} submitted={submitted} setSubmitted={setSubmitted} />;
-  else if (page === 'leaderboard') content = <Leaderboard />;
-  else content = <Soon title={page === 'group' ? 'My Group' : 'Me'} go={go} />;
+  if (page === 'home') content = <Home go={go} me={me} standings={standings} />;
+  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} submitted={submitted} />;
+  else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} submitted={submitted} setSubmitted={setSubmitted} /> : <NoSubmit go={go} />;
+  else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
+  else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;
+  else content = <Soon title="My Group" go={go} />;
 
   return (
     <div className="p-shell">
@@ -48,15 +60,17 @@ export default function PortalApp({ route }) {
         {TABS.map(([r, label, icon]) => (
           <button key={r} className={'p-side-item' + (activeTab === r ? ' active' : '')} onClick={() => go(r)}><Icon name={icon} />{label}</button>
         ))}
-        <a href="#/overview" className="p-side-item" style={{ marginTop: 'auto', textDecoration: 'none', fontSize: 12 }}>Admin Dashboard →</a>
+        <div style={{ marginTop: 'auto' }} />
+        {can('dashboard.view') && <a href="#/overview" className="p-side-item" style={{ textDecoration: 'none', fontSize: 12 }}>Admin Dashboard →</a>}
+        <button className="p-side-item" style={{ fontSize: 12 }} onClick={signOut}>Keluar</button>
       </aside>
 
       <div style={{ minWidth: 0 }}>
         <header className="p-top">
-          <div className="p-avatar" style={{ background: ME.color }}>V</div>
+          <div className="p-avatar" style={{ background: me.group?.color || '#1F4D3A' }}>{(me.group?.name || me.first)[0]}</div>
           <div className="col" style={{ flex: 1, minWidth: 0 }}>
-            <span className="muted" style={{ fontSize: 13 }}>Halo, {ME.name}</span>
-            <span style={{ font: "700 19px 'Bricolage Grotesque'" }}>{ME.group} · Grup {ME.groupNo}</span>
+            <span className="muted" style={{ fontSize: 13 }}>Halo, {me.first}</span>
+            <span style={{ font: "700 19px 'Bricolage Grotesque'" }}>{me.group ? `${me.group.name} · Grup ${me.group.no}` : 'Belum ada grup'}</span>
           </div>
           <button className="p-icon-btn" aria-label="Notifikasi (3)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0" /></svg>
@@ -73,6 +87,42 @@ export default function PortalApp({ route }) {
           </button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+function NoSubmit({ go }) {
+  return (
+    <div className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 24 }}>
+      <span style={{ font: "700 20px 'Bricolage Grotesque'" }}>Hanya Group Leader yang bisa submit</span>
+      <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>Kamu tetap bisa bantu: kirim foto ke Group Leader atau upload ke draft grup.</span>
+      <button onClick={() => go('challenge')} style={{ alignSelf: 'flex-start', height: 44, padding: '0 18px', borderRadius: 14, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Kembali ke challenge</button>
+    </div>
+  );
+}
+
+function Me({ profile, me, signOut, admin }) {
+  const rows = [
+    ['Nama', profile.full_name || '—'], ['Email', profile.email], ['Role', me.roleName],
+    ['Grup', me.group ? `${me.group.no} ${me.group.name}` : '—'], ['Tim pelayanan', profile.service_team || '—'], ['Instagram', profile.ig_handle || '—'],
+  ];
+  return (
+    <div className="p-cols">
+      <div className="p-stack">
+        <span className="p-title">Profil saya</span>
+        <div className="p-card" style={{ padding: 0 }}>
+          {rows.map(([k, v], i) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '12px 16px', borderTop: i ? '1px solid #F0E9DA' : 'none', fontSize: 14 }}>
+              <span className="muted">{k}</span><span style={{ fontWeight: 600, textAlign: 'right', overflowWrap: 'anywhere' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="p-sticky">
+        {admin && <a href="#/overview" className="p-btn-lg" style={{ background: '#E3EFE6', color: '#1F4D3A', textDecoration: 'none' }}>Buka Admin Dashboard</a>}
+        <button className="p-btn-lg" onClick={signOut} style={{ background: '#FFFDF8', border: '1px solid #E9E0CC', color: '#9A2A1E' }}>Keluar</button>
+        <span className="muted" style={{ fontSize: 12, textAlign: 'center' }}>Data grup & role diatur panitia. Ada yang salah? Hubungi captain kamu.</span>
+      </div>
     </div>
   );
 }

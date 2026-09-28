@@ -53,7 +53,7 @@ export default function Overview({ groups, pending, onNavigate }) {
         </div>
         <div className="row" style={{ marginLeft: 'auto', gap: 8 }}>
           <button className="btn btn-ghost">Jadwalkan pengumuman</button>
-          <button className="btn btn-primary" onClick={() => onNavigate(3)}>Buka Validation Queue · {pending}</button>
+          <button className="btn btn-primary" onClick={() => onNavigate('queue')}>Buka Validation Queue · {pending}</button>
         </div>
       </div>
 

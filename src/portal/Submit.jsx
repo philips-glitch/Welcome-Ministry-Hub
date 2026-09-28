@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { tier } from '../data.js';
-import { ROSTER, SUBMIT_RULES, initials } from './portalData.js';
+import { ROSTER, submitRules, initials } from './portalData.js';
 
 const STEPS = ['Media', 'Bukti IG', 'Tag anggota', 'Cek aturan'];
 
-export default function Submit({ go, submitted, setSubmitted }) {
+export default function Submit({ go, me, submitted, setSubmitted }) {
+  const SUBMIT_RULES = submitRules(me);
   const [tagged, setTagged] = useState(() => new Set([0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 12]));
   const [checks, setChecks] = useState([true, true, false, false]);
   const [upPct, setUpPct] = useState(68);
@@ -44,7 +45,7 @@ export default function Submit({ go, submitted, setSubmitted }) {
       <div className="p-stack">
         <div className="row">
           <button onClick={() => go('challenge')} aria-label="Kembali" className="p-icon-btn" style={{ fontSize: 20 }}>‹</button>
-          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>Submit Riddle 2</span><span className="muted" style={{ fontSize: 12 }}>Photo Challenge · Vine</span></div>
+          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>Submit Riddle 2</span><span className="muted" style={{ fontSize: 12 }}>Photo Challenge · {me.group.name}</span></div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
           {STEPS.map((s, i) => {

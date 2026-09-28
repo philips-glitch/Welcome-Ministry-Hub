@@ -27,7 +27,41 @@ export const DRAW0 = [[1, 5, 8, 10], [4, 6, 2, 9], [7, 3, 10, 1], [3, 7, 2, 9], 
 // Per group, per riddle: V validated · S submitted/pending · D draft · N not started · X rejected
 export const R1STAT = ['VVSS', 'VVVS', 'VSSD', 'VSDN', 'VVSN', 'VXSD', 'SSDN', 'VSNN', 'SDNN', 'XDNN'];
 
-export const NAV = ['Overview', 'Groups', 'Challenges', 'Validation Queue', 'Scoring & Leaderboard', 'IG Ops', 'Members', 'Audit Log'];
+// Scoreboard columns: key, short label, long label, max points (null = open-ended).
+export const SCORE_COLS = [
+  ['r1', 'R1', 'Photo Challenge', 40],
+  ['r2', 'R2', 'Video Challenge', null],
+  ['r3', 'R3', 'Spice It Up', 20],
+  ['r4', 'R4', 'Scrapbook / Poster', null],
+  ['r5', 'R5', 'Beyond UR', null],
+  ['r6', 'R6', 'The Legacy Challenge', null],
+  ['sq', 'SQ', 'Side Quests', 55],
+];
+// Validated points already on the books before today's queue (index = group).
+// R1 matches the validated riddles in R1STAT; SQ = Get To Know Me / Find Your Match.
+const BASE = {
+  r1: [16, 25, 8, 8, 18, 7, 0, 9, 0, 0],
+  sq: [15, 15, 10, 10, 10, 10, 10, 0, 0, 0],
+};
+
+// Standings = base validated points + anything approved in the Validation Queue this session.
+export function standings(queue = []) {
+  const rows = GROUPS.map(([no, name, color], gi) => {
+    const s = Object.fromEntries(SCORE_COLS.map(([k]) => [k, BASE[k]?.[gi] ?? 0]));
+    queue.forEach((q) => { if (q.gi === gi && q.status === 'validated') s.r1 += q.score; });
+    const total = SCORE_COLS.reduce((a, [k]) => a + s[k], 0);
+    const validated = [...R1STAT[gi]].filter((c) => c === 'V').length + queue.filter((q) => q.gi === gi && q.status === 'validated').length;
+    return { gi, no, name, color, captain: CAPTAINS[gi], ...s, total, validated };
+  });
+  return rank(rows, 'total');
+}
+
+// Sort by `key` desc and assign competition ranks (1, 2, 2, 4).
+export function rank(rows, key) {
+  const sorted = [...rows].sort((a, b) => b[key] - a[key] || a.no.localeCompare(b.no));
+  return sorted.map((r, i) => ({ ...r, rank: i > 0 && sorted[i - 1][key] === r[key] ? null : i + 1 }))
+    .map((r, i, arr) => ({ ...r, rank: r.rank ?? arr.slice(0, i).reverse().find((x) => x.rank)?.rank }));
+}
 
 // Demo clock: Jum, 16 Okt 2026 · 19:12 WIB (UTC+7)
 export const DEMO_NOW = Date.UTC(2026, 9, 16, 12, 12, 0);
