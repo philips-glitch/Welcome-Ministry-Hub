@@ -62,6 +62,55 @@ function supabaseApi() {
       if (on) unwrap(await sb.from('role_permissions').insert({ role_id: role, permission_id: perm }));
       else unwrap(await sb.from('role_permissions').delete().eq('role_id', role).eq('permission_id', perm));
     },
+
+    // ── Game data ──
+    async listGroups() { return unwrap(await sb.from('groups').select('*').order('no')); },
+    async setGroupsLocked(locked) {
+      unwrap(await sb.from('groups').update(locked ? { locked_at: new Date().toISOString(), locked_by: (await this.getSessionUserId()) } : { locked_at: null, locked_by: null }).neq('no', ''));
+    },
+    async listChallenges() { return unwrap(await sb.from('challenges').select('*').order('sort')); },
+    async saveChallenge({ id, created_at, updated_at, ...c }) {
+      const q = id ? sb.from('challenges').update(c).eq('id', id) : sb.from('challenges').insert(c);
+      return unwrap(await q.select('*').single());
+    },
+    async deleteChallenge(id) { unwrap(await sb.from('challenges').delete().eq('id', id)); },
+    // Riddles with answers; answers come back empty for members (RLS on riddle_answers).
+    async listRiddles(challengeId) {
+      const riddles = unwrap(await sb.from('riddles').select('id,challenge_id,no,prompt').eq('challenge_id', challengeId).order('no'));
+      if (!riddles.length) return [];
+      const answers = unwrap(await sb.from('riddle_answers').select('riddle_id,answer').in('riddle_id', riddles.map((r) => r.id)));
+      const byId = Object.fromEntries(answers.map((a) => [a.riddle_id, a.answer]));
+      return riddles.map((r) => ({ ...r, answer: byId[r.id] ?? null }));
+    },
+    async saveRiddle({ id, answer, ...r }) {
+      const row = unwrap(await (id ? sb.from('riddles').update(r).eq('id', id) : sb.from('riddles').insert(r)).select('id,challenge_id,no,prompt').single());
+      unwrap(await sb.from('riddle_answers').upsert({ riddle_id: row.id, answer: answer || '' }));
+      return { ...row, answer };
+    },
+    async deleteRiddle(id) { unwrap(await sb.from('riddles').delete().eq('id', id)); },
+    async getDraw(challengeId) { return unwrap(await sb.from('riddle_draws').select('group_no,slot,riddle_id').eq('challenge_id', challengeId)); },
+    async saveDraw(challengeId, rows, seed) {
+      unwrap(await sb.from('riddle_draws').delete().eq('challenge_id', challengeId));
+      if (rows.length) unwrap(await sb.from('riddle_draws').insert(rows.map((r) => ({ ...r, challenge_id: challengeId }))));
+      return this.saveChallenge({ id: challengeId, draw_seed: seed });
+    },
+    async listSubmissions({ challengeId, groupNo } = {}) {
+      let q = sb.from('submissions').select('*').order('submitted_at');
+      if (challengeId) q = q.eq('challenge_id', challengeId);
+      if (groupNo) q = q.eq('group_no', groupNo);
+      return unwrap(await q);
+    },
+    async createSubmission({ file, ...s }) {
+      if (file) {
+        const path = `${s.group_no}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]+/g, '_')}`;
+        unwrap(await sb.storage.from('submission-media').upload(path, file, { contentType: file.type }));
+        s = { ...s, media_path: path, media_name: file.name };
+      }
+      return unwrap(await sb.from('submissions').insert(s).select('*').single());
+    },
+    async reviewSubmission(id, patch) { return unwrap(await sb.from('submissions').update(patch).eq('id', id).select('*').single()); },
+    async mediaUrl(path) { return path ? unwrap(await sb.storage.from('submission-media').createSignedUrl(path, 3600)).signedUrl : null; },
+    async groupScores() { return unwrap(await sb.rpc('group_scores')); },
   };
 }
 

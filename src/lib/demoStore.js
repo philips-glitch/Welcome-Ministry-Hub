@@ -2,8 +2,9 @@
 // Persists to localStorage (per browser only) — for demos and local dev, not security.
 import { MEMBERS, TEAMS, GROUPS, CAPTAINS, initialGroups } from '../data.js';
 import { DEFAULT_GRANTS } from './permissions.js';
+import { seedGame, gameMethods } from './demoGame.js';
 
-const KEY = 'flourish-demo-v2';
+const KEY = 'flourish-demo-v3';
 export const DEMO_PASSWORD = 'demo1234';
 const slug = (s) => s.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '');
 
@@ -38,7 +39,8 @@ function seed() {
     p('u-nadia', 'Nadia P.', 'group_leader', { group_no: '04', service_team: t1 ?? null, ig_handle: '@nadia.p' }),
     p('u-grace', 'Grace L.', 'member', { group_no: '04', service_team: t2 ?? null, ig_handle: '@gracel' }),
   ];
-  return { profiles: [...staff, ...portal, ...members], passwords: {}, grants: structuredClone(DEFAULT_GRANTS), sessionId: null };
+  const profiles = [...staff, ...portal, ...members];
+  return { profiles, passwords: {}, grants: structuredClone(DEFAULT_GRANTS), sessionId: null, ...seedGame(profiles) };
 }
 
 let state;
@@ -121,4 +123,5 @@ export const demoApi = {
     save();
   },
   resetDemo() { state = seed(); save(); emit(); },
+  ...gameMethods({ load, save, delay, fail }),
 };

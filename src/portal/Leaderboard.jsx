@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { rank } from '../data.js';
-import { LB_TABS } from './portalData.js';
 
-export default function Leaderboard({ standings, me }) {
+export default function Leaderboard({ standings: { cols, rows }, me }) {
+  // Tabs: Total + every opened scoreboard column (main rounds, Side Q).
+  const LB_TABS = [['Total', 'total'], ...cols.filter((c) => c.open).map((c) => [c.short === 'SQ' ? 'Side Q' : c.label.split(' ')[0], c.key])];
   const [tab, setTab] = useState(0);
-  const key = LB_TABS[tab][1];
-  const lb = rank(standings, key);
+  const key = (LB_TABS[tab] || LB_TABS[0])[1];
+  const lb = rank(rows, key);
   const podium = [[lb[1], 96], [lb[0], 128], [lb[2], 72]];
   const mine = me.group && lb.find((g) => g.no === me.group.no);
   const rest = lb.slice(3).filter((g) => g !== mine);
-  const breakdown = mine && [
-    { label: 'Photo (R1)', val: `${mine.r1}/40`, pct: (mine.r1 / 40) * 100, color: '#1F4D3A' },
-    { label: 'Side Quest', val: mine.sq ? '+' + mine.sq : '—', pct: (mine.sq / 55) * 100, color: '#E3A92B' },
-    { label: 'Video (R2)', val: mine.r2 || '—', pct: 0, color: '#1F4D3A' },
-    { label: 'Scrapbook', val: mine.r4 || '—', pct: 0, color: '#1F4D3A' },
-  ];
+  const top = (k) => Math.max(1, ...rows.map((r) => r[k]));
+  const breakdown = mine && cols.filter((c) => c.open).map((c) => ({
+    label: c.short === 'SQ' ? 'Side Quest' : `${c.label.split(' ')[0]} (${c.short})`,
+    val: mine[c.key] ? (c.short === 'SQ' ? '+' : '') + mine[c.key] : '—',
+    pct: (mine[c.key] / top(c.key)) * 100, color: c.short === 'SQ' ? '#E3A92B' : '#1F4D3A',
+  }));
 
   return (
     <div className="p-cols">
@@ -76,7 +77,7 @@ export default function Leaderboard({ standings, me }) {
           <div className="p-card muted" style={{ fontSize: 13 }}>Kamu belum masuk grup, jadi tidak ada rincian grup.</div>
         )}
         <div style={{ background: '#E3EFE6', borderRadius: 16, padding: '12px 14px', fontSize: 13, lineHeight: 1.45, color: '#1F4D3A' }}>
-          <b>Masih ada 4 challenge lagi.</b> Semua grup masih bisa naik.
+          <b>Masih ada {cols.filter((c) => !c.open).length} challenge lagi.</b> Semua grup masih bisa naik.
         </div>
       </div>
     </div>

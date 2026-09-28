@@ -14,7 +14,9 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
 ## Supabase setup (real login)
 
 1. Create a Supabase project.
-2. In the SQL editor, run [`supabase/migrations/0001_auth_roles.sql`](supabase/migrations/0001_auth_roles.sql). It creates `profiles`, `roles`, `permissions`, `role_permissions`, the new-user trigger, RLS policies and the default role grants.
+2. In the SQL editor, run both migrations in order:
+   - [`0001_auth_roles.sql`](supabase/migrations/0001_auth_roles.sql): `profiles`, `roles`, `permissions`, `role_permissions`, the new-user trigger, RLS and default grants.
+   - [`0002_game.sql`](supabase/migrations/0002_game.sql): game data (see **Database** below), the `submission-media` storage bucket, and seed data (10 groups, R1–R6 + 3 side quests, R1's 10 riddles).
 3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
    ```bash
    npx supabase login
@@ -29,6 +31,40 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
    update public.profiles set role_id = 'super_admin' where email = 'you@example.com';
    ```
 7. Register everyone else from **Groups → + Tambah member** (straight into a group) or **Members → + Daftarkan member**, and give each person their email and starting password.
+
+## Database
+
+| Table | What it holds | Who can read / write (RLS) |
+| --- | --- | --- |
+| `profiles` | Accounts: name, role, group, service team, TL, panitia, active | Own row, own group-mates, `members.view` · edits need `members.manage` |
+| `roles`, `permissions`, `role_permissions` | Role → permission grants | Everyone reads · `roles.manage` edits (Super Admin locked) |
+| `groups` | The 10 groups + Lock & Publish state | Everyone reads · `groups.manage` locks |
+| `challenges` | Code, kind (main / side), round, PIC, status, schedule, content sections, scoring rules (JSON), riddles per group, draw seed / lock | Non-draft for everyone · `challenges.manage` for drafts and edits |
+| `riddles` | Riddle prompts per challenge | Staff see all · members only their group's drawn riddles, once the challenge is Live |
+| `riddle_answers` | Answer key, separate table | Only `challenges.manage` / `submissions.validate` (never sent to members) |
+| `riddle_draws` | Which riddles each group got (slot 1..N) | Staff · members see their own group's draw once Live |
+| `submissions` | Photo (storage path), IG link, tagged members, No-AI declaration, version; review: checks, location, headcount, score, override note, reject reason | Own group + validators/scorers · insert needs `portal.submit` · review needs `submissions.validate` |
+| `group_scores()` | Function: validated points per group per challenge | Everyone (leaderboard) without exposing other groups' submissions |
+
+Database rules (triggers) enforce the game flow:
+- A submission is accepted only while its challenge is **Live**, before the deadline, and only for the submitter's own group. The version number counts up automatically.
+- Reviewers can only change the review fields.
+- Photos go to the private `submission-media/<group>/…` bucket, readable by group-mates and validators.
+
+## Challenges (admin)
+
+**Challenges** lists every round and side quest.
+- **+ Baru** creates a draft.
+- For each challenge you can edit: code, kind, round, PIC, name, the 8 content sections (Game Idea … Duration) and the schedule (announce / open / deadline / validation, in WIB).
+- **Status:** Draft → Scheduled → Live → Closed → Results Published. Drafts are hidden from members. Scheduled and Live need a deadline, and Live needs the riddle draw first.
+- **Scoring rules:**
+  - *Riddle foto:* location weight + participation weight (must total 100%), with editable headcount tiers.
+  - *Poin tetap:* every validated submission gets the max points.
+  - *Nilai manual:* the validator enters 0–max.
+- **Riddle bank & draw:** add, edit and delete riddles with answers, set N riddles per group, draw with a random seed (saved immediately), then **Kunci undian** to lock it.
+- **Delete** removes the challenge with its riddles, draw and submissions, after a confirmation.
+
+The Validation Queue scores each submission with its challenge's own rules. The Scoring page and the portal leaderboard get one column per main round plus one Side Quest column, all from `group_scores()`.
 
 ## Login & roles
 
@@ -48,11 +84,11 @@ Edit the grants in **Roles & Access**; changes apply immediately. The database e
 
 | Nav | Permission | Notes |
 | --- | --- | --- |
-| Overview | `dashboard.view` | Live R1 countdown, stat cards, timeline, submissions per group, overdue SLA, scheduled announcements |
+| Overview | `dashboard.view` | Focus challenge (first Live main round) countdown, submissions received / pending, SLA, per-group riddle status from the database. The timeline, overdue list and scheduled announcements are still static sample content |
 | Groups | `groups.manage` (+ `members.manage` to edit) | Real member list. **+ Tambah member** registers a new account straight into that group; click a name to edit (name, team, TL, role / Group Leader, group, active, reset password); drag names between groups or to "Belum ada grup"; seeded Auto-assign with confirmation (optionally re-picks 1 Group Leader per group); live rule checks; Lock & Publish |
-| Challenges | `challenges.manage` | R1 Photo builder: status, template fields, schedule, score formula, riddle bank + seeded draw |
-| Validation Queue | `submissions.validate` | `A` approve · `R` reject · `→` skip; checklist, headcount → score, override note, reject reasons |
-| Scoring & Leaderboard | `scores.view` | Standings for all groups, points per challenge (R1–R6, Side Quest), filter/rank by challenge, ties share a rank. Updates live from queue approvals |
+| Challenges | `challenges.manage` | Create / edit / delete challenges, status workflow, schedule, scoring rules, riddle bank + draw (see **Challenges** above) |
+| Validation Queue | `submissions.validate` | Real submissions per challenge, filter by group / status. `A` approve · `R` reject · `←`/`→` move. Photo, IG link, tagged members, riddle + answer key, checklist, headcount → score by the challenge's rules, override (with reason), reject / resubmit reasons |
+| Scoring & Leaderboard | `scores.view` | Standings from validated submissions, one column per main round + Side Quest, rank by any column, ties share a rank |
 | Members | `members.view` / `members.manage` | Search/filter, change role/group inline, activate/deactivate, register members, Edit dialog (incl. password reset) |
 | Roles & Access | `roles.manage` | Role × permission matrix |
 
@@ -68,16 +104,17 @@ Responsive web version of `design/Flourish Hub Portal.dc.html` (the design was a
 
 | Screen | Notes |
 | --- | --- |
-| Home | Live countdown, active challenges, this week, your group's rank |
-| Challenge Detail | Riddles for your group, do's & don'ts, scoring, submit button (Group Leader only) |
-| Submit | Needs `portal.submit`. Upload progress, IG proof, member tagging → participation tier, rules + No-AI declaration gate the submit button |
-| Leaderboard | Same standings as admin; tabs, podium, your-group breakdown |
+| Home | Focus challenge countdown + "x dari N riddle terkirim", its schedule, other challenges, your group's rank |
+| Challenge Detail | Tabs for every non-draft challenge; your group's drawn riddles with live status (validated / submitted / rejected + reason), scoring rules, submit per riddle (Group Leader, while Live) |
+| Submit | Needs `portal.submit`. Pick riddle, photo upload (Supabase Storage), IG Story link, tag group-mates → participation tier, rules + No-AI declaration gate the button. Rejected riddles can be re-sent (new version) |
+| Leaderboard | Same standings as admin; tabs per opened challenge, podium, your-group breakdown |
 | Me | Profile, link to admin (if allowed), sign out |
 | My Group | Placeholder (not in the design yet) |
 
 ## What's real vs sample
 
-- **In Supabase:** accounts, sessions, member profiles (including group, service team, TL and Group Leader), roles and permissions.
-- **Still sample data** (`src/data.js`): challenges, riddles, submissions and scores, plus the demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Queue decisions and the Lock & Publish flag reset on reload.
+- **In the database:** accounts, profiles, roles and permissions, groups and their lock, challenges, riddles and answers, draws, submissions and reviews, and scores.
+- **Demo mode** keeps the same tables in the browser's localStorage, seeded with the WM 2026 sample, on a demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Photos aren't stored in demo mode. With Supabase configured, the app uses real time.
+- **Still static:** the Overview timeline, the overdue-SLA list and the scheduled-announcements card.
 - Admin is built for desktop (minimum width 1280 px); the Portal and login page are responsive.
 - `design/` holds the original Claude Design sources for reference; they aren't used by the build.

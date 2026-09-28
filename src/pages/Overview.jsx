@@ -1,10 +1,15 @@
-import { GROUPS, CAPTAINS, R1STAT, R1_DEADLINE } from '../data.js';
+import { useEffect, useState } from 'react';
+import { GROUPS } from '../data.js';
+import { api } from '../lib/api.js';
+import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName } from '../lib/groups.js';
+import { leaderName, isStaffOf } from '../lib/groups.js';
+import { fmtWIB, statusMeta } from '../lib/game.js';
 import useCountdown from '../useCountdown.js';
 
 const DOT = { V: ['#2F7A55', 'none'], S: ['#6F95CF', 'none'], D: ['#E3A92B', 'none'], N: ['transparent', '1.5px solid #CFC4AA'], X: ['#C4533F', 'none'] };
-const LAST_ACT = ['Jum 18:40', 'Jum 17:02', 'Jum 16:15', 'Jum 18:05', 'Kam 22:30', 'Jum 12:10', 'Jum 19:01', 'Kam 21:45', 'Jum 08:20', 'Kam 20:50'];
+// Latest submission per riddle slot → dot: V validated · S waiting · X rejected/resubmit · N none.
+const STATE = { validated: 'V', submitted: 'S', rejected: 'X', resubmit: 'X' };
 
 // Timeline spans day 8 → 51 of October (51 = 20 Nov).
 const X = (d) => ((d - 8) / 43) * 100 + '%';
@@ -36,16 +41,34 @@ const COLS = '1.4fr 1.2fr 110px 70px 70px 80px 1fr';
 const statCard = { padding: 18, display: 'flex', flexDirection: 'column', gap: 6 };
 const bigNum = { font: "800 30px 'Bricolage Grotesque'" };
 
-export default function Overview({ pending, onNavigate }) {
+export default function Overview({ onNavigate }) {
   const members = useMembers().rows || [];
-  const cd = useCountdown(R1_DEADLINE);
-  const rows = GROUPS.map(([no, name, color], i) => {
-    const st = R1STAT[i];
-    const c = (ch) => [...st].filter((x) => x === ch).length;
-    return { no, name, color, captain: CAPTAINS[i], leader: leaderName(members, no), dots: [...st], rec: c('V') + c('S') + c('X'), pen: c('S'), val: c('V'), last: LAST_ACT[i] };
+  const { focus, pending, scores } = useGame();
+  const [subs, setSubs] = useState([]);
+  const [draw, setDraw] = useState([]);
+  // Refetch when scores change (i.e. after a review) so counts stay current.
+  useEffect(() => {
+    if (!focus) return;
+    api.listSubmissions({ challengeId: focus.id }).then(setSubs);
+    api.getDraw(focus.id).then(setDraw);
+  }, [focus?.id, scores]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cd = useCountdown(focus?.deadline_at ? new Date(focus.deadline_at).getTime() : 0);
+  const pic = members.find((p) => p.id === focus?.pic_id)?.full_name;
+  const perGroup = focus?.riddles_per_group || 0;
+
+  const rows = GROUPS.map(([no, name, color]) => {
+    const mine = subs.filter((x) => x.group_no === no);
+    const latest = (riddleId) => mine.filter((x) => x.riddle_id === riddleId).sort((a, b) => b.version - a.version)[0];
+    const slots = draw.filter((d) => d.group_no === no).sort((a, b) => a.slot - b.slot);
+    const dots = perGroup ? slots.map((d) => STATE[latest(d.riddle_id)?.status] || 'N') : [];
+    const cur = perGroup ? slots.map((d) => latest(d.riddle_id)).filter(Boolean) : mine;
+    const last = mine.map((x) => x.submitted_at).sort().pop();
+    const captain = members.filter((p) => isStaffOf(p, no)).map((p) => p.full_name).join(', ') || '—';
+    return { no, name, color, captain, leader: leaderName(members, no), dots, rec: cur.length, pen: cur.filter((x) => x.status === 'submitted').length, val: cur.filter((x) => x.status === 'validated').length, last: last ? fmtWIB(last, { day: undefined, month: undefined }).replace(' WIB', '') : '—' };
   });
   const received = rows.reduce((a, r) => a + r.rec, 0);
   const pendingR1 = rows.reduce((a, r) => a + r.pen, 0);
+  const expected = perGroup * GROUPS.length;
 
   return (
     <div className="page">
@@ -63,21 +86,21 @@ export default function Overview({ pending, onNavigate }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: 14 }}>
         <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="row" style={{ gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 800, background: '#E3A92B', color: '#1B2620', padding: '3px 8px', borderRadius: 999 }}>LIVE</span>
-            <span style={{ fontSize: 13, opacity: 0.85 }}>R1 · Photo Challenge · PIC Cindy</span>
+            <span style={{ fontSize: 11, fontWeight: 800, background: '#E3A92B', color: '#1B2620', padding: '3px 8px', borderRadius: 999 }}>{focus ? statusMeta(focus.status)[1].toUpperCase() : '—'}</span>
+            <span style={{ fontSize: 13, opacity: 0.85 }}>{focus ? `${focus.code} · ${focus.name}${pic ? ' · PIC ' + pic : ''}` : 'Belum ada challenge aktif'}</span>
           </div>
-          <span className="num" style={{ font: "800 26px 'Bricolage Grotesque'" }}>{cd.d}h {cd.h}:{cd.m}:{cd.s}</span>
-          <span style={{ fontSize: 12, opacity: 0.85 }}>tutup Min, 18 Okt · 23:55 WIB</span>
+          <span className="num" style={{ font: "800 26px 'Bricolage Grotesque'" }}>{focus?.deadline_at ? `${cd.d}h ${cd.h}:${cd.m}:${cd.s}` : '—'}</span>
+          <span style={{ fontSize: 12, opacity: 0.85 }}>{focus?.deadline_at ? 'tutup ' + fmtWIB(focus.deadline_at) : 'deadline belum diatur'}</span>
         </div>
         <div className="card" style={statCard}>
-          <span className="muted" style={{ fontSize: 13 }}>Submission R1 masuk</span>
-          <span style={bigNum}>{received}<span className="muted" style={{ fontSize: 16 }}> / 40</span></span>
-          <span className="muted" style={{ fontSize: 12 }}>4 riddle × 10 grup</span>
+          <span className="muted" style={{ fontSize: 13 }}>Submission {focus?.code ?? ''} masuk</span>
+          <span style={bigNum}>{received}{expected ? <span className="muted" style={{ fontSize: 16 }}> / {expected}</span> : null}</span>
+          <span className="muted" style={{ fontSize: 12 }}>{perGroup ? `${perGroup} riddle × 10 grup` : 'submission terbaru per grup'}</span>
         </div>
         <div className="card" style={statCard}>
           <span className="muted" style={{ fontSize: 13 }}>Menunggu validasi</span>
           <span style={{ ...bigNum, color: '#244F8F' }}>{pendingR1}</span>
-          <span className="muted" style={{ fontSize: 12 }}>SLA: Sel, 20 Okt EOD</span>
+          <span className="muted" style={{ fontSize: 12 }}>{focus?.validate_by ? 'SLA: ' + fmtWIB(focus.validate_by, { hour: undefined, minute: undefined }).replace(' WIB', '') : 'SLA belum diatur'}</span>
         </div>
         <div style={{ ...statCard, background: '#FBE4E0', border: '1px solid #F0C4BC', borderRadius: 16, color: '#9A2A1E' }}>
           <span style={{ fontSize: 13, fontWeight: 700 }}>Validasi lewat SLA</span>
@@ -124,7 +147,7 @@ export default function Overview({ pending, onNavigate }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 16, marginTop: 8 }}>
         <div className="card" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'baseline', gap: 10, borderBottom: '1px solid #E9E0CC' }}>
-            <span className="card-title">Submission per grup · R1</span>
+            <span className="card-title">Submission per grup · {focus?.code}</span>
             <span className="muted" style={{ fontSize: 12 }}>
               <Legend c="#2F7A55" /> validated <Legend c="#6F95CF" /> pending <Legend c="#E3A92B" /> draft <Legend c="transparent" b="1.5px solid #CFC4AA" /> belum <Legend c="#C4533F" /> ditolak
             </span>

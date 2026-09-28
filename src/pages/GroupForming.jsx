@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useMembers } from '../lib/members.jsx';
+import { useGame } from '../lib/gameStore.jsx';
 import { groupView, validate, autoAssign, GROUP_MIN, GROUP_MAX } from '../lib/groups.js';
 import MemberDialog from '../components/MemberDialog.jsx';
 
@@ -15,7 +16,10 @@ export default function GroupForming() {
   const { can } = useAuth();
   const { rows, error, update, updateMany } = useMembers();
   const canEdit = can('members.manage');
-  const [locked, setLocked] = useState(false);
+  const { groups: groupRows, setLocked: persistLock } = useGame();
+  // Lock & Publish is stored on the groups table; any edit re-opens it.
+  const locked = !!groupRows?.length && groupRows.every((g) => g.locked_at);
+  const setLocked = (v) => { if (v !== locked) persistLock(v).catch((e) => say('bad', e.message)); };
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const [dialog, setDialog] = useState(null); // { member } | { defaults }
@@ -94,7 +98,7 @@ export default function GroupForming() {
             <button className="btn btn-outline" style={{ height: 38 }} disabled={busy} onClick={() => setConfirmAuto({ seed: Math.floor(Math.random() * 9000) + 1000, pickLeaders: true })}>{busy ? 'Menyimpan…' : 'Auto-assign'}</button>
           </>
         )}
-        <button className="btn" disabled={!ok && !locked} onClick={() => ok && setLocked(true)}
+        <button className="btn" disabled={!ok && !locked} onClick={() => (locked ? setLocked(false) : ok && setLocked(true))} title={locked ? 'Klik untuk membuka kunci' : undefined}
           style={{ marginLeft: canEdit ? 0 : 'auto', height: 38, fontWeight: 800, background: locked ? '#2F7A55' : ok ? '#1F4D3A' : '#E2DACA', color: ok || locked ? '#FBF6EA' : '#6B665A' }}>
           {locked ? '✓ Terkunci & dipublikasikan' : 'Lock & Publish Groups'}
         </button>

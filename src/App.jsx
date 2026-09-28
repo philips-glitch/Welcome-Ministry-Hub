@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import Overview from './pages/Overview.jsx';
 import ValidationQueue from './pages/ValidationQueue.jsx';
@@ -10,8 +10,8 @@ import Roles from './pages/Roles.jsx';
 import PortalApp from './portal/PortalApp.jsx';
 import Login from './auth/Login.jsx';
 import { useAuth } from './auth/AuthContext.jsx';
-import { initialQueue, standings } from './data.js';
 import { MembersProvider } from './lib/members.jsx';
+import { GameProvider, useGame } from './lib/gameStore.jsx';
 
 // Admin pages: slug, label, permission required to see it.
 export const ADMIN_NAV = [
@@ -36,9 +36,6 @@ function parseHash() {
 export default function App() {
   const auth = useAuth();
   const [loc, setLoc] = useState(parseHash);
-  // Shared game state: queue approvals feed scores (admin + portal). Members come from MembersProvider.
-  const [queue, setQueue] = useState(initialQueue);
-  const rows = useMemo(() => standings(queue), [queue]);
 
   useEffect(() => {
     const onHash = () => setLoc(parseHash());
@@ -66,32 +63,39 @@ export default function App() {
 
   if (loc.app === 'portal') {
     if (!can('portal.view')) return <Blocked onSignOut={auth.signOut} text="Role kamu belum punya akses ke Game Portal." />;
-    return <PortalApp route={loc.route} standings={rows} />;
+    return <GameProvider><PortalApp route={loc.route} /></GameProvider>;
   }
   if (loc.app !== 'admin') return <Splash />;
 
+  return (
+    <GameProvider>
+      <MembersProvider>
+        <AdminShell route={loc.route} can={can} />
+      </MembersProvider>
+    </GameProvider>
+  );
+}
+
+function AdminShell({ route: r, can }) {
+  const { pending } = useGame();
   const navigate = (slug) => { window.location.hash = '/' + slug; };
-  const pending = queue.filter((q) => q.status === 'pending').length;
   const nav = ADMIN_NAV.filter(([, , perm]) => can(perm));
   const badges = { queue: pending ? String(pending) : '' };
 
-  const r = loc.route;
   let content = null;
-  if (r === 'overview') content = <Overview pending={pending} onNavigate={navigate} />;
+  if (r === 'overview') content = <Overview onNavigate={navigate} />;
   else if (r === 'groups') content = <GroupForming />;
   else if (r === 'challenges') content = <ChallengeBuilder />;
-  else if (r === 'queue') content = <ValidationQueue queue={queue} setQueue={setQueue} />;
-  else if (r === 'scoring') content = <Scoring rows={rows} pending={pending} />;
+  else if (r === 'queue') content = <ValidationQueue />;
+  else if (r === 'scoring') content = <Scoring />;
   else if (r === 'members') content = <Members />;
   else if (r === 'roles') content = <Roles />;
 
   return (
-    <MembersProvider>
-      <div className="shell">
-        <Sidebar items={nav} active={r} onNavigate={navigate} badges={badges} />
-        <main className="main">{content}</main>
-      </div>
-    </MembersProvider>
+    <div className="shell">
+      <Sidebar items={nav} active={r} onNavigate={navigate} badges={badges} />
+      <main className="main">{content}</main>
+    </div>
   );
 }
 

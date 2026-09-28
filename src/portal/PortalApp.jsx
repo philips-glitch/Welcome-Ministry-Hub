@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './portal.css';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { roleName } from '../lib/permissions.js';
 import { GROUPS } from '../data.js';
+import { api } from '../lib/api.js';
+import { useGame } from '../lib/gameStore.jsx';
+import { buildStandings } from '../lib/game.js';
+import { isPlayer } from '../lib/groups.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
 import Submit from './Submit.jsx';
@@ -26,13 +30,20 @@ export const Leaf = ({ size = 24 }) => (
 const TABS = [['home', 'Home', 'home'], ['challenge', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
 const TAB_OF = { home: 'home', challenge: 'challenge', submit: 'challenge', group: 'group', leaderboard: 'leaderboard', me: 'me' };
 
-export default function PortalApp({ route, standings }) {
+export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
+  const game = useGame();
   const go = (r) => { window.location.hash = '/portal/' + r; window.scrollTo(0, 0); };
   const page = TAB_OF[route] ? route : 'home';
   const activeTab = TAB_OF[page];
-  // Submission draft lives here so it survives switching between Detail and Submit.
-  const [submitted, setSubmitted] = useState(false);
+  const standings = useMemo(() => buildStandings(game.scores, game.challenges || []), [game.scores, game.challenges]);
+
+  // Challenge in view (Detail/Submit); defaults to the focus challenge.
+  const visible = (game.challenges || []).filter((c) => c.status !== 'draft');
+  const [chId, setChId] = useState(null);
+  const challenge = visible.find((c) => c.id === chId) || game.focus || visible[0] || null;
+  const openChallenge = (id) => { setChId(id); go('challenge'); };
+  const [riddleId, setRiddleId] = useState(null);
 
   const g = profile.group_no ? GROUPS[+profile.group_no - 1] : null;
   const me = {
@@ -41,11 +52,14 @@ export default function PortalApp({ route, standings }) {
     group: g && { no: g[0], name: g[1], color: g[2] },
     canSubmit: can('portal.submit') && !!g,
   };
+  const data = useGroupChallenge(challenge, me.group?.no);
+  const onSubmitted = () => { data.reload(); game.reloadScores(); };
 
   let content;
-  if (page === 'home') content = <Home go={go} me={me} standings={standings} />;
-  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} submitted={submitted} />;
-  else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} submitted={submitted} setSubmitted={setSubmitted} /> : <NoSubmit go={go} />;
+  if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
+  else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
+  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} challenges={visible} setChId={setChId} data={data} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
+  else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;
   else content = <Soon title="My Group" go={go} />;
@@ -89,6 +103,24 @@ export default function PortalApp({ route, standings }) {
       </nav>
     </div>
   );
+}
+
+// My group's view of one challenge: drawn riddles, submissions (latest per riddle) and roster for tagging.
+function useGroupChallenge(challenge, groupNo) {
+  const [state, setState] = useState({ riddles: [], draw: [], subs: [], roster: [], loading: true });
+  const id = challenge?.id;
+  const reload = useCallback(async () => {
+    if (!id || !groupNo) return setState((s) => ({ ...s, loading: false }));
+    const [riddles, draw, subs, profiles] = await Promise.all([
+      api.listRiddles(id), api.getDraw(id), api.listSubmissions({ challengeId: id, groupNo }), api.listProfiles(),
+    ]);
+    const mine = draw.filter((d) => d.group_no === groupNo).sort((a, b) => a.slot - b.slot);
+    const ids = new Set(mine.map((d) => d.riddle_id));
+    setState({ riddles: riddles.filter((r) => ids.has(r.id)), draw: mine, subs, roster: profiles.filter((p) => isPlayer(p) && p.group_no === groupNo), loading: false });
+  }, [id, groupNo]);
+  useEffect(() => { setState((s) => ({ ...s, loading: true })); reload().catch(() => setState((s) => ({ ...s, loading: false }))); }, [reload]);
+  const latest = (riddleId) => state.subs.filter((x) => (x.riddle_id ?? null) === (riddleId ?? null)).sort((a, b) => b.version - a.version)[0] || null;
+  return { ...state, reload, latest };
 }
 
 function NoSubmit({ go }) {
