@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EAE3D2;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1B2620;-webkit-font-smoothing:antialiased}
+a{color:#1F4D3A;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#2F7A55}
+*{box-sizing:border-box}
+</style>
+</helmet>
+
+<section id="t1" style="padding:48px 56px 24px;display:flex;flex-direction:column;gap:14px;max-width:1500px">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="width:44px;height:44px;border-radius:14px;background:#1F4D3A;display:flex;align-items:center;justify-content:center;color:#E3A92B">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21v-9M12 12c0-4 3-7 7-7 0 4-3 7-7 7zM12 14c0-3-2.5-5.5-6-5.5 0 3 2.5 5.5 6 5.5z"></path></svg>
+    </div>
+    <div style="display:flex;flex-direction:column">
+      <span style="font:800 30px/1.1 'Bricolage Grotesque',sans-serif;color:#1F4D3A;letter-spacing:-0.01em">Flourish Hub — User Game Portal</span>
+      <span style="font-size:14px;color:#56655C">Welcome UR Outing 2026 · #flourishdeeperWM2026 · mobile-first, 390 px · demo clock: Jum, 16 Okt 2026 · 19:12 WIB (R1 live)</span>
+    </div>
+    <a href="Flourish Hub Admin.dc.html" style="margin-left:auto;font-weight:700;font-size:14px">Buka Admin Dashboard →</a>
+  </div>
+  <p style="margin:0;font-size:14px;line-height:1.55;color:#3C4A42;max-width:980px;text-wrap:pretty">Asumsi: design system yang terpasang masih kosong, jadi palet diambil dari brief — hijau tua (#1F4D3A) sebagai warna utama, emas hangat (#E3A92B) hanya untuk isian/sorotan (tidak pernah untuk teks di atas krem), dan krem lembut sebagai latar. Tiap grup punya satu warna aksen. Tipografi: Bricolage Grotesque untuk judul (hangat, sedikit playful) + Plus Jakarta Sans untuk teks (dirancang di Jakarta, enak dibaca dalam Bahasa Indonesia). Contoh user: <b>Nadia</b>, Group Leader grup <b>Vine (04)</b>.</p>
+</section>
+
+<section id="flows" style="padding:24px 56px 40px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:18px">
+    <span style="font:700 11px ui-monospace,Menlo,monospace;background:#1F4D3A;color:#FBF6EA;padding:3px 8px;border-radius:5px">01</span>
+    <span style="font:700 20px 'Bricolage Grotesque',sans-serif;color:#1F4D3A">Screen list & user flows</span>
+  </div>
+  <div style="display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px;max-width:1400px">
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:10px">
+      <span style="font:700 13px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Portal screens</span>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.4">
+        <span><b>1 Login</b> — Google / magic link</span>
+        <span><b>2 Home</b> — countdown, due strip, cards, rank</span>
+        <span><b>3 Challenge Detail</b> — rules, riddles, status</span>
+        <span><b>4 Submit</b> — Group Leader only</span>
+        <span><b>5 My Group</b> — roster, badges, nudges</span>
+        <span><b>6 Leaderboard</b> — validated only</span>
+        <span><b>7 Gallery</b> — validated + repost picks</span>
+        <span><b>8 Notifications</b> — announce, 24h/3h, results</span>
+        <span><b>9 Me</b> — profile, IG handle, follow status</span>
+      </div>
+      <span style="font:700 13px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C;margin-top:8px">Bottom nav</span>
+      <span style="font-size:14px">Home · Challenges · Group · Leaderboard · Me</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-for list="{{ flows }}" as="f" hint-placeholder-count="3">
+        <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:18px 22px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="font:700 15px 'Bricolage Grotesque',sans-serif;color:#1F4D3A">{{ f.title }}</span>
+            <span style="font-size:13px;color:#56655C">{{ f.who }}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+            <sc-for list="{{ f.steps }}" as="s" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:13px;font-weight:600;padding:8px 12px;border-radius:10px;background:#E3EFE6;color:#1F4D3A;border:1px solid #C9DECF">{{ s.label }}</span>
+                <sc-if value="{{ s.more }}" hint-placeholder-val="{{ true }}"><span style="color:#8A9A8F;font-weight:700">→</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="hifi" style="padding:24px 56px 48px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:18px">
+    <span style="font:700 11px ui-monospace,Menlo,monospace;background:#1F4D3A;color:#FBF6EA;padding:3px 8px;border-radius:5px">02</span>
+    <span style="font:700 20px 'Bricolage Grotesque',sans-serif;color:#1F4D3A">Hi-fi mockups</span>
+    <span style="font-size:13px;color:#56655C">Full-length scroll. Countdown berjalan live. Di Submit: tap avatar untuk tag, centang deklarasi untuk mengaktifkan tombol.</span>
+  </div>
+  <div style="display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap">
+
+    <!-- HOME -->
+    <div id="p-home" style="display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 12px ui-monospace,Menlo,monospace;color:#56655C">2 · Home</span>
+      <div style="width:390px;background:#FBF6EA;border-radius:46px;border:10px solid #14281F;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,40,31,.45);display:flex;flex-direction:column">
+        <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:14px;font-weight:700"><span>19:12</span><span style="width:110px;height:28px;background:#14281F;border-radius:20px"></span><span style="font-size:12px">5G ▮▮▮</span></div>
+        <div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:48px;height:48px;border-radius:16px;background:#8A4FA3;color:#fff;display:flex;align-items:center;justify-content:center;font:800 18px 'Bricolage Grotesque'">V</div>
+            <div style="display:flex;flex-direction:column;flex:1;min-width:0">
+              <span style="font-size:13px;color:#56655C">Halo, Nadia</span>
+              <span style="font:700 19px 'Bricolage Grotesque';color:#1B2620">Vine · Grup 04</span>
+            </div>
+            <div style="position:relative;width:44px;height:44px;border-radius:14px;background:#FFFDF8;border:1px solid #E9E0CC;display:flex;align-items:center;justify-content:center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F4D3A" stroke-width="2" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"></path></svg>
+              <span style="position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:#C4533F;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #FBF6EA">3</span>
+            </div>
+          </div>
+
+          <div style="background:#1F4D3A;border-radius:24px;padding:20px;color:#FBF6EA;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden">
+            <div style="position:absolute;right:-30px;top:-30px;width:140px;height:140px;border-radius:50%;background:#2F7A55;opacity:.5"></div>
+            <div style="display:flex;align-items:center;gap:8px;position:relative">
+              <span style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:#E3A92B;color:#1B2620;padding:4px 9px;border-radius:999px">Live</span>
+              <span style="font-size:13px;opacity:.85">Deadline berikutnya</span>
+            </div>
+            <span style="font:800 24px/1.15 'Bricolage Grotesque';position:relative">Photo Challenge</span>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;position:relative">
+              <div style="background:rgba(251,246,234,.12);border-radius:14px;padding:10px 0;display:flex;flex-direction:column;align-items:center"><span style="font:800 28px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ cd.d }}</span><span style="font-size:11px;opacity:.8">hari</span></div>
+              <div style="background:rgba(251,246,234,.12);border-radius:14px;padding:10px 0;display:flex;flex-direction:column;align-items:center"><span style="font:800 28px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ cd.h }}</span><span style="font-size:11px;opacity:.8">jam</span></div>
+              <div style="background:rgba(251,246,234,.12);border-radius:14px;padding:10px 0;display:flex;flex-direction:column;align-items:center"><span style="font:800 28px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ cd.m }}</span><span style="font-size:11px;opacity:.8">menit</span></div>
+              <div style="background:rgba(251,246,234,.12);border-radius:14px;padding:10px 0;display:flex;flex-direction:column;align-items:center"><span style="font:800 28px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ cd.s }}</span><span style="font-size:11px;opacity:.8">detik</span></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;position:relative"><span>Min, 18 Okt · 23:55 WIB</span><span style="font-weight:700">2 dari 4 riddle terkirim</span></div>
+            <div style="height:8px;border-radius:4px;background:rgba(251,246,234,.18);position:relative"><div style="width:50%;height:100%;border-radius:4px;background:#E3A92B"></div></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font:700 16px 'Bricolage Grotesque'">Minggu ini</span>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+              <div style="background:#E3EFE6;border-radius:14px;padding:10px 8px;display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#2F7A55;font-weight:800">✓ KAM 15</span><span style="font-size:12px;font-weight:600;line-height:1.25">Diumumkan</span></div>
+              <div style="background:#FFFDF8;border:2px solid #1F4D3A;border-radius:14px;padding:9px 7px;display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#1F4D3A;font-weight:800">MIN 18</span><span style="font-size:12px;font-weight:700;line-height:1.25">Deadline 23:55</span></div>
+              <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:14px;padding:10px 8px;display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#56655C;font-weight:800">SEL 20</span><span style="font-size:12px;font-weight:600;line-height:1.25">Validasi</span></div>
+              <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:14px;padding:10px 8px;display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#56655C;font-weight:800">RAB 21</span><span style="font-size:12px;font-weight:600;line-height:1.25">Repost IG</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 16px 'Bricolage Grotesque'">Challenge aktif</span><span style="font-size:13px;font-weight:700;color:#1F4D3A">Lihat semua</span></div>
+            <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:40px;height:40px;border-radius:12px;background:#F8E9C4;display:flex;align-items:center;justify-content:center;color:#7A5410"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg></div>
+                <div style="display:flex;flex-direction:column;flex:1"><span style="font-weight:700;font-size:15px">R4 · Scrapbook / Poster</span><span style="font-size:12px;color:#56655C">Jalan terus s/d Kam, 19 Nov · 23:55</span></div>
+                <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:#E3EFE6;color:#1F4D3A">LIVE</span>
+              </div>
+              <div style="display:flex;gap:4px"><div style="flex:1;height:6px;border-radius:3px;background:#2F7A55"></div><div style="flex:1;height:6px;border-radius:3px;background:#2F7A55"></div><div style="flex:1;height:6px;border-radius:3px;background:#E9E0CC"></div><div style="flex:1;height:6px;border-radius:3px;background:#E9E0CC"></div><div style="flex:1;height:6px;border-radius:3px;background:#E9E0CC"></div></div>
+              <span style="font-size:12px;color:#56655C">2/5 bagian siap: nama tim, slogan. Kurang: foto anggota, fun facts, foto aktivitas.</span>
+            </div>
+            <div style="background:#FFFDF8;border:1px dashed #D5CAB0;border-radius:20px;padding:16px;display:flex;align-items:center;gap:10px">
+              <div style="width:40px;height:40px;border-radius:12px;background:#EDE6D6;display:flex;align-items:center;justify-content:center;color:#56655C"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path></svg></div>
+              <div style="display:flex;flex-direction:column;flex:1"><span style="font-weight:700;font-size:15px">R2 · Video Challenge</span><span style="font-size:12px;color:#56655C">Diumumkan Kam, 22 Okt · 20:00</span></div>
+              <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:#EDE6D6;color:#56655C">SOON</span>
+            </div>
+          </div>
+
+          <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:16px;display:flex;align-items:center;gap:14px">
+            <div style="width:56px;height:56px;border-radius:18px;background:#F8E9C4;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:10px;font-weight:800;color:#7A5410">RANK</span><span style="font:800 24px/1 'Bricolage Grotesque';color:#1B2620">#3</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-weight:700;font-size:15px">28 poin · dari 10 grup</span><span style="font-size:13px;color:#56655C">Tinggal 2 poin lagi ke #2. Gas!</span></div>
+            <span style="font-size:20px;color:#1F4D3A">›</span>
+          </div>
+        </div>
+        <div style="margin-top:auto;border-top:1px solid #E9E0CC;background:#FFFDF8;display:grid;grid-template-columns:repeat(5,1fr);padding:8px 6px 22px">
+          <sc-for list="{{ nav.home }}" as="n" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;justify-content:center;color:{{ n.color }}">
+              <div style="width:44px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:{{ n.bg }}">{{ n.icon }}</div>
+              <span style="font-size:11px;font-weight:700">{{ n.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- DETAIL -->
+    <div id="p-detail" style="display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 12px ui-monospace,Menlo,monospace;color:#56655C">3 · Challenge Detail</span>
+      <div style="width:390px;background:#FBF6EA;border-radius:46px;border:10px solid #14281F;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,40,31,.45);display:flex;flex-direction:column">
+        <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:14px;font-weight:700"><span>19:12</span><span style="width:110px;height:28px;background:#14281F;border-radius:20px"></span><span style="font-size:12px">5G ▮▮▮</span></div>
+        <div style="padding:8px 20px 24px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;height:44px;border-radius:14px;background:#FFFDF8;border:1px solid #E9E0CC;display:flex;align-items:center;justify-content:center;font-size:20px;color:#1F4D3A">‹</div>
+            <span style="font-size:13px;color:#56655C;font-weight:600">Round 1 · PIC: Cindy</span>
+            <span style="margin-left:auto;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:#E3A92B;color:#1B2620">LIVE</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font:800 32px/1.05 'Bricolage Grotesque';color:#1F4D3A;letter-spacing:-0.01em">Photo Challenge</span>
+            <span style="font-size:15px;line-height:1.5;color:#3C4A42;text-wrap:pretty">Pecahkan 4 riddle, datangi lokasinya bareng-bareng, lalu selfie satu grup di sana. Makin banyak yang ikut, makin banyak poinnya.</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:12px 14px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1F4D3A" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 2M9 2h6"></path></svg>
+            <div style="display:flex;flex-direction:column;flex:1"><span style="font-size:12px;color:#56655C">Tutup dalam</span><span style="font:800 20px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ cd.d }}h {{ cd.h }}j {{ cd.m }}m {{ cd.s }}d</span></div>
+            <span style="font-size:12px;font-weight:700;text-align:right;color:#3C4A42">Min, 18 Okt<br>23:55 WIB</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 16px 'Bricolage Grotesque'">Riddle grup kamu</span><span style="font-size:12px;color:#56655C">diundi acak oleh panitia</span></div>
+            <sc-for list="{{ riddles }}" as="r" hint-placeholder-count="4">
+              <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font:800 13px 'Bricolage Grotesque';width:28px;height:28px;border-radius:9px;background:#1F4D3A;color:#FBF6EA;display:flex;align-items:center;justify-content:center">{{ r.no }}</span>
+                  <span style="font-size:13px;font-weight:700;color:#56655C">Riddle {{ r.no }}</span>
+                  <span style="margin-left:auto;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:{{ r.chipBg }};color:{{ r.chipFg }}">{{ r.status }}</span>
+                </div>
+                <span style="font-size:15px;line-height:1.45;font-weight:500;font-style:italic;color:#1B2620">“{{ r.text }}”</span>
+                <span style="font-size:12px;color:#56655C">{{ r.meta }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font:700 16px 'Bricolage Grotesque'">Do's & Don'ts</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:#E3EFE6;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.35"><span style="font-weight:800;color:#1F4D3A">✓ Lakukan</span><span>Selfie satu grup di lokasi</span><span>Post IG Story, tag akun event</span><span>Ajak sebanyak mungkin anggota</span></div>
+              <div style="background:#FBE4E0;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.35"><span style="font-weight:800;color:#9A2A1E">✕ Jangan</span><span>Pakai AI / edit lokasi</span><span>Sebut nama gereja</span><span>Foto wajah jemaat tanpa izin</span></div>
+            </div>
+          </div>
+
+          <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+            <span style="font:700 15px 'Bricolage Grotesque'">Cara skor · maks 10 per riddle</span>
+            <div style="display:flex;height:10px;border-radius:5px;overflow:hidden"><div style="flex:1;background:#1F4D3A"></div><div style="flex:1;background:#E3A92B"></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;line-height:1.4">
+              <div style="display:flex;flex-direction:column"><span style="font-weight:700">50% Lokasi benar</span><span style="color:#56655C">Benar 10 · Salah 0</span></div>
+              <div style="display:flex;flex-direction:column"><span style="font-weight:700">50% Partisipasi</span><span style="color:#56655C">10–14 org: 10 · 7–9: 6 · ≤6: 2</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="height:56px;border-radius:18px;background:#1F4D3A;color:#FBF6EA;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">Submit Riddle 2</div>
+            <span style="font-size:12px;color:#56655C;text-align:center">Hanya Group Leader yang bisa submit. Anggota bisa upload foto ke draft grup.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBMIT -->
+    <div id="p-submit" style="display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 12px ui-monospace,Menlo,monospace;color:#56655C">4 · Submit (Group Leader) — interaktif</span>
+      <div style="width:390px;background:#FBF6EA;border-radius:46px;border:10px solid #14281F;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,40,31,.45);display:flex;flex-direction:column">
+        <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:14px;font-weight:700"><span>19:12</span><span style="width:110px;height:28px;background:#14281F;border-radius:20px"></span><span style="font-size:12px">5G ▮▮▯</span></div>
+        <div style="padding:8px 20px 24px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;height:44px;border-radius:14px;background:#FFFDF8;border:1px solid #E9E0CC;display:flex;align-items:center;justify-content:center;font-size:20px;color:#1F4D3A">‹</div>
+            <div style="display:flex;flex-direction:column"><span style="font:800 20px 'Bricolage Grotesque'">Submit Riddle 2</span><span style="font-size:12px;color:#56655C">Photo Challenge · Vine</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+            <div style="display:flex;flex-direction:column;gap:5px"><div style="height:5px;border-radius:3px;background:#2F7A55"></div><span style="font-size:11px;font-weight:700;color:#2F7A55">Media</span></div>
+            <div style="display:flex;flex-direction:column;gap:5px"><div style="height:5px;border-radius:3px;background:#2F7A55"></div><span style="font-size:11px;font-weight:700;color:#2F7A55">Bukti IG</span></div>
+            <div style="display:flex;flex-direction:column;gap:5px"><div style="height:5px;border-radius:3px;background:#1F4D3A"></div><span style="font-size:11px;font-weight:700;color:#1F4D3A">Tag anggota</span></div>
+            <div style="display:flex;flex-direction:column;gap:5px"><div style="height:5px;border-radius:3px;background:#E9E0CC"></div><span style="font-size:11px;font-weight:700;color:#56655C">Cek aturan</span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font:700 15px 'Bricolage Grotesque'">1 · Foto grup</span>
+            <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:18px;padding:12px;display:flex;gap:12px;align-items:center">
+              <div style="width:64px;height:64px;border-radius:12px;background:repeating-linear-gradient(135deg,#E3D9C2 0 6px,#EDE5D2 6px 12px);display:flex;align-items:center;justify-content:center;font:600 9px ui-monospace,monospace;color:#7B7260">foto</div>
+              <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">IMG_2041.jpg</span><span style="font-variant-numeric:tabular-nums;color:#56655C">{{ up.label }}</span></div>
+                <div style="height:8px;border-radius:4px;background:#EDE6D6;overflow:hidden"><div style="height:100%;border-radius:4px;background:{{ up.color }};width:{{ up.pct }}"></div></div>
+                <span style="font-size:12px;color:{{ up.noteColor }}">{{ up.note }}</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div onClick="{{ retryUpload }}" style="flex:1;height:44px;border-radius:14px;border:1px solid #C9DECF;background:#E3EFE6;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1F4D3A;cursor:pointer">{{ up.action }}</div>
+              <div style="flex:1;height:44px;border-radius:14px;border:1px solid #E9E0CC;background:#FFFDF8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#3C4A42">atau link Drive</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font:700 15px 'Bricolage Grotesque'">2 · Bukti IG Story</span>
+            <div style="height:52px;border-radius:14px;border:1.5px solid #2F7A55;background:#FFFDF8;display:flex;align-items:center;gap:10px;padding:0 14px">
+              <span style="font-size:13px;color:#1B2620;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">instagram.com/stories/vine.wm04/3219…</span>
+              <span style="font-size:11px;font-weight:800;color:#2F7A55">✓ tag ditemukan</span>
+            </div>
+            <span style="font-size:12px;color:#56655C">Link Story kedaluwarsa 24 jam — upload screenshot juga biar aman.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:700 15px 'Bricolage Grotesque'">3 · Siapa aja di foto?</span><span onClick="{{ tagAll }}" style="font-size:13px;font-weight:700;color:#1F4D3A;cursor:pointer">Pilih semua</span></div>
+            <div style="background:#1F4D3A;color:#FBF6EA;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:12px">
+              <span style="font:800 30px/1 'Bricolage Grotesque';font-variant-numeric:tabular-nums">{{ tagCount }}</span>
+              <div style="display:flex;flex-direction:column;flex:1"><span style="font-size:13px;font-weight:700">anggota → {{ tierPts }} poin partisipasi</span><span style="font-size:12px;opacity:.85">{{ tierHint }}</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px 6px">
+              <sc-for list="{{ roster }}" as="m" hint-placeholder-count="14">
+                <div onClick="{{ m.toggle }}" style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;min-height:64px">
+                  <div style="position:relative;width:52px;height:52px;border-radius:50%;background:{{ m.bg }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;box-shadow:0 0 0 3px {{ m.ring }};opacity:{{ m.op }}">
+                    {{ m.ini }}
+                    <sc-if value="{{ m.sel }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;right:-3px;bottom:-3px;width:20px;height:20px;border-radius:50%;background:#E3A92B;color:#1B2620;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #FBF6EA">✓</span></sc-if>
+                  </div>
+                  <span style="font-size:11px;font-weight:600;color:#3C4A42">{{ m.first }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font:700 15px 'Bricolage Grotesque'">4 · Cek aturan</span>
+            <sc-for list="{{ checks }}" as="c" hint-placeholder-count="4">
+              <div onClick="{{ c.toggle }}" style="display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:14px;background:#FFFDF8;border:1px solid {{ c.border }};cursor:pointer;min-height:48px">
+                <span style="flex:none;width:24px;height:24px;border-radius:7px;border:2px solid #1F4D3A;background:{{ c.box }};color:#FBF6EA;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900">{{ c.mark }}</span>
+                <span style="font-size:13px;line-height:1.4;font-weight:{{ c.weight }}">{{ c.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div onClick="{{ doSubmit }}" style="height:56px;border-radius:18px;background:{{ submit.bg }};color:{{ submit.fg }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;cursor:pointer">{{ submit.label }}</div>
+            <span style="font-size:12px;color:#56655C;text-align:center">{{ submit.hint }}</span>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#56655C;border-top:1px dashed #D5CAB0;padding-top:10px"><span>Riwayat versi</span><span>v1 · draft · 16 Okt 18:40 oleh Grace</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div id="p-lb" style="display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 12px ui-monospace,Menlo,monospace;color:#56655C">6 · Leaderboard</span>
+      <div style="width:390px;background:#FBF6EA;border-radius:46px;border:10px solid #14281F;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,40,31,.45);display:flex;flex-direction:column">
+        <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:14px;font-weight:700"><span>19:12</span><span style="width:110px;height:28px;background:#14281F;border-radius:20px"></span><span style="font-size:12px">5G ▮▮▮</span></div>
+        <div style="padding:8px 20px 20px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font:800 28px 'Bricolage Grotesque';color:#1F4D3A">Leaderboard</span>
+            <span style="font-size:12px;color:#56655C">Diperbarui Kam, 15 Okt · 21:30 WIB · hanya skor tervalidasi</span>
+          </div>
+          <div style="display:flex;background:#EDE6D6;border-radius:14px;padding:4px;gap:4px">
+            <sc-for list="{{ lbTabs }}" as="t" hint-placeholder-count="4">
+              <div onClick="{{ t.pick }}" style="flex:1;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:8px;align-items:end;padding-top:8px">
+            <sc-for list="{{ podium }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <div style="width:54px;height:54px;border-radius:18px;background:{{ p.color }};color:#fff;display:flex;align-items:center;justify-content:center;font:800 20px 'Bricolage Grotesque';box-shadow:0 0 0 4px #FBF6EA,0 0 0 6px {{ p.color }}">{{ p.ini }}</div>
+                <span style="font-weight:700;font-size:14px">{{ p.name }}</span>
+                <span style="font-size:13px;color:#56655C;font-variant-numeric:tabular-nums">{{ p.pts }} pts</span>
+                <div style="width:100%;border-radius:14px 14px 4px 4px;background:{{ p.block }};height:{{ p.h }};display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font:800 24px 'Bricolage Grotesque';color:{{ p.numFg }}">{{ p.rank }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="background:#FFFDF8;border:2px solid #8A4FA3;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font:800 16px 'Bricolage Grotesque';width:26px">3</span>
+              <div style="width:36px;height:36px;border-radius:12px;background:#8A4FA3;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">V</div>
+              <div style="display:flex;flex-direction:column;flex:1"><span style="font-weight:700">Vine <span style="font-size:11px;font-weight:800;color:#8A4FA3">· GRUP KAMU</span></span><span style="font-size:12px;color:#56655C">Rincian per challenge</span></div>
+              <span style="font:800 20px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">28</span>
+            </div>
+            <sc-for list="{{ breakdown }}" as="b" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:96px minmax(0,1fr) 46px;gap:10px;align-items:center;font-size:12px">
+                <span style="font-weight:600">{{ b.label }}</span>
+                <div style="height:8px;border-radius:4px;background:#EDE6D6;overflow:hidden"><div style="height:100%;border-radius:4px;background:{{ b.color }};width:{{ b.pct }}"></div></div>
+                <span style="text-align:right;font-variant-numeric:tabular-nums;color:#3C4A42">{{ b.val }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ lbRest }}" as="g" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#FFFDF8;border:1px solid #E9E0CC">
+                <span style="font:700 14px 'Bricolage Grotesque';width:26px;color:#56655C">{{ g.rank }}</span>
+                <span style="width:10px;height:28px;border-radius:5px;background:{{ g.color }}"></span>
+                <span style="font-weight:600;font-size:14px;flex:1">{{ g.name }}</span>
+                <span style="font-weight:700;font-variant-numeric:tabular-nums">{{ g.pts }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#E3EFE6;border-radius:16px;padding:12px 14px;font-size:13px;line-height:1.45;color:#1F4D3A"><b>Masih ada 4 challenge lagi.</b> Total poin tersisa ±90 — semua grup masih bisa naik.</div>
+        </div>
+        <div style="border-top:1px solid #E9E0CC;background:#FFFDF8;display:grid;grid-template-columns:repeat(5,1fr);padding:8px 6px 22px">
+          <sc-for list="{{ nav.lb }}" as="n" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;justify-content:center;color:{{ n.color }}">
+              <div style="width:44px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:{{ n.bg }}">{{ n.icon }}</div>
+              <span style="font-size:11px;font-weight:700">{{ n.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="states" style="padding:24px 56px 48px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:18px">
+    <span style="font:700 11px ui-monospace,Menlo,monospace;background:#1F4D3A;color:#FBF6EA;padding:3px 8px;border-radius:5px">03</span>
+    <span style="font:700 20px 'Bricolage Grotesque',sans-serif;color:#1F4D3A">States — empty, loading, error, deadline passed</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:stretch">
+    <div style="width:300px;background:#FBF6EA;border:1px solid #E9E0CC;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px ui-monospace,monospace;color:#56655C">LOADING · Home</span>
+      <div style="height:150px;border-radius:20px;background:#E2DACA"></div>
+      <div style="height:14px;width:60%;border-radius:7px;background:#E2DACA"></div>
+      <div style="height:70px;border-radius:18px;background:#EDE6D6"></div>
+      <div style="height:70px;border-radius:18px;background:#EDE6D6"></div>
+    </div>
+    <div style="width:300px;background:#FBF6EA;border:1px solid #E9E0CC;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;justify-content:center">
+      <span style="font:600 11px ui-monospace,monospace;color:#56655C;align-self:flex-start">EMPTY · Challenges</span>
+      <div style="width:64px;height:64px;border-radius:22px;background:#E3EFE6;display:flex;align-items:center;justify-content:center;color:#2F7A55"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21v-9M12 12c0-4 3-7 7-7 0 4-3 7-7 7zM12 14c0-3-2.5-5.5-6-5.5 0 3 2.5 5.5 6 5.5z"></path></svg></div>
+      <span style="font:700 18px 'Bricolage Grotesque'">Lagi jeda dulu</span>
+      <span style="font-size:13px;line-height:1.45;color:#56655C">Challenge berikutnya diumumkan Kamis, 20:00 WIB. Sambil nunggu, kenalan sama 3 anggota yang belum kamu sapa?</span>
+      <div style="height:44px;padding:0 18px;border-radius:14px;background:#1F4D3A;color:#FBF6EA;display:flex;align-items:center;font-weight:700;font-size:13px">Buka My Group</div>
+    </div>
+    <div style="width:300px;background:#FBF6EA;border:1px solid #E9E0CC;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px ui-monospace,monospace;color:#56655C">ERROR · Upload gagal</span>
+      <div style="background:#FFFDF8;border:1.5px solid #C4533F;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:700">VID_0112.mp4</span><span style="color:#9A2A1E;font-weight:700">41%</span></div>
+        <div style="height:8px;border-radius:4px;background:#EDE6D6"><div style="width:41%;height:100%;border-radius:4px;background:#C4533F"></div></div>
+        <span style="font-size:12px;color:#9A2A1E;line-height:1.4">Koneksi putus. Tenang, bagian yang sudah ter-upload aman.</span>
+      </div>
+      <div style="display:flex;gap:8px"><div style="flex:1;height:44px;border-radius:14px;background:#1F4D3A;color:#FBF6EA;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">Coba lagi</div><div style="flex:1;height:44px;border-radius:14px;border:1px solid #E9E0CC;background:#FFFDF8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">Pakai link Drive</div></div>
+    </div>
+    <div style="width:300px;background:#FBF6EA;border:1px solid #E9E0CC;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px ui-monospace,monospace;color:#56655C">DEADLINE PASSED · Detail</span>
+      <div style="background:#EDE6D6;border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;color:#56655C">Submission ditutup</span><span style="font:800 20px 'Bricolage Grotesque';color:#3C4A42">Min, 18 Okt · 23:55</span></div>
+      <span style="font-size:13px;line-height:1.45;color:#3C4A42">3 dari 4 riddle terkirim. Captain akan validasi paling lambat Selasa malam — hasilnya muncul di notifikasi.</span>
+      <div style="height:48px;border-radius:14px;background:#E2DACA;color:#6B665A;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">Submit ditutup</div>
+    </div>
+    <div style="width:300px;background:#FBF6EA;border:1px solid #E9E0CC;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px ui-monospace,monospace;color:#56655C">REJECTED · member (read-only)</span>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;font-size:15px">Riddle 9</span><span style="margin-left:auto;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:#FBE4E0;color:#9A2A1E">DITOLAK</span></div>
+      <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:14px;padding:12px;font-size:13px;line-height:1.45"><b>Alasan dari Captain (Kak Yohan):</b> Akun event belum di-tag di IG Story. Upload ulang ya, masih sempat sebelum deadline.</div>
+      <span style="font-size:12px;color:#56655C">Hanya Group Leader (Nadia) yang bisa resubmit. Kamu bisa bantu upload foto ke draft grup.</span>
+    </div>
+  </div>
+</section>
+
+<section id="components" style="padding:24px 56px 72px">
+  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:18px">
+    <span style="font:700 11px ui-monospace,Menlo,monospace;background:#1F4D3A;color:#FBF6EA;padding:3px 8px;border-radius:5px">04</span>
+    <span style="font:700 20px 'Bricolage Grotesque',sans-serif;color:#1F4D3A">Component library</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px;max-width:1500px">
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Status chip · submission</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ subChips }}" as="c" hint-placeholder-count="5"><span style="font-size:12px;font-weight:800;padding:5px 11px;border-radius:999px;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</span></sc-for>
+      </div>
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Status chip · challenge</span>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ chChips }}" as="c" hint-placeholder-count="5"><span style="font-size:12px;font-weight:800;padding:5px 11px;border-radius:999px;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</span></sc-for>
+      </div>
+    </div>
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Countdown</span>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#E3EFE6;color:#1F4D3A"><span style="font-size:11px;font-weight:800">SANTAI</span><span style="font:800 16px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">2h 04j</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#F8E9C4;color:#7A5410"><span style="font-size:11px;font-weight:800">&lt; 24 JAM</span><span style="font:800 16px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">18j 22m</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#C4533F;color:#fff"><span style="font-size:11px;font-weight:800">&lt; 3 JAM</span><span style="font:800 16px 'Bricolage Grotesque';font-variant-numeric:tabular-nums">02:41:09</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#E2DACA;color:#56655C"><span style="font-size:11px;font-weight:800">DITUTUP</span><span style="font:700 14px 'Plus Jakarta Sans'">18 Okt 23:55</span></div>
+      </div>
+      <span style="font-size:12px;color:#56655C;line-height:1.45">Selalu tampilkan jam absolut + “WIB” di samping hitungan mundur. Di bawah 3 jam berganti ke format detik.</span>
+    </div>
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Challenge card</span>
+      <div style="border:1px solid #E9E0CC;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px;background:#FBF6EA">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:40px;height:40px;border-radius:12px;background:#F8E9C4;display:flex;align-items:center;justify-content:center;color:#7A5410;font-weight:800">R3</div>
+          <div style="display:flex;flex-direction:column;flex:1"><span style="font-weight:700;font-size:15px">Spice It Up</span><span style="font-size:12px;color:#56655C">Pilih challenge + tema s/d Jum, 6 Nov 20:00</span></div>
+          <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:#E3A92B;color:#1B2620">LIVE</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:10px;background:#E3EFE6;color:#1F4D3A">Tema: Connect</span>
+          <span style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:10px;background:#EDE6D6;color:#3C4A42">Maks 20 pts</span>
+          <span style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:10px;background:#F8E9C4;color:#7A5410">Pilihan terkunci</span>
+        </div>
+      </div>
+      <div style="border:1px solid #D9CFB6;border-radius:20px;padding:14px 16px;display:flex;align-items:center;gap:10px;background:#FBF6EA">
+        <div style="width:40px;height:40px;border-radius:12px;background:#E3EFE6;display:flex;align-items:center;justify-content:center;color:#1F4D3A;font-weight:800;font-size:12px">+15</div>
+        <div style="display:flex;flex-direction:column;flex:1"><span style="font-size:11px;font-weight:800;color:#2F7A55;letter-spacing:.06em">SIDE QUEST</span><span style="font-weight:700;font-size:15px">Find Your Match</span></div>
+        <span style="font-size:13px;font-weight:700;color:#1F4D3A">Opsional</span>
+      </div>
+    </div>
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Score breakdown</span>
+      <div style="display:flex;align-items:baseline;gap:8px"><span style="font:800 36px/1 'Bricolage Grotesque';color:#1F4D3A">8</span><span style="font-size:14px;color:#56655C">/ 10 · Riddle 3 · Vine</span></div>
+      <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:#EDE6D6"><div style="width:50%;background:#1F4D3A"></div><div style="width:30%;background:#E3A92B"></div></div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13px">
+        <span>Lokasi benar (10 × 50%)</span><span style="font-weight:700;font-variant-numeric:tabular-nums">5.0</span>
+        <span>Partisipasi 8 org → 6 (× 50%)</span><span style="font-weight:700;font-variant-numeric:tabular-nums">3.0</span>
+        <span style="color:#56655C">Penyesuaian admin</span><span style="color:#56655C">—</span>
+      </div>
+    </div>
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Participant tagger · compact</span>
+      <div style="display:flex;align-items:center">
+        <sc-for list="{{ taggedStack }}" as="m" hint-placeholder-count="6"><div style="width:36px;height:36px;border-radius:50%;background:{{ m.bg }};color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #FFFDF8;margin-right:-8px">{{ m.ini }}</div></sc-for>
+        <span style="margin-left:18px;font-size:13px;font-weight:700">{{ tagCount }} dari 14 · {{ tierPts }} pts</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12px">
+        <div style="padding:8px;border-radius:10px;background:{{ tiers.a }};display:flex;flex-direction:column"><b>10–14</b><span>10 pts</span></div>
+        <div style="padding:8px;border-radius:10px;background:{{ tiers.b }};display:flex;flex-direction:column"><b>7–9</b><span>6 pts</span></div>
+        <div style="padding:8px;border-radius:10px;background:{{ tiers.c }};display:flex;flex-direction:column"><b>≤ 6</b><span>2 pts</span></div>
+      </div>
+      <span style="font-size:12px;color:#56655C">Tier aktif ikut berubah waktu kamu tag anggota di layar Submit.</span>
+    </div>
+
+    <div style="background:#FFFDF8;border:1px solid #E9E0CC;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Theme icons</span>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0;border-radius:14px;background:#E3EFE6;color:#1F4D3A"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="5"></circle><circle cx="15" cy="12" r="5"></circle></svg><span style="font-size:12px;font-weight:700">Connect</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0;border-radius:14px;background:#E3EFE6;color:#1F4D3A"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21v-9M12 12c0-4 3-7 7-7 0 4-3 7-7 7zM12 14c0-3-2.5-5.5-6-5.5 0 3 2.5 5.5 6 5.5z"></path></svg><span style="font-size:12px;font-weight:700">Grow</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0;border-radius:14px;background:#F8E9C4;color:#7A5410"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"></path></svg><span style="font-size:12px;font-weight:700">Remember</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0;border-radius:14px;background:#F8E9C4;color:#7A5410"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="6.5" r="3"></circle><circle cx="12" cy="17.5" r="3"></circle><circle cx="6.5" cy="12" r="3"></circle><circle cx="17.5" cy="12" r="3"></circle></svg><span style="font-size:12px;font-weight:700">Flourish</span></div>
+      </div>
+      <span style="font:700 12px 'Plus Jakarta Sans';letter-spacing:.06em;text-transform:uppercase;color:#56655C">Group accents</span>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="10"><div style="display:flex;flex-direction:column;gap:4px"><div style="height:30px;border-radius:9px;background:{{ g.color }}"></div><span style="font-size:11px;font-weight:600">{{ g.no }} {{ g.name }}</span></div></sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tick: 0, tagged: [0,1,2,3,4,6,7,8,10,11,12], checks: [true, true, false, false], upPct: 68, upFail: false, submitted: false, lbTab: 0 };
+  componentDidMount() {
+    this.t0 = Date.now();
+    this.iv = setInterval(() => {
+      this.setState(s => {
+        let p = s.upPct;
+        if (!s.upFail && p < 100) p = Math.min(100, p + 0.6);
+        return { tick: s.tick + 1, upPct: p };
+      });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.iv); }
+  icon(name) {
+    const P = {
+      home: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z',
+      flag: 'M5 21V4h11l-2 4 2 4H5',
+      users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M16 3.5a4 4 0 0 1 0 7.5M18 15c2.5.6 4 2.6 4 6',
+      trophy: 'M8 4h8v6a4 4 0 0 1-8 0zM8 6H4c0 3 2 5 4 5M16 6h4c0 3-2 5-4 5M12 14v4M8 21h8',
+      me: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.5-6 8-6s8 2 8 6'
+    };
+    return React.createElement('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, React.createElement('path', { d: P[name] }));
+  }
+  nav(active) {
+    return [['home','Home'],['flag','Challenges'],['users','Group'],['trophy','Leaderboard'],['me','Me']].map(([k, l], i) => ({
+      label: l, icon: this.icon(k), color: i === active ? '#1F4D3A' : '#6B7A70', bg: i === active ? '#E3EFE6' : 'transparent'
+    }));
+  }
+  renderVals() {
+    const s = this.state;
+    const now = Date.UTC(2026, 9, 16, 12, 12, 0) + (this.t0 ? Date.now() - this.t0 : 0);
+    const dl = Date.UTC(2026, 9, 18, 16, 55, 0);
+    let diff = Math.max(0, Math.floor((dl - now) / 1000));
+    const pad = n => String(n).padStart(2, '0');
+    const cd = { d: Math.floor(diff / 86400), h: pad(Math.floor(diff % 86400 / 3600)), m: pad(Math.floor(diff % 3600 / 60)), s: pad(diff % 60) };
+
+    const R = [['Nadia P.','#8A4FA3'],['Kevin S.','#2A8C82'],['Grace L.','#C4533F'],['Yosua H.','#3E86C9'],['Michelle T.','#C98A12'],['Andre W.','#4E9A55'],['Clara M.','#D0577E'],['Daniel K.','#5C63B8'],['Febe A.','#9A6435'],['Ivan R.','#7F8F24'],['Jessica N.','#2A8C82'],['Timothy G.','#8A4FA3'],['Priska D.','#3E86C9'],['Samuel B.','#C4533F']];
+    const tagged = new Set(s.tagged);
+    const toggle = i => () => this.setState(st => {
+      const t = new Set(st.tagged); t.has(i) ? t.delete(i) : t.add(i); return { tagged: [...t] };
+    });
+    const roster = R.map(([n, c], i) => {
+      const sel = tagged.has(i);
+      const ini = n.split(' ').map(x => x[0]).join('').replace('.', '');
+      return { first: n.split(' ')[0], ini, bg: c, sel, ring: sel ? '#1F4D3A' : 'transparent', op: sel ? 1 : 0.45, toggle: toggle(i) };
+    });
+    const tagCount = tagged.size;
+    const tierPts = tagCount >= 10 ? 10 : tagCount >= 7 ? 6 : 2;
+    const tierHint = tagCount >= 10 ? 'Tier tertinggi — mantap!' : tagCount >= 7 ? `Tambah ${10 - tagCount} orang lagi untuk 10 poin` : `Tambah ${7 - tagCount} orang lagi untuk 6 poin`;
+    const tiers = { a: tierPts === 10 ? '#F8E9C4' : '#F3EEE2', b: tierPts === 6 ? '#F8E9C4' : '#F3EEE2', c: tierPts === 2 ? '#F8E9C4' : '#F3EEE2' };
+
+    const labels = ['Semua orang di foto adalah anggota Vine', 'IG Story sudah tag akun event', 'Tidak menyebut nama gereja & tidak ada wajah jemaat tanpa izin', 'Deklarasi No-AI: foto ini asli, diambil hari ini, tanpa AI atau editing lokasi. — Nadia (Group Leader)'];
+    const checks = labels.map((label, i) => ({
+      label, mark: s.checks[i] ? '✓' : '', box: s.checks[i] ? '#1F4D3A' : 'transparent',
+      border: i === 3 ? '#E3A92B' : '#E9E0CC', weight: i === 3 ? 700 : 500,
+      toggle: () => this.setState(st => { const c = [...st.checks]; c[i] = !c[i]; return { checks: c, submitted: false }; })
+    }));
+    const done = s.upPct >= 100 && !s.upFail;
+    const ready = s.checks.every(Boolean) && done;
+    const submit = s.submitted
+      ? { bg: '#2F7A55', fg: '#FBF6EA', label: '✓ Terkirim — menunggu validasi', hint: 'Masih bisa resubmit sampai Min 23:55. Versi lama disimpan.' }
+      : ready ? { bg: '#1F4D3A', fg: '#FBF6EA', label: 'Kirim submission', hint: `${tagCount} anggota ditag · perkiraan partisipasi ${tierPts} pts` }
+      : { bg: '#E2DACA', fg: '#6B665A', label: 'Kirim submission', hint: !done ? 'Tunggu upload selesai dulu ya' : 'Centang semua aturan & deklarasi No-AI dulu' };
+
+    const up = s.upFail
+      ? { pct: Math.round(s.upPct) + '%', label: Math.round(s.upPct) + '%', color: '#C4533F', note: 'Upload terhenti. Bagian yang sudah terkirim aman.', noteColor: '#9A2A1E', action: 'Coba lagi' }
+      : done ? { pct: '100%', label: '4.2 MB ✓', color: '#2F7A55', note: 'Upload selesai', noteColor: '#2F7A55', action: 'Ganti foto' }
+      : { pct: Math.round(s.upPct) + '%', label: Math.round(s.upPct) + '% · 4.2 MB', color: '#E3A92B', note: 'Wi-Fi lemah — upload lanjut otomatis', noteColor: '#7A5410', action: 'Jeda' };
+
+    const chip = { Validated: ['#E3EFE6','#1F4D3A'], Submitted: ['#E3ECF8','#244F8F'], Draft: ['#F8E9C4','#7A5410'], 'Not Started': ['#EDE6D6','#56655C'], Rejected: ['#FBE4E0','#9A2A1E'] };
+    const rid = [
+      ['3','Validated','Anak-anak berlari ke sini, orang tua melepas dengan lambaian.','Tervalidasi · 8/10 pts · 8 orang ditag'],
+      ['7','Submitted','Kartu kecil berisi harapan berakhir di kotak ini.','Dikirim Jum 18:05 oleh Nadia · 12 orang'],
+      ['2','Draft','Di sini kopi dan cerita bertemu setelah ibadah.','3 foto di draft grup (Grace, Ivan, Febe)'],
+      ['9','Not Started','Mobil berhenti, senyum pertama dimulai dari sini.','Belum ada foto']
+    ].map(([no, st, text, meta]) => ({ no, status: st.toUpperCase(), text, meta, chipBg: chip[st][0], chipFg: chip[st][1] }));
+
+    const G = [['01','Olive','#7F8F24'],['02','Cedar','#2A8C82'],['03','Fig','#C4533F'],['04','Vine','#8A4FA3'],['05','Mustard Seed','#C98A12'],['06','Lily','#D0577E'],['07','Palm','#3E86C9'],['08','Oak','#9A6435'],['09','Willow','#4E9A55'],['10','Hyssop','#5C63B8']];
+    const groups = G.map(([no, name, color]) => ({ no, name, color }));
+    const byName = Object.fromEntries(G.map(g => [g[1], g[2]]));
+    const tabSets = [
+      [['Cedar',34],['Olive',30],['Vine',28],['Mustard Seed',26],['Fig',24],['Lily',22],['Palm',20],['Oak',18],['Willow',16],['Hyssop',12]],
+      [['Cedar',34],['Olive',30],['Vine',28],['Mustard Seed',26],['Fig',24],['Lily',22],['Palm',20],['Oak',18],['Willow',16],['Hyssop',12]],
+      [['Vine',0],['Cedar',0],['Olive',0],['Fig',0],['Lily',0],['Mustard Seed',0],['Palm',0],['Oak',0],['Willow',0],['Hyssop',0]],
+      [['Cedar',15],['Olive',15],['Vine',15],['Fig',10],['Mustard Seed',10],['Lily',10],['Palm',10],['Oak',0],['Willow',0],['Hyssop',0]]
+    ];
+    const lb = tabSets[s.lbTab];
+    const lbTabs = ['Total','Photo','Video','Side Q'].map((label, i) => ({ label, bg: i === s.lbTab ? '#FFFDF8' : 'transparent', fg: i === s.lbTab ? '#1F4D3A' : '#56655C', pick: () => this.setState({ lbTab: i }) }));
+    const pod = [[lb[1], 2, '96px'], [lb[0], 1, '128px'], [lb[2], 3, '72px']];
+    const podium = pod.map(([[name, pts], rank, h]) => ({ name, pts, rank, h, ini: name[0], color: byName[name], block: rank === 1 ? '#E3A92B' : rank === 2 ? '#1F4D3A' : '#2F7A55', numFg: rank === 1 ? '#1B2620' : '#FBF6EA' }));
+    const lbRest = lb.slice(3).filter(([n]) => n !== 'Vine').map(([name, pts]) => ({ name, pts, color: byName[name], rank: lb.findIndex(x => x[0] === name) + 1 }));
+
+    const breakdown = [
+      { label: 'Photo (R1)', val: '18/40', pct: '45%', color: '#1F4D3A' },
+      { label: 'Side Quest', val: '+10', pct: '33%', color: '#E3A92B' },
+      { label: 'Video (R2)', val: '—', pct: '0%', color: '#1F4D3A' },
+      { label: 'Scrapbook', val: '—', pct: '0%', color: '#1F4D3A' }
+    ];
+    const mk = (a) => a.map(([label, bg, fg]) => ({ label, bg, fg }));
+    return {
+      cd, roster, tagCount, tierPts, tierHint, tiers, checks, submit, up, riddles: rid,
+      taggedStack: roster.filter(m => m.sel).slice(0, 6),
+      retryUpload: () => this.setState(st => st.upPct >= 100 && !st.upFail ? { upPct: 5 } : { upFail: !st.upFail }),
+      tagAll: () => this.setState({ tagged: R.map((_, i) => i) }),
+      doSubmit: () => { if (ready) this.setState({ submitted: true }); },
+      nav: { home: this.nav(0), lb: this.nav(3) },
+      lbTabs, podium, lbRest, breakdown, groups,
+      subChips: mk([['NOT STARTED','#EDE6D6','#56655C'],['DRAFT','#F8E9C4','#7A5410'],['SUBMITTED','#E3ECF8','#244F8F'],['VALIDATED','#E3EFE6','#1F4D3A'],['REJECTED','#FBE4E0','#9A2A1E']]),
+      chChips: mk([['DRAFT','#EDE6D6','#56655C'],['SCHEDULED','#E3ECF8','#244F8F'],['LIVE','#E3A92B','#1B2620'],['CLOSED','#3C4A42','#FBF6EA'],['RESULTS PUBLISHED','#1F4D3A','#FBF6EA']]),
+      flows: [
+        { title: 'Masuk & orientasi', who: 'Semua member', steps: ['Link undangan WA','Login Google / magic link','Isi IG handle + follow akun event','Lihat grup & roster','Home'] },
+        { title: 'Submit challenge', who: 'Group Leader', steps: ['Notif: challenge diumumkan (Kam 20:00)','Challenge Detail','Anggota upload ke draft grup','Leader: Submit → media, bukti IG, tag, aturan','Submitted','Validated / Rejected (Sel)','Leaderboard + Gallery'] },
+        { title: 'Spice It Up — pilih & kunci', who: 'Group Leader', steps: ['Pilih 1 challenge','Pilih tema (Connect/Grow/Remember/Flourish)','Konfirmasi s/d Jum 20:00','Terkunci','Submit video s/d Min 23:55'] },
+        { title: 'Ikut tanpa jadi leader', who: 'Member', steps: ['Notif reminder 24j / 3j','Challenge Detail (riddle saja, tanpa jawaban)','Upload foto ke draft','Lihat status read-only','My Group: “Kamu belum kenalan sama Febe”'] }
+      ].map(f => ({ ...f, steps: f.steps.map((label, i) => ({ label, more: i < f.steps.length - 1 })) }))
+    };
+  }
+}
+</script>
+</body>
+</html>
