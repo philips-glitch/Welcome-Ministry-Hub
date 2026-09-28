@@ -1,17 +1,5 @@
-import { useEffect, useState } from 'react';
-import { GROUPS, CAPTAINS, R1STAT, DEMO_NOW, R1_DEADLINE, pad, memberName } from '../data.js';
-
-function useCountdown(target) {
-  const [t0] = useState(Date.now);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const iv = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(iv);
-  }, []);
-  const now = DEMO_NOW + (Date.now() - t0);
-  const diff = Math.max(0, Math.floor((target - now) / 1000));
-  return { d: Math.floor(diff / 86400), h: pad(Math.floor((diff % 86400) / 3600)), m: pad(Math.floor((diff % 3600) / 60)), s: pad(diff % 60) };
-}
+import { GROUPS, CAPTAINS, R1STAT, R1_DEADLINE, memberName } from '../data.js';
+import useCountdown from '../useCountdown.js';
 
 const DOT = { V: ['#2F7A55', 'none'], S: ['#6F95CF', 'none'], D: ['#E3A92B', 'none'], N: ['transparent', '1.5px solid #CFC4AA'], X: ['#C4533F', 'none'] };
 const LAST_ACT = ['Jum 18:40', 'Jum 17:02', 'Jum 16:15', 'Jum 18:05', 'Kam 22:30', 'Jum 12:10', 'Jum 19:01', 'Kam 21:45', 'Jum 08:20', 'Kam 20:50'];

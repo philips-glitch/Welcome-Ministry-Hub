@@ -1,0 +1,66 @@
+/* Member portal — mobile-first, then tablet (≥640) and desktop (≥960). */
+
+.p-shell { min-height: 100vh; background: var(--cream); }
+.p-main { padding: 12px 16px 104px; display: flex; flex-direction: column; gap: 18px; max-width: 1180px; margin: 0 auto; width: 100%; }
+
+/* Top bar: greeting + notifications (all sizes) */
+.p-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px 6px; max-width: 1180px; margin: 0 auto; width: 100%; }
+.p-avatar { width: 44px; height: 44px; border-radius: 14px; color: #fff; display: flex; align-items: center; justify-content: center; font: 800 18px var(--display); flex: none; }
+.p-icon-btn { position: relative; width: 44px; height: 44px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--green); flex: none; }
+.p-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; border-radius: 10px; background: #c4533f; color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--cream); }
+
+/* Bottom tab bar (mobile/tablet) */
+.p-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--paper); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px calc(10px + env(safe-area-inset-bottom));
+}
+.p-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; justify-content: center; color: #6b7a70; font-size: 11px; font-weight: 700; }
+.p-tab .pill { width: 44px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; }
+.p-tab.active { color: var(--green); }
+.p-tab.active .pill { background: #e3efe6; }
+
+/* Sidebar (desktop only) */
+.p-side { display: none; }
+
+/* Layout helpers */
+.p-cols { display: grid; gap: 18px; align-items: start; }
+.p-stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.p-sticky { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.p-grid-2 { display: grid; gap: 10px; }
+.p-week { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.p-roster { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px 6px; }
+.p-countdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.p-title { font: 800 28px/1.1 var(--display); color: var(--green); letter-spacing: -0.01em; }
+.p-h { font: 700 16px var(--display); }
+.p-card { background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 16px; }
+.p-btn-lg { height: 56px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; width: 100%; }
+.p-row-link { display: flex; align-items: center; gap: 14px; text-align: left; width: 100%; }
+.p-desktop-only { display: none; }
+
+@media (min-width: 640px) {
+  .p-main { padding: 12px 24px 112px; }
+  .p-top { padding: 18px 24px 6px; }
+  .p-grid-2 { grid-template-columns: 1fr 1fr; }
+  .p-roster { grid-template-columns: repeat(7, 1fr); }
+}
+
+@media (min-width: 960px) {
+  .p-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+  .p-tabbar { display: none; }
+  .p-side {
+    display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh;
+    background: var(--paper); border-right: 1px solid var(--line); padding: 22px 14px;
+  }
+  .p-side-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 20px; }
+  .p-side-item { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; color: #56655c; width: 100%; text-align: left; }
+  .p-side-item:hover { background: #f3eee2; }
+  .p-side-item.active { background: #e3efe6; color: var(--green); }
+  .p-main { padding: 12px 32px 48px; gap: 22px; }
+  .p-top { padding: 22px 32px 6px; }
+  .p-cols { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 22px; }
+  .p-sticky { position: sticky; top: 16px; }
+  .p-title { font-size: 34px; }
+  .p-roster { grid-template-columns: repeat(7, 1fr); }
+  .p-desktop-only { display: initial; }
+  .p-mobile-only { display: none !important; }
+}
