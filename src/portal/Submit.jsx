@@ -4,7 +4,7 @@ import { api } from '../lib/api.js';
 import { tierPoints, DEFAULT_SCORING, fmtWIB } from '../lib/game.js';
 import { submitRules, initials, avatarColor } from './portalData.js';
 
-const STEPS = ['Media', 'Bukti IG', 'Tag anggota', 'Cek aturan'];
+const STEPS = ['Media', 'Link Image', 'Tag anggota', 'Cek aturan'];
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const MAX_MB = 15;
 
@@ -52,7 +52,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const nextTier = scoring.type === 'riddle' ? [...tiersDesc].reverse().find((t) => t.min > n) : null;
   const hint = !nextTier ? 'Tier tertinggi — mantap!' : `Tambah ${nextTier.min - n} orang lagi untuk ${nextTier.pts} poin`;
   const needIg = scoring.type === 'riddle';
-  const missing = [!file && 'foto', needIg && !ig.trim() && 'link IG Story', !n && 'tag anggota', !checks.every(Boolean) && 'semua aturan'].filter(Boolean);
+  const missing = [!file && 'foto', needIg && !ig.trim() && 'link image', !n && 'tag anggota', !checks.every(Boolean) && 'semua aturan'].filter(Boolean);
   const ready = !missing.length;
   const state = [file ? 'done' : 'now', ig.trim() || !needIg ? 'done' : file ? 'now' : 'todo', n ? 'done' : 'todo', checks.every(Boolean) ? 'done' : 'todo'];
 
@@ -116,10 +116,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
         </section>
 
         <section className="col" style={{ gap: 10 }}>
-          <span style={{ font: "700 15px 'Bricolage Grotesque'" }}>2 · Bukti IG Story{needIg ? '' : ' (opsional)'}</span>
-          <input type="url" inputMode="url" placeholder="instagram.com/stories/…" value={ig} onChange={(e) => setIg(e.target.value)} aria-label="Link IG Story"
+          <span style={{ font: "700 15px 'Bricolage Grotesque'" }}>2 · Link Image{needIg ? '' : ' (opsional)'}</span>
+          <input type="url" inputMode="url" placeholder="https://…" value={ig} onChange={(e) => setIg(e.target.value)} aria-label="Link Image"
             style={{ height: 52, borderRadius: 14, border: `1.5px solid ${ig.trim() ? '#2F7A55' : '#DCD2BC'}`, background: '#FFFDF8', padding: '0 14px', font: 'inherit', fontSize: 14 }} />
-          <span className="muted" style={{ fontSize: 12 }}>Link Story kedaluwarsa 24 jam — simpan screenshot juga untuk jaga-jaga.</span>
+          <span className="muted" style={{ fontSize: 12 }}>Tempel link gambar, mis. Google Drive, Google Photos, atau Instagram.</span>
         </section>
 
         <section className="col" style={{ gap: 10 }}>

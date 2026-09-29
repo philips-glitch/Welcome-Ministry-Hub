@@ -180,7 +180,7 @@ export default function ValidationQueue() {
                     </>
                   )}
                   <div className="card" style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1 / -1', fontSize: 12, lineHeight: 1.5 }}>
-                    <span><b>IG Story:</b> {cur.ig_url ? <a href={cur.ig_url.startsWith('http') ? cur.ig_url : 'https://' + cur.ig_url} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>
+                    <span><b>Link Image:</b> {cur.ig_url ? <a href={cur.ig_url.startsWith('http') ? cur.ig_url : 'https://' + cur.ig_url} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>
                     <span><b>Deklarasi No-AI:</b> {cur.declaration ? '✓ dicentang oleh leader' : '✕ tidak dicentang'}</span>
                     <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>
                     {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}</span>}
