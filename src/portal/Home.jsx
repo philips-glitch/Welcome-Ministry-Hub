@@ -59,7 +59,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
         <div className="col" style={{ gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span className="p-h">Challenge lainnya</span>
-            <button className="link" style={{ fontSize: 13 }} onClick={() => go('challenge')}>Lihat semua</button>
+            <button className="link" style={{ fontSize: 13 }} onClick={() => go('challenges')}>Lihat semua</button>
           </div>
           <div className="p-grid-2">
             {others.map((c) => {

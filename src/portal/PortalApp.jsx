@@ -10,6 +10,7 @@ import { buildStandings } from '../lib/game.js';
 import { isPlayer } from '../lib/groups.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
+import ChallengeList from './ChallengeList.jsx';
 import Submit from './Submit.jsx';
 import Leaderboard from './Leaderboard.jsx';
 
@@ -28,8 +29,8 @@ export const Leaf = ({ size = 24 }) => (
 );
 
 // route → tab it belongs to
-const TABS = [['home', 'Home', 'home'], ['challenge', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
-const TAB_OF = { home: 'home', challenge: 'challenge', submit: 'challenge', group: 'group', leaderboard: 'leaderboard', me: 'me' };
+const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
+const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', me: 'me' };
 
 export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
@@ -59,7 +60,8 @@ export default function PortalApp({ route }) {
   let content;
   if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
-  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} challenges={visible} setChId={setChId} data={data} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
+  else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
+  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
   else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;

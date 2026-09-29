@@ -37,6 +37,15 @@
 .p-row-link { display: flex; align-items: center; gap: 14px; text-align: left; width: 100%; }
 .p-desktop-only { display: none; }
 
+/* Challenge detail: hero stats + collapsible sections */
+.p-hero-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.p-fold { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.p-fold > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; font: 700 15px var(--display); }
+.p-fold > summary::-webkit-details-marker { display: none; }
+.p-fold > summary::after { content: '▾'; font-size: 14px; color: var(--muted); transition: transform .15s; }
+.p-fold:not([open]) > summary::after { transform: rotate(-90deg); }
+.p-fold > summary:focus-visible { outline: 2px solid var(--green-2); outline-offset: -2px; }
+
 @media (min-width: 640px) {
   .p-main { padding: 12px 24px 112px; }
   .p-top { padding: 18px 24px 6px; }
@@ -58,6 +67,8 @@
   .p-main { padding: 12px 32px 48px; gap: 22px; }
   .p-top { padding: 22px 32px 6px; }
   .p-cols { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 22px; }
+  .p-hero-stats { grid-template-columns: 2fr 1fr 1fr; max-width: 720px; }
+  .p-hero-stats > :first-child { grid-column: auto !important; }
   .p-sticky { position: sticky; top: 16px; }
   .p-title { font-size: 34px; }
   .p-roster { grid-template-columns: repeat(7, 1fr); }
