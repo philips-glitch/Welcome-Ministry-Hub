@@ -111,6 +111,19 @@ function supabaseApi() {
     async reviewSubmission(id, patch) { return unwrap(await sb.from('submissions').update(patch).eq('id', id).select('*').single()); },
     async mediaUrl(path) { return path ? unwrap(await sb.storage.from('submission-media').createSignedUrl(path, 3600)).signedUrl : null; },
     async groupScores() { return unwrap(await sb.rpc('group_scores')); },
+
+    // ── Notifications (created by DB triggers / pg_cron; RLS limits to everyone + my group) ──
+    async listNotifications() {
+      const rows = unwrap(await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50));
+      const reads = unwrap(await sb.from('notification_reads').select('notification_id'));
+      const read = new Set(reads.map((r) => r.notification_id));
+      return rows.map((n) => ({ ...n, read: read.has(n.id) }));
+    },
+    async markNotificationsRead(ids) {
+      if (!ids.length) return;
+      const uid = await this.getSessionUserId();
+      unwrap(await sb.from('notification_reads').upsert(ids.map((id) => ({ user_id: uid, notification_id: id })), { onConflict: 'user_id,notification_id', ignoreDuplicates: true }));
+    },
   };
 }
 

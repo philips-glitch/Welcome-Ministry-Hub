@@ -17,6 +17,7 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
 2. In the SQL editor, run both migrations in order:
    - [`0001_auth_roles.sql`](supabase/migrations/0001_auth_roles.sql): `profiles`, `roles`, `permissions`, `role_permissions`, the new-user trigger, RLS and default grants.
    - [`0002_game.sql`](supabase/migrations/0002_game.sql): game data (see **Database** below), the `submission-media` storage bucket, and seed data (10 groups, R1–R6 + 3 side quests, R1's 10 riddles).
+   - [`0003_notifications.sql`](supabase/migrations/0003_notifications.sql): notifications + read receipts, their triggers, and a `pg_cron` job for deadline reminders. If it fails on `pg_cron`, enable the extension under **Database → Extensions** and run it again.
 3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
    ```bash
    npx supabase login
@@ -50,6 +51,18 @@ Database rules (triggers) enforce the game flow:
 - A submission is accepted only while its challenge is **Live**, before the deadline, and only for the submitter's own group. The version number counts up automatically.
 - Reviewers can only change the review fields.
 - Photos go to the private `submission-media/<group>/…` bucket, readable by group-mates and validators.
+
+## Notifications (portal)
+
+The bell in the portal header shows the unread count and opens **Notifikasi**. That page groups notifications by day, has an *Semua / Belum dibaca* filter and *Tandai semua dibaca*, and tapping a notification opens its challenge. The list refreshes every minute and when the tab regains focus. All notifications are created automatically by the database:
+
+| Event | Who gets it | Source |
+| --- | --- | --- |
+| Submission approved (with points), rejected or asked to resubmit (with reason) | The submitting group | Trigger on `submissions` |
+| Challenge set to **Scheduled** (announced) or **Live** (opened) | Everyone | Trigger on `challenges` |
+| Deadline in 24 h, and again in 3 h | Each group that still has riddles (or the submission) unsent | `send_deadline_reminders()` via `pg_cron` every 10 min |
+
+Tables: `notifications` (`group_no` null = everyone; `dedupe_key` stops repeats) and `notification_reads` (per user). Members can read only their own audience and mark their own reads. Clients can't create notifications. In demo mode the same rules run in the browser on the demo clock.
 
 ## Challenges (admin)
 

@@ -13,6 +13,8 @@ import ChallengeDetail from './ChallengeDetail.jsx';
 import ChallengeList from './ChallengeList.jsx';
 import Submit from './Submit.jsx';
 import Leaderboard from './Leaderboard.jsx';
+import Notifications from './Notifications.jsx';
+import useNotifications from './useNotifications.js';
 
 const ICONS = {
   home: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z',
@@ -30,13 +32,13 @@ export const Leaf = ({ size = 24 }) => (
 
 // route → tab it belongs to
 const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
-const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', me: 'me' };
+const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', me: 'me', notifications: null };
 
 export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
   const game = useGame();
   const go = (r) => { window.location.hash = '/portal/' + r; window.scrollTo(0, 0); };
-  const page = TAB_OF[route] ? route : 'home';
+  const page = route in TAB_OF ? route : 'home';
   const activeTab = TAB_OF[page];
   const standings = useMemo(() => buildStandings(game.scores, game.challenges || []), [game.scores, game.challenges]);
 
@@ -55,7 +57,8 @@ export default function PortalApp({ route }) {
     canSubmit: can('portal.submit') && !!g,
   };
   const data = useGroupChallenge(challenge, me.group?.no);
-  const onSubmitted = () => { data.reload(); game.reloadScores(); };
+  const notif = useNotifications();
+  const onSubmitted = () => { data.reload(); game.reloadScores(); notif.reload(); };
 
   let content;
   if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
@@ -64,6 +67,7 @@ export default function PortalApp({ route }) {
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
   else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
+  else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;
   else content = <Soon title="My Group" go={go} />;
 
@@ -88,9 +92,10 @@ export default function PortalApp({ route }) {
             <span className="muted" style={{ fontSize: 13 }}>Halo, {me.first}</span>
             <span style={{ font: "700 19px 'Bricolage Grotesque'" }}>{me.group ? `${me.group.name} · Grup ${me.group.no}` : 'Belum ada grup'}</span>
           </div>
-          <button className="p-icon-btn" aria-label="Notifikasi (3)">
+          <button className="p-icon-btn" aria-label={`Notifikasi${notif.unread ? ` (${notif.unread} belum dibaca)` : ''}`} onClick={() => go('notifications')}
+            style={page === 'notifications' ? { background: '#E3EFE6', borderColor: '#1F4D3A' } : undefined}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0" /></svg>
-            <span className="p-badge">3</span>
+            {notif.unread > 0 && <span className="p-badge">{notif.unread > 9 ? '9+' : notif.unread}</span>}
           </button>
         </header>
         <main className="p-main">{content}</main>

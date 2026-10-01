@@ -1,6 +1,7 @@
 // Demo-mode game data, mirroring supabase/migrations/0002_game.sql (same tables, same seed).
 import { GROUPS, RIDDLES, DRAW0, R1STAT } from '../data.js';
 import { DEFAULT_SCORING } from './game.js';
+import { notifyReview, notifyChallenge, syncReminders, seedNotifications } from './demoNotify.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
@@ -86,7 +87,28 @@ export function seedGame(profiles) {
 // Game methods over the demo state. `ctx` = { load, save, delay, fail }.
 export function gameMethods({ load, save, delay, fail }) {
   const sortBy = (k) => (a, b) => (a[k] ?? 0) - (b[k] ?? 0);
+  // Older saved demo states predate notifications: backfill once.
+  const notifs = (s) => { if (!s.notifications) seedNotifications(s); return s.notifications; };
   return {
+    async listNotifications() {
+      const s = load();
+      notifs(s);
+      syncReminders(s);
+      save();
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      const myGroup = me?.active ? me.group_no : null;
+      const read = new Set(s.notificationReads?.[s.sessionId] || []);
+      return delay(s.notifications
+        .filter((n) => n.group_no == null || n.group_no === myGroup)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 50)
+        .map((n) => ({ ...n, read: read.has(n.id) })));
+    },
+    async markNotificationsRead(ids) {
+      const s = load();
+      s.notificationReads ||= {};
+      s.notificationReads[s.sessionId] = [...new Set([...(s.notificationReads[s.sessionId] || []), ...ids])];
+      save(); return delay();
+    },
     async listGroups() { return delay(structuredClone(load().groups)); },
     async setGroupsLocked(locked) {
       const s = load();
@@ -99,8 +121,10 @@ export function gameMethods({ load, save, delay, fail }) {
       if (c.code && s.challenges.some((x) => x.code === c.code && x.id !== c.id)) return fail(`Kode ${c.code} sudah dipakai.`);
       const now = new Date().toISOString();
       const i = c.id ? s.challenges.findIndex((x) => x.id === c.id) : -1;
+      const prevStatus = i >= 0 ? s.challenges[i].status : null;
       const row = i >= 0 ? { ...s.challenges[i], ...c, updated_at: now } : { draw_seed: null, draw_locked: false, sort: s.challenges.length + 1, ...c, id: uid(), created_at: now, updated_at: now };
       if (i >= 0) s.challenges[i] = row; else s.challenges.push(row);
+      if (row.status !== prevStatus) { notifs(s); notifyChallenge(s, row); }
       save(); return delay(structuredClone(row));
     },
     async deleteChallenge(id) {
@@ -154,7 +178,9 @@ export function gameMethods({ load, save, delay, fail }) {
       const s = load();
       const i = s.submissions.findIndex((x) => x.id === id);
       if (i < 0) return fail('Submission tidak ditemukan.');
+      const prevStatus = s.submissions[i].status;
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
+      if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
       save(); return delay(structuredClone(s.submissions[i]));
     },
     async mediaUrl() { return null; },
