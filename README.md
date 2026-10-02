@@ -14,10 +14,11 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
 ## Supabase setup (real login)
 
 1. Create a Supabase project.
-2. In the SQL editor, run both migrations in order:
+2. In the SQL editor, run the migrations in order:
    - [`0001_auth_roles.sql`](supabase/migrations/0001_auth_roles.sql): `profiles`, `roles`, `permissions`, `role_permissions`, the new-user trigger, RLS and default grants.
    - [`0002_game.sql`](supabase/migrations/0002_game.sql): game data (see **Database** below), the `submission-media` storage bucket, and seed data (10 groups, R1–R6 + 3 side quests, R1's 10 riddles).
    - [`0003_notifications.sql`](supabase/migrations/0003_notifications.sql): notifications + read receipts, their triggers, and a `pg_cron` job for deadline reminders. If it fails on `pg_cron`, enable the extension under **Database → Extensions** and run it again.
+   - [`0004_groups_crud.sql`](supabase/migrations/0004_groups_crud.sql): editable groups. It lifts the fixed 01–10 numbering, adds per-group min/max size, and points `profiles.group_no` at `groups` (renumber cascades; delete un-assigns members). A group with submissions can't be deleted.
 3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
    ```bash
    npx supabase login
@@ -98,7 +99,7 @@ Edit the grants in **Roles & Access**; changes apply immediately. The database e
 | Nav | Permission | Notes |
 | --- | --- | --- |
 | Overview | `dashboard.view` | Focus challenge (first Live main round) countdown, submissions received / pending, SLA, per-group riddle status from the database. The timeline, overdue list and scheduled announcements are still static sample content |
-| Groups | `groups.manage` (+ `members.manage` to edit) | Real member list. **+ Tambah member** registers a new account straight into that group; click a name to edit (name, team, TL, role / Group Leader, group, active, reset password); drag names between groups or to "Belum ada grup"; seeded Auto-assign with confirmation (optionally re-picks 1 Group Leader per group); live rule checks; Lock & Publish |
+| Groups | `groups.manage` (+ `members.manage` to edit members) | **+ Grup baru** / ✎ on a card: create or edit a group (number, name, colour, min/max size, captains); delete an empty group (members move to "Belum ada grup"; blocked once it has submissions). Real member list. **+ Tambah member** registers a new account straight into that group; click a name to edit (name, team, TL, role / Group Leader, group, active, reset password); drag names between groups or to "Belum ada grup"; seeded Auto-assign with confirmation (optionally re-picks 1 Group Leader per group); live rule checks; Lock & Publish |
 | Challenges | `challenges.manage` | Create / edit / delete challenges, status workflow, schedule, scoring rules, riddle bank + draw (see **Challenges** above) |
 | Validation Queue | `submissions.validate` | Real submissions per challenge, filter by group / status. `A` approve · `R` reject · `←`/`→` move. Photo, IG link, tagged members, riddle + answer key, checklist, headcount → score by the challenge's rules, override (with reason), reject / resubmit reasons |
 | Scoring & Leaderboard | `scores.view` | Standings from validated submissions, one column per main round + Side Quest, rank by any column, ties share a rank |

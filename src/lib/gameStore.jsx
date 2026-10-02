@@ -34,6 +34,11 @@ export function GameProvider({ children }) {
     },
     deleteChallenge: async (id) => { await api.deleteChallenge(id); setChallenges((cs) => cs.filter((c) => c.id !== id)); reloadScores(); },
     setLocked: async (locked) => { await api.setGroupsLocked(locked); await reloadGroups(); },
+    createGroup: async (g) => { const row = await api.createGroup(g); await reloadGroups(); return row; },
+    // Renumbering moves members/draws/submissions too, so refresh what depends on group numbers.
+    updateGroup: async (no, patch) => { const row = await api.updateGroup(no, patch); await reloadGroups(); if (patch.no && patch.no !== no) reloadScores(); return row; },
+    deleteGroup: async (no) => { await api.deleteGroup(no); await reloadGroups(); reloadScores(); },
+    groupOf: (no) => (groups || []).find((g) => g.no === no) || null,
     // The challenge the Overview / portal hero focuses on: first live main round, else next scheduled one.
     focus: challenges && (challenges.find((c) => c.kind === 'main' && c.status === 'live') || challenges.find((c) => c.kind === 'main' && c.status === 'scheduled') || null),
   }), [challenges, groups, scores, pending, error, reloadChallenges, reloadGroups, reloadScores]);

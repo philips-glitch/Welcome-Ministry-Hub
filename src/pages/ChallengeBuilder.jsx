@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { GROUPS } from '../data.js';
 import {
   STATUSES, statusMeta, SECTIONS, SCORING_TYPES, DEFAULT_SCORING, computeScore, drawRiddles, fmtWIB, toLocalInput, fromLocalInput,
 } from '../lib/game.js';
@@ -238,6 +237,7 @@ function ScoringEditor({ scoring, setScoring }) {
 }
 
 function RiddleBank({ challenge, form, set, riddles, setRiddles, draw, setDraw, save, say }) {
+  const GROUPS = useGame().groups || [];
   const [showAns, setShowAns] = useState(true);
   const [editing, setEditing] = useState({}); // id|'new' → draft row
   const n = Number(form.riddles_per_group) || 0;
@@ -265,7 +265,7 @@ function RiddleBank({ challenge, form, set, riddles, setRiddles, draw, setDraw, 
     if (!riddles?.length || riddles.length < n) return say('bad', `Butuh minimal ${n} riddle di bank.`);
     if (n < 1) return say('bad', 'Isi jumlah riddle per grup dulu.');
     const seed = Math.floor(Math.random() * 9000) + 1000;
-    const rows = drawRiddles(riddles.map((r) => r.id), n, seed);
+    const rows = drawRiddles(riddles.map((r) => r.id), n, seed, GROUPS);
     try {
       if (Number(challenge.riddles_per_group) !== n) await save({ id: challenge.id, riddles_per_group: n });
       await api.saveDraw(challenge.id, rows, seed);
@@ -323,7 +323,7 @@ function RiddleBank({ challenge, form, set, riddles, setRiddles, draw, setDraw, 
             <button className="btn" onClick={toggleLock} style={{ height: 34, padding: '0 12px', borderRadius: 9, fontSize: 12, fontWeight: 800, background: locked ? '#2F7A55' : '#1F4D3A', color: '#FBF6EA' }}>{locked ? '✓ Undian terkunci' : 'Kunci undian'}</button>
           </div>
           <span className="muted" style={{ fontSize: 11 }}>{n} riddle berbeda per grup, diambil acak dari {riddles?.length ?? 0}. Grup tidak bisa memilih. Undian tersimpan langsung.</span>
-          {GROUPS.map(([no, name, color]) => {
+          {GROUPS.map(({ no, name, color }) => {
             const mine = draw.filter((d) => d.group_no === no).sort((a, b) => a.slot - b.slot);
             return (
               <div key={no} className="row" style={{ gap: 8, padding: '5px 0', borderBottom: '1px solid #F0E9DA' }}>

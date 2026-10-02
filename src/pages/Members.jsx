@@ -4,7 +4,7 @@ import { useMembers } from '../lib/members.jsx';
 import MemberDialog from '../components/MemberDialog.jsx';
 import { ROLES, roleName } from '../lib/permissions.js';
 import { useAuth } from '../auth/AuthContext.jsx';
-import { GROUPS } from '../data.js';
+import { useGame } from '../lib/gameStore.jsx';
 
 const PAGE = 25;
 const COLS = 'minmax(200px,1.6fr) 150px 130px 80px 90px 90px 60px';
@@ -13,6 +13,8 @@ const inputStyle = { height: 36, borderRadius: 10, border: '1px solid #DCD2BC', 
 export default function Members() {
   const { can, profile: me } = useAuth();
   const { rows, error, update: save } = useMembers();
+  const GROUPS = useGame().groups || [];
+  const groupName = (no) => GROUPS.find((g) => g.no === no)?.name || '?';
   const canManage = can('members.manage');
   const canRoles = can('roles.manage');
   const [q, setQ] = useState('');
@@ -81,7 +83,7 @@ export default function Members() {
           <select aria-label="Filter grup" value={fGroup} onChange={(e) => setFGroup(e.target.value)} style={inputStyle}>
             <option value="">Semua grup</option>
             <option value="none">Tanpa grup</option>
-            {GROUPS.map(([no, name]) => <option key={no} value={no}>{no} {name}</option>)}
+            {GROUPS.map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
           </select>
           <select aria-label="Filter status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} style={inputStyle}>
             <option value="active">Aktif</option><option value="inactive">Nonaktif</option><option value="all">Semua status</option>
@@ -110,9 +112,9 @@ export default function Members() {
               {canManage ? (
                 <select aria-label={`Grup ${r.full_name}`} value={r.group_no || ''} onChange={(e) => update(r, { group_no: e.target.value || null }, `${r.full_name} dipindah grup`)} style={{ ...inputStyle, height: 32 }}>
                   <option value="">—</option>
-                  {GROUPS.map(([no, name]) => <option key={no} value={no}>{no} {name}</option>)}
+                  {GROUPS.map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
                 </select>
-              ) : <span>{r.group_no ? `${r.group_no} ${GROUPS[+r.group_no - 1][1]}` : '—'}</span>}
+              ) : <span>{r.group_no ? `${r.group_no} ${groupName(r.group_no)}` : '—'}</span>}
               <span className="mono muted" style={{ fontSize: 12 }}>{r.service_team || '—'}</span>
               <span style={{ display: 'flex', gap: 4 }}>
                 {r.is_ministry_tl && <span className="chip" style={{ background: '#FBF1D8', color: '#7A5410' }}>TL</span>}

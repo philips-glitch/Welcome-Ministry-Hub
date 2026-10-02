@@ -3,7 +3,6 @@ import './portal.css';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Logo from '../components/Logo.jsx';
 import { roleName } from '../lib/permissions.js';
-import { GROUPS } from '../data.js';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { buildStandings } from '../lib/game.js';
@@ -40,7 +39,7 @@ export default function PortalApp({ route }) {
   const go = (r) => { window.location.hash = '/portal/' + r; window.scrollTo(0, 0); };
   const page = route in TAB_OF ? route : 'home';
   const activeTab = TAB_OF[page];
-  const standings = useMemo(() => buildStandings(game.scores, game.challenges || []), [game.scores, game.challenges]);
+  const standings = useMemo(() => buildStandings(game.scores, game.challenges || [], {}, game.groups || []), [game.scores, game.challenges, game.groups]);
 
   // Challenge in view (Detail/Submit); defaults to the focus challenge.
   const visible = (game.challenges || []).filter((c) => c.status !== 'draft');
@@ -49,7 +48,8 @@ export default function PortalApp({ route }) {
   const openChallenge = (id) => { setChId(id); go('challenge'); };
   const [riddleId, setRiddleId] = useState(null);
 
-  const g = profile.group_no ? GROUPS[+profile.group_no - 1] : null;
+  const gr = game.groupOf(profile.group_no);
+  const g = gr && [gr.no, gr.name, gr.color];
   const me = {
     first: (profile.full_name || profile.email).split(' ')[0],
     roleName: roleName(profile.role_id),

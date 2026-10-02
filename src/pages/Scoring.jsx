@@ -6,14 +6,14 @@ import { isStaffOf } from '../lib/groups.js';
 import { buildStandings } from '../lib/game.js';
 
 export default function Scoring() {
-  const { challenges, scores, pending } = useGame();
+  const { challenges, scores, pending, groups } = useGame();
   const members = useMembers().rows || [];
   const { cols: SCORE_COLS, rows } = useMemo(() => {
     const captains = {};
     members.forEach((p) => { if (p.group_no && isStaffOf(p, p.group_no)) (captains[p.group_no] ||= []).push(p.full_name); });
     Object.keys(captains).forEach((k) => { captains[k] = captains[k].join(', '); });
-    return buildStandings(scores, challenges || [], captains);
-  }, [scores, challenges, members]);
+    return buildStandings(scores, challenges || [], captains, groups || []);
+  }, [scores, challenges, members, groups]);
   const FILTERS = [['total', 'Total', 'Semua challenge'], ...SCORE_COLS.map((c) => [c.key, c.short === 'SQ' ? 'Side Quest' : `${c.short} · ${c.label.split(' ')[0]}`, c.label])];
   const COLS = `48px minmax(150px,1.3fr) 110px repeat(${SCORE_COLS.length}, 58px) 72px minmax(120px,1fr)`;
   const [by, setBy] = useState('total');
@@ -41,7 +41,7 @@ export default function Scoring() {
           <span className="row" style={{ gap: 8, font: "800 26px 'Bricolage Grotesque'" }}><span style={{ width: 12, height: 12, borderRadius: 4, background: leader.color }} />{leader.name}</span>
           <span style={{ fontSize: 12, opacity: 0.85 }}>{leader.total} pts · unggul {leader.total - second.total} dari {second.name}</span>
         </div>
-        <Stat label="Total poin dibagikan" value={totalPts} sub={`10 grup · ${SCORE_COLS.length} kolom skor`} />
+        <Stat label="Total poin dibagikan" value={totalPts} sub={`${rows.length} grup · ${SCORE_COLS.length} kolom skor`} />
         <Stat label="Submission tervalidasi" value={validated} sub="semua challenge" color="#1F4D3A" />
         <Stat label="Menunggu validasi" value={pending} sub="belum masuk skor" color="#244F8F" />
       </div>

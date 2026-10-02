@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { useGame } from '../lib/gameStore.jsx';
-import { groupView, validate, autoAssign, GROUP_MIN, GROUP_MAX } from '../lib/groups.js';
+import { groupView, validate, autoAssign } from '../lib/groups.js';
 import MemberDialog from '../components/MemberDialog.jsx';
+import GroupDialog from '../components/GroupDialog.jsx';
 
 const RULES = [
-  [`10 grup, ${GROUP_MIN}–${GROUP_MAX} anggota`, (v) => /anggota/.test(v)],
+  ['Jumlah anggota sesuai batas tiap grup', (v) => /anggota/.test(v)],
   ['Tiap grup ≥ 1 Ministry TL', (v) => /Ministry TL$/.test(v)],
   ['Tepat 1 Group Leader, bukan Ministry TL', (v) => /Group Leader/.test(v)],
   ['Tidak ada 2 orang dari tim pelayanan yang sama', (v) => /sama-sama/.test(v)],
@@ -24,10 +25,12 @@ export default function GroupForming() {
   const [over, setOver] = useState(null);
   const [dialog, setDialog] = useState(null); // { member } | { defaults }
   const [confirmAuto, setConfirmAuto] = useState(null);
+  const [groupDialog, setGroupDialog] = useState(null); // { group } | {}
+  const canGroups = can('groups.manage');
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const view = useMemo(() => groupView(rows || []), [rows]);
+  const view = useMemo(() => groupView(rows || [], groupRows || []), [rows, groupRows]);
   const { violations, badGroups, badMembers, ok } = useMemo(() => validate(view), [view]);
   const excluded = (rows || []).filter((p) => p.active && p.is_committee);
 
@@ -54,7 +57,7 @@ export default function GroupForming() {
 
   const runAuto = async () => {
     const { seed, pickLeaders } = confirmAuto;
-    const changes = autoAssign(view.players, seed, { pickLeaders });
+    const changes = autoAssign(view.players, seed, { pickLeaders }, view.groups);
     setConfirmAuto(null);
     if (!changes.length) return say('ok', 'Tidak ada perubahan.');
     setBusy(true);
@@ -95,6 +98,7 @@ export default function GroupForming() {
         {canEdit && (
           <>
             <button className="btn btn-ghost" style={{ marginLeft: 'auto', height: 38 }} onClick={() => setDialog({ defaults: {} })}>+ Daftarkan member</button>
+            {canGroups && <button className="btn btn-ghost" style={{ height: 38 }} onClick={() => setGroupDialog({})}>+ Grup baru</button>}
             <button className="btn btn-outline" style={{ height: 38 }} disabled={busy} onClick={() => setConfirmAuto({ seed: Math.floor(Math.random() * 9000) + 1000, pickLeaders: true })}>{busy ? 'Menyimpan…' : 'Auto-assign'}</button>
           </>
         )}
@@ -108,14 +112,15 @@ export default function GroupForming() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
           {view.groups.map((g) => {
             const n = g.members.length;
-            const sizeBad = n < GROUP_MIN || n > GROUP_MAX;
+            const sizeBad = n < g.min || n > g.max;
             const isOver = over === g.no;
             return (
               <div key={g.no} {...dropProps(g.no)}
                 style={{ background: isOver ? '#F3F8F4' : '#FFFDF8', border: `1.5px solid ${isOver ? '#2F7A55' : badGroups.has(g.no) ? '#E7A79C' : '#E9E0CC'}`, borderRadius: 14, padding: 10, display: 'flex', flexDirection: 'column', gap: 5, minHeight: 420 }}>
                 <div className="row" style={{ gap: 6, paddingBottom: 6, borderBottom: `3px solid ${g.color}` }}>
-                  <span style={{ font: "800 13px 'Bricolage Grotesque'" }}>{g.no} {g.name}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: sizeBad ? '#B3261E' : '#E3EFE6', color: sizeBad ? '#fff' : '#1F4D3A' }}>{n}/{GROUP_MAX}</span>
+                  <span style={{ font: "800 13px 'Bricolage Grotesque'", minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.no} {g.name}</span>
+                  <span title={`Batas ${g.min}–${g.max} anggota`} style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: sizeBad ? '#B3261E' : '#E3EFE6', color: sizeBad ? '#fff' : '#1F4D3A', flex: 'none' }}>{n}/{g.max}</span>
+                  {canGroups && <button onClick={() => setGroupDialog({ group: g })} aria-label={`Edit grup ${g.no} ${g.name}`} title="Edit grup" style={{ width: 22, height: 22, borderRadius: 6, fontSize: 12, color: '#56655C', flex: 'none' }}>✎</button>}
                 </div>
                 <span className="muted" style={{ fontSize: 10 }}>Captain: {g.staff.map((p) => p.full_name).join(', ') || '—'} · TL {g.members.filter((p) => p.is_ministry_tl).length}</span>
                 {g.members.map((p) => chip(p, g.no))}
@@ -125,6 +130,12 @@ export default function GroupForming() {
               </div>
             );
           })}
+          {canGroups && (
+            <button onClick={() => setGroupDialog({})} style={{ minHeight: 420, borderRadius: 14, border: '1.5px dashed #CFC4AA', color: '#1F4D3A', fontWeight: 700, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>Grup baru
+            </button>
+          )}
+          {!view.groups.length && !canGroups && <div className="card pad muted" style={{ gridColumn: '1 / -1' }}>Belum ada grup.</div>}
         </div>
 
         <div className="col" style={{ gap: 12 }}>
@@ -170,13 +181,14 @@ export default function GroupForming() {
         </div>
       </div>
 
+      {groupDialog && <GroupDialog group={groupDialog.group} onClose={() => setGroupDialog(null)} onSaved={(msg) => { setGroupDialog(null); setLocked(false); say('ok', msg); }} />}
       {dialog && <MemberDialog member={dialog.member} defaults={dialog.defaults} onClose={() => setDialog(null)} onSaved={(msg) => { setDialog(null); setLocked(false); say('ok', msg); }} />}
       {confirmAuto && (
         <div role="dialog" aria-modal="true" aria-label="Konfirmasi auto-assign" onClick={() => setConfirmAuto(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(20,40,31,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: 440, background: '#FFFDF8', borderRadius: 18, padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span style={{ font: "800 20px 'Bricolage Grotesque'", color: '#1F4D3A' }}>Undi ulang semua grup?</span>
             <span className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              {view.players.length} peserta akan disebar ulang ke 10 grup (seed <b className="mono">{confirmAuto.seed}</b>). Grup yang sudah diatur manual akan tertimpa.
+              {view.players.length} peserta akan disebar ulang ke {view.groups.length} grup (seed <b className="mono">{confirmAuto.seed}</b>). Grup yang sudah diatur manual akan tertimpa.
             </span>
             <label className="row" style={{ gap: 8, fontSize: 13 }}>
               <input type="checkbox" checked={confirmAuto.pickLeaders} onChange={(e) => setConfirmAuto((c) => ({ ...c, pickLeaders: e.target.checked }))} />

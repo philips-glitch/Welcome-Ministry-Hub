@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
-import { GROUPS } from '../data.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { leaderName } from '../lib/groups.js';
@@ -10,11 +9,12 @@ const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
 const STATUS_CHIP = { submitted: ['PENDING', '#E3ECF8', '#244F8F'], validated: ['VALID', '#E3EFE6', '#1F4D3A'], rejected: ['DITOLAK', '#FBE4E0', '#9A2A1E'], resubmit: ['ULANG', '#F8E9C4', '#7A5410'] };
 const TOAST = { ok: ['#E3EFE6', '#1F4D3A'], warn: ['#F8E9C4', '#7A5410'], bad: ['#FBE4E0', '#9A2A1E'] };
-const group = (no) => GROUPS.find((g) => g[0] === no) || [no, no, '#999'];
 const selectStyle = { height: 36, padding: '0 10px', borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', font: 'inherit', fontSize: 13, fontWeight: 700 };
 
 export default function ValidationQueue() {
-  const { challenges, focus, reloadScores } = useGame();
+  const { challenges, focus, reloadScores, groups: groupRows } = useGame();
+  // [no, name, color] for a group number (falls back for a group that was deleted).
+  const group = (no) => { const g = (groupRows || []).find((x) => x.no === no); return g ? [g.no, g.name, g.color] : [no, 'Grup ' + no, '#999']; };
   const members = useMembers().rows || [];
   const reviewable = (challenges || []).filter((c) => c.status !== 'draft');
   const [chId, setChId] = useState(null);
@@ -120,7 +120,7 @@ export default function ValidationQueue() {
         </select>
         <select aria-label="Grup" value={fGroup} onChange={(e) => setFGroup(e.target.value)} style={selectStyle}>
           <option value="">Semua grup</option>
-          {GROUPS.map(([no, name]) => <option key={no} value={no}>{no} {name}</option>)}
+          {(groupRows || []).map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
         </select>
         <select aria-label="Status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} style={selectStyle}>
           <option value="submitted">Pending</option><option value="validated">Valid</option><option value="rejected">Ditolak</option><option value="resubmit">Minta ulang</option><option value="all">Semua status</option>

@@ -1,6 +1,6 @@
 // Demo-mode notifications, mirroring supabase/migrations/0003_notifications.sql:
 // same three automatic kinds, same dedupe keys, same wording. Times follow the demo clock.
-import { DEMO_NOW, GROUPS } from '../data.js';
+import { DEMO_NOW } from '../data.js';
 
 const T0 = Date.now();
 export const demoNow = () => DEMO_NOW + (Date.now() - T0);
@@ -40,7 +40,7 @@ export function syncReminders(s, now = demoNow()) {
     const dl = new Date(c.deadline_at).getTime();
     if (dl <= now || dl > now + 24 * H) return;
     const label = dl <= now + 3 * H ? '3' : '24';
-    GROUPS.forEach(([no]) => {
+    s.groups.forEach(({ no }) => {
       const active = (riddleId) => s.submissions.some((x) => x.challenge_id === c.id && x.group_no === no && (x.riddle_id ?? null) === riddleId && ['submitted', 'validated'].includes(x.status));
       const left = c.riddles_per_group > 0
         ? s.draws.filter((d) => d.challenge_id === c.id && d.group_no === no && !active(d.riddle_id)).length

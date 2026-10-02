@@ -1,5 +1,5 @@
 // Challenge rules shared by admin and portal: statuses, scoring, draws, standings.
-import { GROUPS, rng, rank } from '../data.js';
+import { rng, rank } from '../data.js';
 
 export const STATUSES = [
   ['draft', 'Draft', '#EDE6D6', '#56655C'],
@@ -55,9 +55,9 @@ export function scoreParts(scoring, sub) {
 }
 
 // Seeded draw: `n` distinct riddles per group out of the bank. Returns [{group_no, slot, riddle_id}].
-export function drawRiddles(riddleIds, n, seed) {
+export function drawRiddles(riddleIds, n, seed, groups) {
   const r = rng(seed);
-  return GROUPS.flatMap(([no]) => {
+  return groups.flatMap(({ no }) => {
     const a = [...riddleIds];
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
     return a.slice(0, n).map((riddle_id, i) => ({ group_no: no, slot: i + 1, riddle_id }));
@@ -74,9 +74,9 @@ export function scoreColumns(challenges) {
 }
 
 // Standings rows from group_scores() output: [{group_no, challenge_id, points, validated}].
-export function buildStandings(scores, challenges, captains = {}) {
+export function buildStandings(scores, challenges, captains = {}, groups = []) {
   const cols = scoreColumns(challenges);
-  const rows = GROUPS.map(([no, name, color], gi) => {
+  const rows = groups.map(({ no, name, color }, gi) => {
     const mine = scores.filter((s) => s.group_no === no);
     const row = { gi, no, name, color, captain: captains[no] || '—', validated: mine.reduce((a, s) => a + s.validated, 0) };
     cols.forEach((c) => { row[c.key] = round1(mine.filter((s) => c.ids.includes(s.challenge_id)).reduce((a, s) => a + Number(s.points), 0)); });

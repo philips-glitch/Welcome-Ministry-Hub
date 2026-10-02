@@ -3,7 +3,8 @@ import { ROLES } from '../lib/permissions.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { api } from '../lib/api.js';
-import { GROUPS, TEAMS } from '../data.js';
+import { TEAMS } from '../data.js';
+import { useGame } from '../lib/gameStore.jsx';
 
 const input = { height: 38, borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', padding: '0 10px', font: 'inherit', fontSize: 13, fontWeight: 500, color: '#1B2620', width: '100%' };
 const field = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontWeight: 700, minWidth: 0 };
@@ -13,6 +14,7 @@ const EDITABLE = ['full_name', 'role_id', 'group_no', 'service_team', 'ig_handle
 export default function MemberDialog({ member, defaults = {}, onClose, onSaved }) {
   const { profile: me, can } = useAuth();
   const { create, update, setPassword } = useMembers();
+  const GROUPS = useGame().groups || [];
   const editing = !!member;
   const canRoles = can('roles.manage');
   const self = editing && member.id === me.id;
@@ -84,7 +86,7 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
           <label style={field}>Grup
             <select value={f.group_no} onChange={set('group_no')} style={input}>
               <option value="">Belum ada grup</option>
-              {GROUPS.map(([no, name]) => <option key={no} value={no}>{no} {name}</option>)}
+              {GROUPS.map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
             </select>
           </label>
           <label style={field}>Role

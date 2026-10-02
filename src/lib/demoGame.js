@@ -80,7 +80,7 @@ export function seedGame(profiles) {
     });
   });
 
-  const groups = GROUPS.map(([no, name, color]) => ({ no, name, color, locked_at: null, locked_by: null }));
+  const groups = GROUPS.map(([no, name, color], i) => ({ no, name, color, min_size: 13, max_size: 14, sort: i + 1, locked_at: null, locked_by: null }));
   return { groups, challenges, riddles, draws, submissions };
 }
 
@@ -109,7 +109,41 @@ export function gameMethods({ load, save, delay, fail }) {
       s.notificationReads[s.sessionId] = [...new Set([...(s.notificationReads[s.sessionId] || []), ...ids])];
       save(); return delay();
     },
-    async listGroups() { return delay(structuredClone(load().groups)); },
+    async listGroups() {
+      // Older saved states predate size limits / sort.
+      return delay(structuredClone(load().groups).map((g, i) => ({ min_size: 13, max_size: 14, sort: i + 1, ...g })).sort((a, b) => a.sort - b.sort || a.no.localeCompare(b.no)));
+    },
+    async createGroup(g) {
+      const s = load();
+      if (s.groups.some((x) => x.no === g.no)) return fail(`Nomor grup ${g.no} sudah dipakai.`);
+      const row = { min_size: 13, max_size: 14, sort: Math.max(0, ...s.groups.map((x) => x.sort || 0)) + 1, locked_at: null, locked_by: null, ...g };
+      s.groups.push(row);
+      save(); return delay(structuredClone(row));
+    },
+    async updateGroup(no, patch) {
+      const s = load();
+      const i = s.groups.findIndex((x) => x.no === no);
+      if (i < 0) return fail('Grup tidak ditemukan.');
+      const to = patch.no ?? no;
+      if (to !== no) {
+        if (s.groups.some((x) => x.no === to)) return fail(`Nomor grup ${to} sudah dipakai.`);
+        // Same cascade as the FK "on update cascade" in 0004_groups_crud.sql.
+        const move = (x) => { if (x.group_no === no) x.group_no = to; };
+        s.profiles.forEach(move); s.draws.forEach(move); s.submissions.forEach(move); (s.notifications || []).forEach(move);
+      }
+      s.groups[i] = { ...s.groups[i], ...patch };
+      save(); return delay(structuredClone(s.groups[i]));
+    },
+    async deleteGroup(no) {
+      const s = load();
+      const n = s.submissions.filter((x) => x.group_no === no).length;
+      if (n) return fail(`Grup ${no} punya ${n} submission dan tidak bisa dihapus. Ganti nama grup kalau perlu.`);
+      s.groups = s.groups.filter((x) => x.no !== no);
+      s.profiles.forEach((p) => { if (p.group_no === no) p.group_no = null; });
+      s.draws = s.draws.filter((d) => d.group_no !== no);
+      s.notifications = (s.notifications || []).filter((x) => x.group_no !== no);
+      save(); return delay();
+    },
     async setGroupsLocked(locked) {
       const s = load();
       s.groups = s.groups.map((g) => ({ ...g, locked_at: locked ? new Date().toISOString() : null, locked_by: locked ? s.sessionId : null }));

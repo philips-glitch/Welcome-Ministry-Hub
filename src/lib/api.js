@@ -64,7 +64,11 @@ function supabaseApi() {
     },
 
     // ── Game data ──
-    async listGroups() { return unwrap(await sb.from('groups').select('*').order('no')); },
+    async listGroups() { return unwrap(await sb.from('groups').select('*').order('sort').order('no')); },
+    async createGroup(g) { return unwrap(await sb.from('groups').insert(g).select('*').single()); },
+    // Renumbering (patch.no) cascades to members, draws, submissions and notifications in the DB.
+    async updateGroup(no, patch) { return unwrap(await sb.from('groups').update(patch).eq('no', no).select('*').single()); },
+    async deleteGroup(no) { unwrap(await sb.from('groups').delete().eq('no', no)); },
     async setGroupsLocked(locked) {
       unwrap(await sb.from('groups').update(locked ? { locked_at: new Date().toISOString(), locked_by: (await this.getSessionUserId()) } : { locked_at: null, locked_by: null }).neq('no', ''));
     },

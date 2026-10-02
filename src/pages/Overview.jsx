@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { GROUPS } from '../data.js';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
@@ -43,7 +42,8 @@ const bigNum = { font: "800 30px 'Bricolage Grotesque'" };
 
 export default function Overview({ onNavigate }) {
   const members = useMembers().rows || [];
-  const { focus, pending, scores } = useGame();
+  const { focus, pending, scores, groups: groupRows } = useGame();
+  const GROUPS = groupRows || [];
   const [subs, setSubs] = useState([]);
   const [draw, setDraw] = useState([]);
   // Refetch when scores change (i.e. after a review) so counts stay current.
@@ -56,7 +56,7 @@ export default function Overview({ onNavigate }) {
   const pic = members.find((p) => p.id === focus?.pic_id)?.full_name;
   const perGroup = focus?.riddles_per_group || 0;
 
-  const rows = GROUPS.map(([no, name, color]) => {
+  const rows = GROUPS.map(({ no, name, color }) => {
     const mine = subs.filter((x) => x.group_no === no);
     const latest = (riddleId) => mine.filter((x) => x.riddle_id === riddleId).sort((a, b) => b.version - a.version)[0];
     const slots = draw.filter((d) => d.group_no === no).sort((a, b) => a.slot - b.slot);
@@ -95,7 +95,7 @@ export default function Overview({ onNavigate }) {
         <div className="card" style={statCard}>
           <span className="muted" style={{ fontSize: 13 }}>Submission {focus?.code ?? ''} masuk</span>
           <span style={bigNum}>{received}{expected ? <span className="muted" style={{ fontSize: 16 }}> / {expected}</span> : null}</span>
-          <span className="muted" style={{ fontSize: 12 }}>{perGroup ? `${perGroup} riddle × 10 grup` : 'submission terbaru per grup'}</span>
+          <span className="muted" style={{ fontSize: 12 }}>{perGroup ? `${perGroup} riddle × ${GROUPS.length} grup` : 'submission terbaru per grup'}</span>
         </div>
         <div className="card" style={statCard}>
           <span className="muted" style={{ fontSize: 13 }}>Menunggu validasi</span>

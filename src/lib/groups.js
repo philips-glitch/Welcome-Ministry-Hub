@@ -1,8 +1,11 @@
 // Group composition over real member profiles (Supabase or demo store).
-import { GROUPS, TEAMS, rng } from '../data.js';
+import { TEAMS, rng } from '../data.js';
 
+// Defaults for groups that predate per-group size limits.
 export const GROUP_MIN = 13;
 export const GROUP_MAX = 14;
+const minOf = (g) => g.min_size ?? GROUP_MIN;
+const maxOf = (g) => g.max_size ?? GROUP_MAX;
 const PLAYER_ROLES = ['member', 'group_leader'];
 
 // Players are the people who get sorted into groups: active, not panitia, member/leader role.
@@ -10,17 +13,20 @@ export const isPlayer = (p) => p.active && !p.is_committee && PLAYER_ROLES.inclu
 // Captains/PICs attached to a group (shown on the card, not counted in its size).
 export const isStaffOf = (p, no) => p.active && p.group_no === no && !PLAYER_ROLES.includes(p.role_id);
 
-export function groupView(profiles) {
+export function groupView(profiles, groupRows = []) {
   const players = profiles.filter(isPlayer);
-  const groups = GROUPS.map(([no, name, color]) => {
+  const known = new Set(groupRows.map((g) => g.no));
+  const groups = groupRows.map((g) => {
+    const { no } = g;
     const members = players.filter((p) => p.group_no === no);
     return {
-      no, name, color, members,
+      ...g, min: minOf(g), max: maxOf(g), members,
       leaders: members.filter((p) => p.role_id === 'group_leader'),
       staff: profiles.filter((p) => isStaffOf(p, no)),
     };
   });
-  const unassigned = players.filter((p) => !p.group_no);
+  // A group number that no longer exists counts as unassigned.
+  const unassigned = players.filter((p) => !p.group_no || !known.has(p.group_no));
   return { groups, unassigned, players };
 }
 
@@ -34,8 +40,8 @@ export function validate({ groups }) {
   groups.forEach((g) => {
     const nm = `${g.no} ${g.name}`;
     const n = g.members.length;
-    if (n > GROUP_MAX) { violations.push(`Grup ${nm}: ${n} anggota (maks ${GROUP_MAX})`); badGroups.add(g.no); }
-    if (n < GROUP_MIN) { violations.push(`Grup ${nm}: ${n} anggota (min ${GROUP_MIN})`); badGroups.add(g.no); }
+    if (n > g.max) { violations.push(`Grup ${nm}: ${n} anggota (maks ${g.max})`); badGroups.add(g.no); }
+    if (n < g.min) { violations.push(`Grup ${nm}: ${n} anggota (min ${g.min})`); badGroups.add(g.no); }
     if (!g.members.some((p) => p.is_ministry_tl)) { violations.push(`Grup ${nm}: belum ada Ministry TL`); badGroups.add(g.no); }
     if (!g.leaders.length) { violations.push(`Grup ${nm}: belum ada Group Leader`); badGroups.add(g.no); }
     if (g.leaders.length > 1) {
@@ -60,9 +66,10 @@ export function validate({ groups }) {
 // Seeded shuffle of all players into 10 groups: TLs spread first, then others by team so no
 // group gets two people from the same service team. Optionally re-picks one non-TL leader per group.
 // Returns [[id, patch], …] for only the profiles that change.
-export function autoAssign(players, seed, { pickLeaders = true } = {}) {
+export function autoAssign(players, seed, { pickLeaders = true } = {}, groupRows = []) {
+  if (!groupRows.length) return [];
   const r = rng(seed);
-  const g = GROUPS.map(() => []);
+  const g = groupRows.map(() => []);
   const tls = players.filter((p) => p.is_ministry_tl).map((p) => [p, r()]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
   tls.forEach((p, i) => g[i % g.length].push(p));
   const teamIdx = (p) => (p.service_team ? TEAMS.indexOf(p.service_team) : 99);
@@ -71,7 +78,7 @@ export function autoAssign(players, seed, { pickLeaders = true } = {}) {
   const hasTeam = (gi, t) => t && g[gi].some((p) => p.service_team === t);
   rest.forEach((p) => {
     const all = [...g.keys()];
-    const opts = all.filter((i) => g[i].length < GROUP_MAX && !hasTeam(i, p.service_team));
+    const opts = all.filter((i) => g[i].length < maxOf(groupRows[i]) && !hasTeam(i, p.service_team));
     const pool = opts.length ? opts : all;
     pool.sort((a, b) => g[a].length - g[b].length || r() - 0.5);
     g[pool[0]].push(p);
@@ -79,7 +86,7 @@ export function autoAssign(players, seed, { pickLeaders = true } = {}) {
 
   const changes = [];
   g.forEach((ids, gi) => {
-    const no = GROUPS[gi][0];
+    const no = groupRows[gi].no;
     const leader = pickLeaders ? ids.find((p) => !p.is_ministry_tl) : null;
     ids.forEach((p) => {
       const patch = {};
