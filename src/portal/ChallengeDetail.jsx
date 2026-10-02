@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { SUB_CHIP } from './portalData.js';
 import { fmtWIB, statusMeta, DEFAULT_SCORING } from '../lib/game.js';
 import { CountUp, urgency } from './motion.jsx';
+import { PhotoThumb } from '../components/Photo.jsx';
 
 const STATUS = { validated: 'Validated', submitted: 'Submitted', rejected: 'Rejected', resubmit: 'Rejected' };
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
@@ -27,7 +28,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
       : sub.status === 'submitted' ? `Dikirim ${fmtWIB(sub.submitted_at)} oleh ${nameOf(sub.submitted_by)}`
       : `${sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}: ${sub.reject_reason || '—'}`;
     const canSend = open && me.canSubmit && (!sub || ['rejected', 'resubmit'].includes(sub.status));
-    return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st, meta, canSend, resend: !!sub };
+    return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st, meta, canSend, resend: !!sub, sub };
   });
   const single = !riddleMode ? data.latest(null) : null;
   const canSingle = open && me.canSubmit && (!single || ['rejected', 'resubmit'].includes(single.status));
@@ -97,6 +98,9 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '4px 8px', borderRadius: 999, background: cbg, color: cfg }}>{r.st.toUpperCase()}</span>
                       </div>
                       <span style={{ fontSize: 15, lineHeight: 1.45, fontWeight: 500, fontStyle: 'italic', flex: 1 }}>“{r.text}”</span>
+                      {r.sub && (r.sub.media_path || r.sub.media_name) && (
+                        <PhotoThumb path={r.sub.media_path} name={r.sub.media_name} height={150} caption={`Riddle ${r.no} · versi ${r.sub.version}`} placeholder="Foto lama, tidak tersimpan" />
+                      )}
                       <span className="muted" style={{ fontSize: 12 }}>{r.meta}</span>
                       {r.canSend && <button onClick={() => pickRiddle(r.id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{r.resend ? 'Kirim ulang' : `Submit Riddle ${r.no}`}</button>}
                     </div>
@@ -110,6 +114,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
               <span className="muted" style={{ fontSize: 13 }}>
                 {!single ? 'Belum ada submission dari grup kamu.' : `Status: ${STATUS[single.status]}${single.score != null ? ` · ${single.score} pts` : ''}${single.reject_reason ? ` · “${single.reject_reason}”` : ''} · versi ${single.version}`}
               </span>
+              {single && (single.media_path || single.media_name) && <PhotoThumb path={single.media_path} name={single.media_name} height={200} caption={`${c.name} · versi ${single.version}`} placeholder="Foto lama, tidak tersimpan" />}
               {canSingle
                 ? <button className="p-btn-lg" onClick={() => pickRiddle(null)} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{single ? 'Kirim ulang' : 'Submit challenge'}</button>
                 : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (c.status === 'scheduled' ? 'Belum dibuka' : 'Submit ditutup') : single ? 'Sudah dikirim' : 'Submit oleh Group Leader'}</button>}

@@ -128,7 +128,8 @@ Responsive web version of `design/Flourish Hub Portal.dc.html` (the design was a
 ## What's real vs sample
 
 - **In the database:** accounts, profiles, roles and permissions, groups and their lock, challenges, riddles and answers, draws, submissions and reviews, and scores.
-- **Demo mode** keeps the same tables in the browser's localStorage, seeded with the WM 2026 sample, on a demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Photos aren't stored in demo mode. With Supabase configured, the app uses real time.
+- **Demo mode** keeps the same tables in the browser's localStorage and the submission photos in IndexedDB, seeded with the WM 2026 sample, on a demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Seeded submissions have no photo. With Supabase configured, the app uses real time and photos go to the private `submission-media` bucket.
+- **Photos** are shrunk in the browser before upload (longest side 1,600 px, JPEG; a 5–6 MB phone photo becomes about 0.5 MB). They show in the admin Validation Queue (click to zoom) and as thumbnails on the group's riddle cards in the portal.
 - **Still static:** the Overview timeline, the overdue-SLA list and the scheduled-announcements card.
 - Admin is built for desktop (minimum width 1280 px); the Portal and login page are responsive.
 - `design/` holds the original Claude Design sources for reference; they aren't used by the build.

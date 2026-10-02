@@ -4,6 +4,7 @@ import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { leaderName } from '../lib/groups.js';
 import { computeScore, scoreParts, DEFAULT_SCORING, fmtWIB } from '../lib/game.js';
+import { Lightbox } from '../components/Photo.jsx';
 
 const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 'Jumlah peserta sesuai tag', 'Aturan diikuti · tanpa nama gereja', 'Tidak ada wajah jemaat tanpa izin'];
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
@@ -26,6 +27,8 @@ export default function ValidationQueue() {
   const [review, setReview] = useState(null);
   const [toast, setToast] = useState(null);
   const [media, setMedia] = useState(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [zoom, setZoom] = useState(false);
 
   useEffect(() => { if (!chId && challenges) setChId((focus || reviewable[0])?.id ?? null); }, [challenges]); // eslint-disable-line react-hooks/exhaustive-deps
   const challenge = reviewable.find((c) => c.id === chId);
@@ -43,7 +46,12 @@ export default function ValidationQueue() {
 
   // Pick the first item whenever the list changes and the selection fell out of it.
   useEffect(() => { if (!cur && list.length) select(list[0]); }, [list]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setMedia(null); if (cur?.media_path) api.mediaUrl(cur.media_path).then(setMedia).catch(() => {}); }, [cur?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let alive = true;
+    setMedia(null); setZoom(false); setMediaLoading(!!cur?.media_path);
+    if (cur?.media_path) api.mediaUrl(cur.media_path).then((u) => alive && setMedia(u)).catch(() => {}).finally(() => alive && setMediaLoading(false));
+    return () => { alive = false; };
+  }, [cur?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function select(s) {
     setSelId(s.id);
@@ -99,6 +107,7 @@ export default function ValidationQueue() {
     const onKey = (e) => {
       const tag = e.target?.tagName || '';
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector('[role=dialog][aria-modal=true]')) return; // e.g. photo zoom open
       if (e.key === 'a' || e.key === 'A') keys.current.decide('validated');
       else if (e.key === 'r' || e.key === 'R') keys.current.decide('rejected');
       else if (e.key === 'ArrowRight') keys.current.move(1);
@@ -157,14 +166,20 @@ export default function ValidationQueue() {
                   <span style={{ font: "800 20px 'Bricolage Grotesque'" }}>{G[1]}{riddle ? ` · Riddle ${riddle.no}` : ''}</span>
                   <span className="muted" style={{ fontSize: 12 }}>dikirim {fmtWIB(cur.submitted_at)} · leader {leaderName(members, cur.group_no)} · v{cur.version}</span>
                 </div>
-                <div className={media ? '' : 'placeholder-stripes'} style={{ height: 380, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, color: '#6B665A', overflow: 'hidden', background: media ? '#14281F' : undefined }}>
-                  {media ? <img src={media} alt={`Foto ${G[1]}`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : (
+                <div className={media ? '' : 'placeholder-stripes'} style={{ height: 380, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, color: '#6B665A', overflow: 'hidden', background: media ? '#14281F' : undefined, position: 'relative' }}>
+                  {media ? (
+                    <button onClick={() => setZoom(true)} title="Klik untuk memperbesar" style={{ width: '100%', height: '100%', padding: 0, cursor: 'zoom-in', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={media} alt={`Foto ${G[1]}`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                      <span style={{ position: 'absolute', right: 10, bottom: 10, fontSize: 12, fontWeight: 700, color: '#FBF6EA', background: 'rgba(20,40,31,.75)', padding: '4px 10px', borderRadius: 999 }}>⤢ Perbesar · {cur.media_name}</span>
+                    </button>
+                  ) : (
                     <>
                       <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{cur.media_name || 'tanpa foto'}</span>
-                      <span style={{ fontSize: 12 }}>{api.mode === 'demo' ? 'Mode demo: foto tidak disimpan' : 'Foto belum diunggah'}</span>
+                      <span style={{ fontSize: 12 }}>{mediaLoading ? 'Memuat foto…' : cur.media_path ? 'Foto tidak ditemukan di penyimpanan' : 'Submission ini tidak menyertakan foto tersimpan'}</span>
                     </>
                   )}
                 </div>
+                {zoom && media && <Lightbox src={media} alt={`Foto ${G[1]}`} caption={`${G[1]}${riddle ? ' · Riddle ' + riddle.no : ''} · v${cur.version}`} onClose={() => setZoom(false)} />}
                 <div style={{ display: 'grid', gridTemplateColumns: riddle ? '1fr 1fr' : '1fr', gap: 10 }}>
                   {riddle && (
                     <>

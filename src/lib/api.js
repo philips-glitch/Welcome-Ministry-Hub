@@ -20,6 +20,7 @@ function friendly(msg) {
 
 function supabaseApi() {
   const sb = createClient(URL, KEY, { auth: { persistSession: true } });
+  const signed = new Map();
   // Account creation / password reset need the service role, so they go through the admin-users Edge Function.
   const adminUsers = async (body) => {
     const { data, error } = await sb.functions.invoke('admin-users', { body });
@@ -113,7 +114,15 @@ function supabaseApi() {
       return unwrap(await sb.from('submissions').insert(s).select('*').single());
     },
     async reviewSubmission(id, patch) { return unwrap(await sb.from('submissions').update(patch).eq('id', id).select('*').single()); },
-    async mediaUrl(path) { return path ? unwrap(await sb.storage.from('submission-media').createSignedUrl(path, 3600)).signedUrl : null; },
+    // Signed URLs last an hour; reuse them for 50 minutes.
+    async mediaUrl(path) {
+      if (!path) return null;
+      const hit = signed.get(path);
+      if (hit && hit.until > Date.now()) return hit.url;
+      const url = unwrap(await sb.storage.from('submission-media').createSignedUrl(path, 3600)).signedUrl;
+      signed.set(path, { url, until: Date.now() + 50 * 60e3 });
+      return url;
+    },
     async groupScores() { return unwrap(await sb.rpc('group_scores')); },
 
     // ── Notifications (created by DB triggers / pg_cron; RLS limits to everyone + my group) ──

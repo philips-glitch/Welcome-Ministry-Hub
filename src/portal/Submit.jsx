@@ -4,10 +4,11 @@ import { api } from '../lib/api.js';
 import { tierPoints, DEFAULT_SCORING, fmtWIB } from '../lib/game.js';
 import { submitRules, initials, avatarColor } from './portalData.js';
 import { Confetti } from './motion.jsx';
+import { resizeImage, formatBytes } from '../lib/image.js';
 
 const STEPS = ['Media', 'Link Image', 'Tag anggota', 'Cek aturan'];
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
-const MAX_MB = 15;
+const MAX_MB = 25; // before resizing; photos are shrunk to ≤1600 px JPEG in the browser
 
 export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitted }) {
   const rules = submitRules(me);
@@ -24,6 +25,8 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const cur = sendable.find((d) => d.riddle_id === target);
 
   const [file, setFile] = useState(null);
+  const [origSize, setOrigSize] = useState(null);
+  const [shrinking, setShrinking] = useState(false);
   const [preview, setPreview] = useState(null);
   const [ig, setIg] = useState('');
   const [tagged, setTagged] = useState(() => new Set());
@@ -55,16 +58,19 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const hint = !nextTier ? 'Tier tertinggi — mantap!' : `Tambah ${nextTier.min - n} orang lagi untuk ${nextTier.pts} poin`;
   const needIg = scoring.type === 'riddle';
   const missing = [!file && 'foto', needIg && !ig.trim() && 'link image', !n && 'tag anggota', !checks.every(Boolean) && 'semua aturan'].filter(Boolean);
-  const ready = !missing.length;
+  const ready = !missing.length && !shrinking;
   const state = [file ? 'done' : 'now', ig.trim() || !needIg ? 'done' : file ? 'now' : 'todo', n ? 'done' : 'todo', checks.every(Boolean) ? 'done' : 'todo'];
 
-  const pickFile = (f) => {
+  const pickFile = async (f) => {
     setErr(null);
     if (!f) return;
-    if (!f.type.startsWith('image/')) return setErr('File harus berupa foto (JPG/PNG/HEIC).');
+    if (!f.type.startsWith('image/') && !/.(heic|heif)$/i.test(f.name)) return setErr('File harus berupa foto (JPG/PNG/HEIC).');
     if (f.size > MAX_MB * 1024 * 1024) return setErr(`Ukuran foto maks ${MAX_MB} MB.`);
+    setShrinking(true);
+    const { file: out } = await resizeImage(f);
+    setShrinking(false);
     if (preview) URL.revokeObjectURL(preview);
-    setFile(f); setPreview(URL.createObjectURL(f));
+    setOrigSize(f.size); setFile(out); setPreview(URL.createObjectURL(out));
   };
   const submit = async () => {
     if (!ready) return setErr('Lengkapi dulu: ' + missing.join(', ') + '.');
@@ -111,7 +117,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
             </div>
             <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
               <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : 'Pilih foto grup'}</span>
-              <span className="muted" style={{ fontSize: 12 }}>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ketuk untuk ganti` : `JPG / PNG, maks ${MAX_MB} MB`}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{shrinking ? 'Memperkecil foto…' : file ? `${origSize && origSize > file.size ? formatBytes(origSize) + ' → ' : ''}${formatBytes(file.size)} · ketuk untuk ganti` : `JPG / PNG / HEIC, maks ${MAX_MB} MB · otomatis diperkecil`}</span>
             </div>
             <input type="file" accept="image/*" onChange={(e) => pickFile(e.target.files?.[0])} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
           </label>

@@ -2,6 +2,7 @@
 import { GROUPS, RIDDLES, DRAW0, R1STAT } from '../data.js';
 import { DEFAULT_SCORING } from './game.js';
 import { notifyReview, notifyChallenge, syncReminders, seedNotifications } from './demoNotify.js';
+import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
@@ -200,8 +201,14 @@ export function gameMethods({ load, save, delay, fail }) {
       const c = s.challenges.find((x) => x.id === sub.challenge_id);
       if (!c || c.status !== 'live') return fail('Challenge ini sedang tidak menerima submission.');
       const prev = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no && x.riddle_id === (sub.riddle_id ?? null));
+      // Same path layout as the Supabase bucket: <group>/<id>-<name>.
+      let media_path = null;
+      if (file) {
+        media_path = `${sub.group_no}/${uid()}-${file.name.replace(/[^w.-]+/g, '_')}`;
+        try { await putMedia(media_path, file); } catch { return fail('Foto gagal disimpan di browser ini.'); }
+      }
       const row = {
-        id: uid(), riddle_id: null, media_path: null, ig_url: null, tagged_ids: [], declaration: false, ...sub, media_name: file?.name ?? sub.media_name ?? null,
+        id: uid(), riddle_id: null, ig_url: null, tagged_ids: [], declaration: false, ...sub, media_path, media_name: file?.name ?? sub.media_name ?? null,
         version: prev.length + 1, status: 'submitted', submitted_by: s.sessionId, submitted_at: new Date().toISOString(),
         reviewed_by: null, reviewed_at: null, checks: null, location_correct: null, participant_count: null, score: null, override_note: null, reject_reason: null,
       };
@@ -217,7 +224,7 @@ export function gameMethods({ load, save, delay, fail }) {
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
       save(); return delay(structuredClone(s.submissions[i]));
     },
-    async mediaUrl() { return null; },
+    async mediaUrl(path) { return mediaObjectUrl(path); },
     async groupScores() {
       const s = load();
       const open = new Set(s.challenges.filter((c) => c.status !== 'draft').map((c) => c.id));
