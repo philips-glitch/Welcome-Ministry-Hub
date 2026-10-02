@@ -2,12 +2,14 @@ import useCountdown from '../useCountdown.js';
 import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
 import { fmtWIB, statusMeta } from '../lib/game.js';
+import { CountUp, urgency } from './motion.jsx';
 
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const short = (iso) => fmtWIB(iso, { hour: undefined, minute: undefined, month: undefined }).replace(' WIB', '').toUpperCase();
 
 export default function Home({ go, me, standings, focus, challenges, data, openChallenge }) {
   const cd = useCountdown(focus?.deadline_at ? new Date(focus.deadline_at).getTime() : 0);
+  const u = focus?.status === 'live' ? urgency(focus.deadline_at) : 'calm';
   const idx = me.group ? standings.findIndex((g) => g.no === me.group.no) : -1;
   const mine = standings[idx];
   const ahead = idx > 0 ? standings.slice(0, idx).reverse().find((g) => g.total > mine.total) : null;
@@ -35,7 +37,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
             {focus.deadline_at && (
               <div className="p-countdown" style={{ position: 'relative' }}>
                 {[[cd.d, 'hari'], [cd.h, 'jam'], [cd.m, 'menit'], [cd.s, 'detik']].map(([v, l]) => (
-                  <div key={l} style={{ background: 'rgba(251,246,234,.12)', borderRadius: 14, padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div key={l} className={u === 'urgent' ? 'p-urgent p-urgent-bg' : u === 'soon' ? 'p-soon' : undefined} style={{ background: 'rgba(251,246,234,.12)', borderRadius: 14, padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span className="num" style={{ font: "800 28px 'Bricolage Grotesque'" }}>{v}</span>
                     <span style={{ fontSize: 11, opacity: 0.8 }}>{l}</span>
                   </div>
@@ -43,12 +45,12 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, fontSize: 13, position: 'relative' }}>
-              <span>{focus.deadline_at ? fmtWIB(focus.deadline_at) : 'Deadline belum diumumkan'}</span>
+              <span>{u === 'urgent' ? '⏰ Kurang dari 3 jam! · ' : u === 'soon' ? '⏳ Kurang dari 24 jam · ' : ''}{focus.deadline_at ? fmtWIB(focus.deadline_at) : 'Deadline belum diumumkan'}</span>
               {slots > 0 && <span style={{ fontWeight: 700 }}>{sent} dari {slots} riddle terkirim</span>}
             </div>
             {slots > 0 && (
               <div style={{ height: 8, borderRadius: 4, background: 'rgba(251,246,234,.18)', position: 'relative' }}>
-                <div style={{ width: (sent / slots) * 100 + '%', height: '100%', borderRadius: 4, background: '#E3A92B' }} />
+                <div className="p-fill" style={{ width: (sent / slots) * 100 + '%', height: '100%', borderRadius: 4, background: '#E3A92B', animationDelay: '200ms' }} />
               </div>
             )}
           </button>
@@ -104,7 +106,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
             <span style={{ font: "800 24px/1 'Bricolage Grotesque'" }}>{mine ? '#' + mine.rank : '—'}</span>
           </div>
           <div className="col" style={{ gap: 2, flex: 1 }}>
-            <span style={{ fontWeight: 700, fontSize: 15 }}>{mine ? `${mine.total} poin · dari ${standings.length} grup` : 'Lihat leaderboard'}</span>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>{mine ? <><CountUp value={mine.total} /> poin · dari {standings.length} grup</> : 'Lihat leaderboard'}</span>
             <span className="muted" style={{ fontSize: 13 }}>{rankHint}</span>
           </div>
           <span style={{ fontSize: 20, color: '#1F4D3A' }}>›</span>

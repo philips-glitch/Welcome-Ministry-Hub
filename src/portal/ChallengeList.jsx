@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { DEMO_NOW } from '../data.js';
 import { fmtWIB, statusMeta } from '../lib/game.js';
+import { CountUp, urgency } from './motion.jsx';
 
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const SECTIONS = [
@@ -88,23 +89,36 @@ function Card({ c, p, section, me, onOpen }) {
           {me.group && (
             <div className="col" style={{ gap: 6 }}>
               <div style={{ display: 'flex', gap: 4 }}>
-                {Array.from({ length: p.total }, (_, i) => <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < p.sent ? '#2F7A55' : '#E9E0CC' }} />)}
+                {Array.from({ length: p.total }, (_, i) => (
+                  <div key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: '#E9E0CC', overflow: 'hidden' }}>
+                    {i < p.sent && <div className="p-fill" style={{ height: '100%', background: '#2F7A55', animationDelay: `${150 + i * 110}ms` }} />}
+                  </div>
+                ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
                 <span style={{ fontWeight: 700, color: done ? '#2F7A55' : '#3C4A42' }}>
                   {c.riddles_per_group ? `${p.sent}/${p.total} riddle terkirim` : p.sent ? (p.status === 'validated' ? '✓ Tervalidasi' : p.status === 'submitted' ? 'Menunggu validasi' : 'Perlu kirim ulang') : 'Belum dikirim'}
                 </span>
-                <span className="num" style={{ fontWeight: 800, color: '#1F4D3A' }}>{p.pts} pts</span>
+                <span style={{ fontWeight: 800, color: '#1F4D3A' }}><CountUp value={p.pts} /> pts</span>
               </div>
             </div>
           )}
           {c.deadline_at && (
             <span className="muted" style={{ fontSize: 12 }}>
-              {live ? <><b style={{ color: '#9A2A1E' }}>{left(c.deadline_at)}</b> lagi · tutup {fmtWIB(c.deadline_at)}</> : `Ditutup ${fmtWIB(c.deadline_at)}`}
+              {live ? <><Left iso={c.deadline_at} /> lagi · tutup {fmtWIB(c.deadline_at)}</> : `Ditutup ${fmtWIB(c.deadline_at)}`}
             </span>
           )}
         </>
       )}
     </button>
   );
+}
+
+// Time left: plain red text normally, an amber pill under 24 h, a pulsing red pill under 3 h.
+function Left({ iso }) {
+  const u = urgency(iso);
+  if (u === 'soon' || u === 'urgent') {
+    return <b className={u === 'urgent' ? 'p-urgent' : 'p-soon'} style={{ padding: '2px 8px', borderRadius: 999, background: u === 'urgent' ? '#C4533F' : '#F8E9C4', color: u === 'urgent' ? '#fff' : '#7A5410' }}>{left(iso)}</b>;
+  }
+  return <b style={{ color: '#9A2A1E' }}>{left(iso)}</b>;
 }

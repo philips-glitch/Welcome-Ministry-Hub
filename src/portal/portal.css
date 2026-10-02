@@ -75,3 +75,34 @@
   .p-desktop-only { display: initial; }
   .p-mobile-only { display: none !important; }
 }
+
+/* ───────── Motion ───────── */
+@keyframes p-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes p-pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes p-bump { 0% { transform: scale(1); } 35% { transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes p-shake { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(9deg); } 60% { transform: rotate(-6deg); } 75% { transform: rotate(3deg); } }
+@keyframes p-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes p-flash { 0% { box-shadow: 0 0 0 0 rgba(227,169,43,.75); } 70% { box-shadow: 0 0 0 14px rgba(227,169,43,0); } 100% { box-shadow: 0 0 0 0 rgba(227,169,43,0); } }
+@keyframes p-pulse-soon { 0%, 100% { box-shadow: 0 0 0 0 rgba(227,169,43,0); } 50% { box-shadow: 0 0 0 6px rgba(227,169,43,.35); } }
+@keyframes p-pulse-urgent { 0%, 100% { box-shadow: 0 0 0 0 rgba(196,83,63,0); } 50% { box-shadow: 0 0 0 7px rgba(196,83,63,.45); } }
+@keyframes p-fall {
+  0% { transform: translate3d(0, -20px, 0) rotate(0); opacity: 1; }
+  100% { transform: translate3d(var(--drift), 420px, 0) rotate(var(--rot)); opacity: 0; }
+}
+
+.p-fill { transform-origin: left center; animation: p-fill .7s cubic-bezier(.2,.8,.2,1) both; }
+.p-pop { animation: p-pop .45s cubic-bezier(.2,.8,.2,1) both; }
+.p-bump { animation: p-bump .35s ease-out; }
+.p-shake { animation: p-shake .8s ease-in-out; transform-origin: 50% 10%; }
+.p-rise { transform-origin: bottom center; animation: p-rise .6s cubic-bezier(.2,.8,.2,1) both; }
+.p-flash { animation: p-flash 1.2s ease-out 2; }
+.p-soon { animation: p-pulse-soon 2.4s ease-in-out infinite; }
+.p-urgent { animation: p-pulse-urgent 1.4s ease-in-out infinite; }
+.p-urgent-bg { background: #C4533F !important; }
+.p-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.p-confetti span { position: absolute; top: 0; animation-name: p-fall; animation-timing-function: cubic-bezier(.25,.6,.4,1); animation-fill-mode: both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .p-fill, .p-pop, .p-bump, .p-shake, .p-rise, .p-flash, .p-soon, .p-urgent { animation: none !important; }
+  .p-confetti { display: none; }
+}

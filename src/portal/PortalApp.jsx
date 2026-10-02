@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './portal.css';
 import { useAuth } from '../auth/AuthContext.jsx';
 import Logo from '../components/Logo.jsx';
@@ -58,13 +58,26 @@ export default function PortalApp({ route }) {
   };
   const data = useGroupChallenge(challenge, me.group?.no);
   const notif = useNotifications();
-  const onSubmitted = () => { data.reload(); game.reloadScores(); notif.reload(); };
+  // The riddle just sent flashes once on the detail page.
+  const [justSent, setJustSent] = useState(null);
+  const onSubmitted = (row) => {
+    data.reload(); game.reloadScores(); notif.reload();
+    setJustSent(row?.riddle_id ?? 'single');
+    setTimeout(() => setJustSent(null), 6000);
+  };
+  // Bell rings whenever the unread count goes up.
+  const [ring, setRing] = useState(0);
+  const lastUnread = useRef(null);
+  useEffect(() => {
+    if (lastUnread.current != null && notif.unread > lastUnread.current) setRing((r) => r + 1);
+    lastUnread.current = notif.unread;
+  }, [notif.unread]);
 
   let content;
   if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
-  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
+  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
   else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;
@@ -94,8 +107,8 @@ export default function PortalApp({ route }) {
           </div>
           <button className="p-icon-btn" aria-label={`Notifikasi${notif.unread ? ` (${notif.unread} belum dibaca)` : ''}`} onClick={() => go('notifications')}
             style={page === 'notifications' ? { background: '#E3EFE6', borderColor: '#1F4D3A' } : undefined}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0" /></svg>
-            {notif.unread > 0 && <span className="p-badge">{notif.unread > 9 ? '9+' : notif.unread}</span>}
+            <span key={ring} className={ring ? 'p-shake' : ''} style={{ display: 'flex' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0" /></svg></span>
+            {notif.unread > 0 && <span key={notif.unread} className="p-badge p-pop">{notif.unread > 9 ? '9+' : notif.unread}</span>}
           </button>
         </header>
         <main className="p-main">{content}</main>

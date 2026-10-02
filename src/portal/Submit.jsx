@@ -3,6 +3,7 @@ import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
 import { tierPoints, DEFAULT_SCORING, fmtWIB } from '../lib/game.js';
 import { submitRules, initials, avatarColor } from './portalData.js';
+import { Confetti } from './motion.jsx';
 
 const STEPS = ['Media', 'Link Image', 'Tag anggota', 'Cek aturan'];
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
@@ -36,7 +37,8 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   if (!c) return <div className="p-card muted">Tidak ada challenge.</div>;
   if (done) {
     return (
-      <div className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24, maxWidth: 560 }}>
+      <div className="p-card p-pop" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24, maxWidth: 560, position: 'relative', overflow: 'hidden' }}>
+        <Confetti />
         <span style={{ font: "800 22px 'Bricolage Grotesque'", color: '#2F7A55' }}>✓ Terkirim — menunggu validasi</span>
         <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{done.label} · versi {done.version} · {fmtWIB(done.submitted_at)}. Captain akan memvalidasi{c.validate_by ? ' paling lambat ' + fmtWIB(c.validate_by) : ''}. Kalau ditolak, kamu bisa kirim ulang sebelum deadline.</span>
         <button className="p-btn-lg" onClick={() => go('challenge')} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>Kembali ke challenge</button>
@@ -73,7 +75,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
         ig_url: ig.trim() || null, tagged_ids: [...tagged], declaration: true,
       });
       setDone({ ...row, label: riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name });
-      onSubmitted();
+      onSubmitted(row);
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -127,7 +129,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
             <span style={{ font: "700 15px 'Bricolage Grotesque'" }}>3 · Siapa aja di foto?</span>
             <button className="link" style={{ fontSize: 13 }} onClick={() => setTagged(n === data.roster.length ? new Set() : new Set(data.roster.map((p) => p.id)))}>{n === data.roster.length && n ? 'Kosongkan' : 'Pilih semua'}</button>
           </div>
-          <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={pts ?? 'n'} className="p-bump" style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="num" style={{ font: "800 30px/1 'Bricolage Grotesque'" }}>{n}</span>
             <div className="col" style={{ flex: 1 }}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>anggota ditag{pts != null ? ` → ${pts} poin partisipasi` : ''}</span>

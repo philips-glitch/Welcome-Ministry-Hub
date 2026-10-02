@@ -3,12 +3,13 @@ import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
 import { SUB_CHIP } from './portalData.js';
 import { fmtWIB, statusMeta, DEFAULT_SCORING } from '../lib/game.js';
+import { CountUp, urgency } from './motion.jsx';
 
 const STATUS = { validated: 'Validated', submitted: 'Submitted', rejected: 'Rejected', resubmit: 'Rejected' };
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const EXTRA = [['connection', 'The Connection'], ['what_we_need', 'What We Need'], ['make_it_flourish', 'Make It Flourish'], ['flourish_hub', 'Flourish Hub'], ['duration', 'Durasi']];
 
-export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle }) {
+export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle, justSent }) {
   const cd = useCountdown(c?.deadline_at ? new Date(c.deadline_at).getTime() : 0);
   if (!c) return <div className="p-card muted">Challenge tidak ditemukan.</div>;
   const open = c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
@@ -57,13 +58,17 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
         <div className="p-hero-stats" style={{ position: 'relative' }}>
           <Stat label={open ? 'Tutup dalam' : c.status === 'scheduled' ? 'Dibuka' : 'Deadline'}
             value={open && c.deadline_at ? `${cd.d}h ${cd.h}:${cd.m}:${cd.s}` : c.status === 'scheduled' ? (c.open_at ? fmtWIB(c.open_at).replace(' WIB', '') : 'TBD') : c.deadline_at ? 'Ditutup' : '—'}
-            sub={c.deadline_at ? fmtWIB(c.deadline_at) : 'belum diatur'} wide />
+            sub={c.deadline_at ? fmtWIB(c.deadline_at) : 'belum diatur'} wide urgency={open ? urgency(c.deadline_at) : 'calm'} />
           {me.group && <Stat label={riddleMode ? 'Riddle terkirim' : 'Submission'} value={`${sent}/${total}`} sub={waiting ? `${waiting} menunggu validasi` : sent >= total ? 'semua terkirim' : 'ayo kirim!'} />}
-          {me.group && <Stat label="Poin grup" value={`${pts}`} sub={`dari maks ${maxPts}`} />}
+          {me.group && <Stat label="Poin grup" value={<CountUp value={pts} />} sub={`dari maks ${maxPts}`} />}
         </div>
         {me.group && (
           <div style={{ display: 'flex', gap: 4, position: 'relative' }}>
-            {Array.from({ length: total }, (_, i) => <div key={i} style={{ flex: 1, height: 8, borderRadius: 4, background: i < sent ? '#E3A92B' : 'rgba(251,246,234,.18)' }} />)}
+            {Array.from({ length: total }, (_, i) => (
+              <div key={i} style={{ flex: 1, height: 8, borderRadius: 4, background: 'rgba(251,246,234,.18)', overflow: 'hidden' }}>
+                {i < sent && <div className="p-fill" style={{ height: '100%', background: '#E3A92B', animationDelay: `${i * 120}ms` }} />}
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -85,7 +90,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                   const [cbg, cfg] = SUB_CHIP[r.st];
                   const doneCard = r.st === 'Validated';
                   return (
-                    <div key={r.slot} className="p-card" style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, borderColor: r.canSend ? '#1F4D3A' : undefined, background: doneCard ? '#F3F8F4' : undefined }}>
+                    <div key={r.slot} className={'p-card' + (justSent && justSent === r.id ? ' p-flash' : '')} style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, borderColor: r.canSend ? '#1F4D3A' : undefined, background: doneCard ? '#F3F8F4' : undefined }}>
                       <div className="row" style={{ gap: 8 }}>
                         <span style={{ font: "800 13px 'Bricolage Grotesque'", width: 30, height: 30, borderRadius: 9, background: doneCard ? '#2F7A55' : '#1F4D3A', color: '#FBF6EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{doneCard ? '✓' : r.no}</span>
                         <span className="muted" style={{ fontSize: 13, fontWeight: 700 }}>Riddle {r.no}</span>
@@ -166,9 +171,10 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
 
 const para = { margin: 0, fontSize: 13.5, lineHeight: 1.55, color: '#3C4A42' };
 
-function Stat({ label, value, sub, wide }) {
+// urgency: 'soon' (< 24 h) pulses amber, 'urgent' (< 3 h) turns red and pulses.
+function Stat({ label, value, sub, wide, urgency: u = 'calm' }) {
   return (
-    <div style={{ background: 'rgba(251,246,234,.12)', borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 2, gridColumn: wide ? 'span 2' : undefined, minWidth: 0 }}>
+    <div className={u === 'urgent' ? 'p-urgent p-urgent-bg' : u === 'soon' ? 'p-soon' : undefined} style={{ background: 'rgba(251,246,234,.12)', borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 2, gridColumn: wide ? 'span 2' : undefined, minWidth: 0 }}>
       <span style={{ fontSize: 11, opacity: 0.8, fontWeight: 600 }}>{label}</span>
       <span className="num" style={{ font: "800 22px/1.15 'Bricolage Grotesque'", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
       <span style={{ fontSize: 11, opacity: 0.75 }}>{sub}</span>
