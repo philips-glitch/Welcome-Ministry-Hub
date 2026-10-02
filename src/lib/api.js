@@ -2,18 +2,19 @@
 // otherwise falls back to the in-browser demo store (see demoStore.js).
 import { createClient } from '@supabase/supabase-js';
 import { demoApi } from './demoStore.js';
+import { authEmail } from './username.js';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const PROFILE_COLS = 'id,email,full_name,role_id,group_no,service_team,is_ministry_tl,is_committee,ig_handle,active,created_at';
+const PROFILE_COLS = 'id,email,username,contact_email,full_name,role_id,group_no,service_team,is_ministry_tl,is_committee,ig_handle,active,created_at';
 
 function unwrap({ data, error }) {
   if (error) throw new Error(friendly(error.message));
   return data;
 }
 function friendly(msg) {
-  if (/Invalid login credentials/i.test(msg)) return 'Email atau password salah.';
+  if (/Invalid login credentials/i.test(msg)) return 'Username atau password salah.';
   if (/rate limit/i.test(msg)) return 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.';
   return msg;
 }
@@ -40,7 +41,8 @@ function supabaseApi() {
       const { data } = sb.auth.onAuthStateChange(() => setTimeout(fn, 0));
       return () => data.subscription.unsubscribe();
     },
-    async signInPassword(email, password) { unwrap(await sb.auth.signInWithPassword({ email, password })); },
+    // Usernames map to a hidden auth email (see lib/username.js); no lookup, so no email is ever exposed.
+    async signInPassword(username, password) { unwrap(await sb.auth.signInWithPassword({ email: authEmail(username), password })); },
     async signOut() { unwrap(await sb.auth.signOut()); },
     async getProfile(id) { return unwrap(await sb.from('profiles').select(PROFILE_COLS).eq('id', id).maybeSingle()); },
     async listProfiles() { return unwrap(await sb.from('profiles').select(PROFILE_COLS).order('full_name')); },
@@ -55,6 +57,8 @@ function supabaseApi() {
     },
     async createMember(fields) { return (await adminUsers({ action: 'create', ...fields })).profile; },
     async setPassword(id, password) { await adminUsers({ action: 'set_password', id, password }); },
+    // Username + its hidden login email change together, so this goes through the Edge Function.
+    async setUsername(id, username) { return (await adminUsers({ action: 'set_username', id, username })).profile; },
     async getGrants() {
       const rows = unwrap(await sb.from('role_permissions').select('role_id,permission_id'));
       return rows.reduce((acc, r) => ((acc[r.role_id] ||= []).push(r.permission_id), acc), {});

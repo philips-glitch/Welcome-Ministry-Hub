@@ -51,7 +51,7 @@ export default function PortalApp({ route }) {
   const gr = game.groupOf(profile.group_no);
   const g = gr && [gr.no, gr.name, gr.color];
   const me = {
-    first: (profile.full_name || profile.email).split(' ')[0],
+    first: (profile.full_name || profile.username || '').split(' ')[0],
     roleName: roleName(profile.role_id),
     group: g && { no: g[0], name: g[1], color: g[2] },
     canSubmit: can('portal.submit') && !!g,
@@ -155,7 +155,7 @@ function NoSubmit({ go }) {
 
 function Me({ profile, me, signOut, admin }) {
   const rows = [
-    ['Nama', profile.full_name || '—'], ['Email', profile.email], ['Role', me.roleName],
+    ['Nama', profile.full_name || '—'], ['Username', '@' + profile.username], ['Email kontak', profile.contact_email || '—'], ['Role', me.roleName],
     ['Grup', me.group ? `${me.group.no} ${me.group.name}` : '—'], ['Tim pelayanan', profile.service_team || '—'], ['Instagram', profile.ig_handle || '—'],
   ];
   return (

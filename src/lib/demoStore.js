@@ -3,6 +3,7 @@
 import { MEMBERS, TEAMS, GROUPS, CAPTAINS, initialGroups } from '../data.js';
 import { DEFAULT_GRANTS } from './permissions.js';
 import { seedGame, gameMethods } from './demoGame.js';
+import { normalizeUsername, usernameError, authEmail } from './username.js';
 
 const KEY = 'flourish-demo-v3';
 export const DEMO_PASSWORD = 'demo1234';
@@ -47,7 +48,22 @@ let state;
 function load() {
   if (state) return state;
   try { state = JSON.parse(localStorage.getItem(KEY)) || seed(); } catch { state = seed(); }
+  ensureUsernames(state);
   return state;
+}
+// Every profile gets a username (from its email's local part, de-duplicated) — also upgrades
+// demo data saved before usernames existed. Mirrors the backfill in 0005_usernames.sql.
+function ensureUsernames(s) {
+  const used = new Set(s.profiles.map((p) => p.username).filter(Boolean));
+  s.profiles.forEach((p) => {
+    if (p.username) return;
+    let base = normalizeUsername(String(p.email || '').split('@')[0]).replace(/[^a-z0-9._]/g, '');
+    if (usernameError(base)) base = 'user' + String(p.id).replace(/[^a-z0-9]/gi, '').slice(-6).toLowerCase();
+    let u = base, n = 2;
+    while (used.has(u)) u = base + n++;
+    used.add(u);
+    p.username = u;
+  });
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* private mode: keep in memory */ } }
 
@@ -64,10 +80,10 @@ export const demoApi = {
   async getSessionUserId() { return load().sessionId; },
   onAuthChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   async signInDemo(id) { load().sessionId = id; save(); emit(); },
-  async signInPassword(email, password) {
+  async signInPassword(username, password) {
     const s = load();
-    const p = s.profiles.find((x) => x.email === email.trim().toLowerCase());
-    if (!p || password !== (s.passwords[p.id] ?? DEMO_PASSWORD)) return fail('Email atau password salah.');
+    const p = s.profiles.find((x) => x.username === normalizeUsername(username));
+    if (!p || password !== (s.passwords[p.id] ?? DEMO_PASSWORD)) return fail('Username atau password salah.');
     s.sessionId = p.id; save(); emit();
   },
   async signOut() { load().sessionId = null; save(); emit(); },
@@ -94,18 +110,31 @@ export const demoApi = {
   },
   async createMember({ password, ...fields }) {
     const s = load();
-    const email = String(fields.email || '').trim().toLowerCase();
-    const bad = checkPassword(password);
+    const username = normalizeUsername(fields.username);
+    const bad = usernameError(username) || checkPassword(password);
     if (bad) return fail(bad);
-    if (s.profiles.some((p) => p.email === email)) return fail('Email sudah terdaftar.');
+    if (s.profiles.some((p) => p.username === username)) return fail(`Username “${username}” sudah dipakai.`);
     const row = {
       id: 'x-' + Date.now(), role_id: 'member', group_no: null, service_team: null, is_ministry_tl: false,
-      is_committee: false, ig_handle: null, active: true, created_at: new Date().toISOString(), ...fields, email,
+      is_committee: false, ig_handle: null, contact_email: null, active: true, created_at: new Date().toISOString(),
+      ...fields, username, email: authEmail(username),
     };
     s.profiles.push(row);
     s.passwords[row.id] = password;
     save();
     return delay(row);
+  },
+  async setUsername(id, username) {
+    const s = load();
+    const u = normalizeUsername(username);
+    const bad = usernameError(u);
+    if (bad) return fail(bad);
+    if (s.profiles.some((p) => p.username === u && p.id !== id)) return fail(`Username “${u}” sudah dipakai.`);
+    const i = s.profiles.findIndex((p) => p.id === id);
+    if (i < 0) return fail('Member tidak ditemukan');
+    s.profiles[i] = { ...s.profiles[i], username: u, email: authEmail(u) };
+    save();
+    return delay(s.profiles[i]);
   },
   async setPassword(id, password) {
     const bad = checkPassword(password);

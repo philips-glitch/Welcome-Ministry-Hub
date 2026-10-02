@@ -5,15 +5,16 @@ import { useMembers } from '../lib/members.jsx';
 import { api } from '../lib/api.js';
 import { TEAMS } from '../data.js';
 import { useGame } from '../lib/gameStore.jsx';
+import { normalizeUsername, usernameError, suggestUsername } from '../lib/username.js';
 
 const input = { height: 38, borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', padding: '0 10px', font: 'inherit', fontSize: 13, fontWeight: 500, color: '#1B2620', width: '100%' };
 const field = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontWeight: 700, minWidth: 0 };
-const EDITABLE = ['full_name', 'role_id', 'group_no', 'service_team', 'ig_handle', 'is_ministry_tl', 'is_committee', 'active'];
+const EDITABLE = ['full_name', 'contact_email', 'role_id', 'group_no', 'service_team', 'ig_handle', 'is_ministry_tl', 'is_committee', 'active'];
 
 // Register a new member (admin sets the starting password) or edit an existing one.
 export default function MemberDialog({ member, defaults = {}, onClose, onSaved }) {
   const { profile: me, can } = useAuth();
-  const { create, update, setPassword } = useMembers();
+  const { create, update, setPassword, setUsername } = useMembers();
   const GROUPS = useGame().groups || [];
   const editing = !!member;
   const canRoles = can('roles.manage');
@@ -21,16 +22,23 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
   const roleLocked = self || (editing && member.role_id === 'super_admin' && !canRoles);
 
   const [f, setF] = useState(() => ({
-    full_name: '', email: '', password: '', role_id: 'member', group_no: '', service_team: '', ig_handle: '',
+    full_name: '', username: '', contact_email: '', password: '', role_id: 'member', group_no: '', service_team: '', ig_handle: '',
     is_ministry_tl: false, is_committee: false, active: true,
     ...defaults,
     ...(member && Object.fromEntries(Object.entries(member).map(([k, v]) => [k, v ?? '']))),
     password: '',
   }));
   const [newPw, setNewPw] = useState('');
+  // While registering, the username follows the name until the admin types one.
+  const [userTouched, setUserTouched] = useState(editing);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  const set = (k) => (e) => setF((x) => {
+    const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    const next = { ...x, [k]: v };
+    if (k === 'full_name' && !userTouched) next.username = suggestUsername(v);
+    return next;
+  });
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -38,28 +46,33 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const clean = (k, v) => (['group_no', 'service_team', 'ig_handle'].includes(k) ? (String(v).trim() || null) : k === 'full_name' ? String(v).trim() : v);
+  const clean = (k, v) => (['group_no', 'service_team', 'ig_handle', 'contact_email'].includes(k) ? (String(v).trim() || null) : k === 'full_name' ? String(v).trim() : v);
+  const uname = normalizeUsername(f.username);
+  const usernameChanged = editing && uname !== member.username;
 
   const submit = async (e) => {
     e.preventDefault();
     if (!f.full_name.trim()) return setErr('Nama wajib diisi.');
-    if (!editing && !/^\S+@\S+\.\S+$/.test(f.email.trim())) return setErr('Email tidak valid.');
+    const uErr = usernameError(f.username);
+    if (uErr) return setErr(uErr);
+    if (String(f.contact_email || '').trim() && !/^\S+@\S+\.\S+$/.test(String(f.contact_email).trim())) return setErr('Email kontak tidak valid (atau kosongkan).');
     if (!editing && f.password.length < 8) return setErr('Password minimal 8 karakter.');
     if (editing && newPw && newPw.length < 8) return setErr('Password baru minimal 8 karakter.');
     setBusy(true); setErr(null);
     try {
       if (!editing) {
         const fields = Object.fromEntries(EDITABLE.filter((k) => k !== 'active').map((k) => [k, clean(k, f[k])]));
-        const row = await create({ ...fields, email: f.email.trim().toLowerCase(), password: f.password });
-        onSaved(`${row.full_name} terdaftar${row.group_no ? ` di grup ${row.group_no}` : ''}. Berikan email & password ke member.`);
+        const row = await create({ ...fields, username: uname, password: f.password });
+        onSaved(`${row.full_name} terdaftar${row.group_no ? ` di grup ${row.group_no}` : ''}. Login: @${row.username} + password awal.`);
       } else {
         const patch = {};
         EDITABLE.forEach((k) => { const v = clean(k, f[k]); if (v !== (member[k] ?? (typeof v === 'boolean' ? false : null))) patch[k] = v; });
         if (roleLocked) delete patch.role_id;
         if (self) delete patch.active;
         if (Object.keys(patch).length) await update(member.id, patch);
+        if (usernameChanged) await setUsername(member.id, uname);
         if (newPw) await setPassword(member.id, newPw);
-        onSaved(`${f.full_name.trim()} disimpan${newPw ? ' · password baru aktif' : ''}.`);
+        onSaved(`${f.full_name.trim()} disimpan${usernameChanged ? ` · login sekarang @${uname}` : ''}${newPw ? ' · password baru aktif' : ''}.`);
       }
     } catch (x) { setErr(x.message); setBusy(false); }
   };
@@ -71,16 +84,21 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
         style={{ width: 520, maxWidth: '100%', maxHeight: '92vh', overflowY: 'auto', background: '#FFFDF8', borderRadius: 18, padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="col" style={{ gap: 2 }}>
           <span style={{ font: "800 22px 'Bricolage Grotesque'", color: '#1F4D3A' }}>{editing ? 'Edit member' : 'Daftarkan member'}</span>
-          <span className="muted" style={{ fontSize: 13 }}>{editing ? member.email : 'Akun langsung aktif. Member masuk dengan email & password ini.'}</span>
+          <span className="muted" style={{ fontSize: 13 }}>{editing ? `@${member.username}` : 'Akun langsung aktif. Member masuk dengan username & password ini.'}</span>
         </div>
 
         <label style={field}>Nama lengkap *<input autoFocus value={f.full_name} onChange={set('full_name')} style={input} /></label>
-        {!editing && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <label style={field}>Email *<input type="email" autoComplete="off" value={f.email} onChange={set('email')} style={input} /></label>
-            <label style={field}>Password awal *<input type="text" autoComplete="new-password" placeholder="min. 8 karakter" value={f.password} onChange={set('password')} style={input} /></label>
-          </div>
-        )}
+        <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 10 }}>
+          <label style={field}>Username *
+            <input autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="mis. nadia.putri" value={f.username}
+              onChange={(e) => { setUserTouched(true); setF((x) => ({ ...x, username: e.target.value.toLowerCase() })); }} style={input} />
+            <span className="muted" style={{ fontSize: 11, fontWeight: 500 }}>
+              {usernameChanged ? `Login berubah dari @${member.username} ke @${uname || '…'}. Kabari member-nya.` : 'Huruf kecil, angka, titik, garis bawah · 3–24 karakter.'}
+            </span>
+          </label>
+          {!editing && <label style={field}>Password awal *<input type="text" autoComplete="new-password" placeholder="min. 8 karakter" value={f.password} onChange={set('password')} style={input} /></label>}
+        </div>
+        <label style={field}>Email kontak (opsional)<input type="email" autoComplete="off" placeholder="tidak dipakai untuk login" value={f.contact_email} onChange={set('contact_email')} style={input} /></label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <label style={field}>Grup

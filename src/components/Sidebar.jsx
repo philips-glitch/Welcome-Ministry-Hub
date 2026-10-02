@@ -19,7 +19,7 @@ export default function Sidebar({ items, active, onNavigate, badges }) {
         <a href="#/portal/home" className="nav-item" style={{ marginTop: 'auto', textDecoration: 'none', fontSize: 12 }}>← User Game Portal</a>
       )}
       <div className="whoami" style={{ marginTop: can('portal.view') ? 8 : 'auto' }}>
-        Masuk sebagai <b>{profile.full_name || profile.email}</b>
+        Masuk sebagai <b>{profile.full_name || '@' + profile.username}</b>
         <br />
         {roleName(profile.role_id)}
         <button onClick={signOut} style={{ display: 'block', marginTop: 8, fontSize: 12, fontWeight: 700, color: '#E3A92B' }}>Keluar</button>

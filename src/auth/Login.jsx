@@ -6,15 +6,15 @@ import './login.css';
 import { LogoMark } from '../components/Logo.jsx';
 
 const DEMO_LABELS = {
-  'u-angel': ['Angel', 'super_admin', 'Tim Acara'],
-  'u-cindy': ['Cindy', 'challenge_pic', 'PIC Photo Challenge'],
-  'u-yohan': ['Yohan', 'captain', 'Captain Olive'],
-  'u-nadia': ['Nadia', 'group_leader', 'Vine · 04'],
-  'u-grace': ['Grace', 'member', 'Vine · 04'],
+  'u-angel': ['Angel', 'super_admin', 'Tim Acara', 'angel'],
+  'u-cindy': ['Cindy', 'challenge_pic', 'PIC Photo Challenge', 'cindy'],
+  'u-yohan': ['Yohan', 'captain', 'Captain Olive', 'yohan'],
+  'u-nadia': ['Nadia', 'group_leader', 'Vine · 04', 'nadia.p'],
+  'u-grace': ['Grace', 'member', 'Vine · 04', 'grace.l'],
 };
 
 export default function Login({ notice }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,8 +28,8 @@ export default function Login({ notice }) {
 
   const submit = (e) => {
     e.preventDefault();
-    if (!email.trim() || !password) return setMsg('Isi email dan password dulu ya.');
-    run(() => api.signInPassword(email.trim(), password));
+    if (!username.trim() || !password) return setMsg('Isi username dan password dulu ya.');
+    run(() => api.signInPassword(username, password));
   };
 
   return (
@@ -55,8 +55,8 @@ export default function Login({ notice }) {
           </div>
 
           <label className="login-field">
-            <span>Email</span>
-            <input type="email" autoComplete="username" inputMode="email" placeholder="nama@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <span>Username</span>
+            <input type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="mis. nadia.putri" value={username} onChange={(e) => setUsername(e.target.value)} />
           </label>
           <label className="login-field">
             <span>Password</span>
@@ -76,13 +76,13 @@ export default function Login({ notice }) {
           {demo && (
             <div className="login-demo">
               <span className="login-demo-title">Mode demo · Supabase belum dikonfigurasi</span>
-              <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau pakai email demo dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>
+              <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau ketik username di kartu dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>
               <div className="login-demo-grid">
                 {DEMO_ACCOUNTS.map((id) => {
-                  const [name, role, sub] = DEMO_LABELS[id];
+                  const [name, role, sub, user] = DEMO_LABELS[id];
                   return (
                     <button type="button" key={id} onClick={() => run(() => api.signInDemo(id))}>
-                      <b>{name}</b><span>{roleName(role)}</span><span className="muted">{sub}</span>
+                      <b>{name}</b><span>{roleName(role)}</span><span className="muted">{sub}</span><span className="mono" style={{ fontSize: 11, color: '#1F4D3A' }}>@{user}</span>
                     </button>
                   );
                 })}

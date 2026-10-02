@@ -33,6 +33,7 @@ export function MembersProvider({ children }) {
     updateMany: async (list) => { const out = await api.updateMany(list); merge(out); return out; },
     create: async (fields) => { const r = await api.createMember(fields); merge([r]); return r; },
     setPassword: (id, pw) => api.setPassword(id, pw),
+    setUsername: async (id, u) => { const r = await api.setUsername(id, u); merge([r]); return r; },
   }), [rows, error, reload, merge]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

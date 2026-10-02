@@ -30,7 +30,7 @@ export default function Members() {
     if (!rows) return [];
     const s = q.trim().toLowerCase();
     return rows.filter((r) =>
-      (!s || (r.full_name || '').toLowerCase().includes(s) || r.email.toLowerCase().includes(s) || (r.ig_handle || '').toLowerCase().includes(s)) &&
+      (!s || (r.full_name || '').toLowerCase().includes(s) || (r.username || '').includes(s.replace(/^@/, '')) || (r.contact_email || '').toLowerCase().includes(s) || (r.ig_handle || '').toLowerCase().includes(s)) &&
       (!fRole || r.role_id === fRole) &&
       (!fGroup || (fGroup === 'none' ? !r.group_no : r.group_no === fGroup)) &&
       (fStatus === 'all' || (fStatus === 'active' ? r.active : !r.active)));
@@ -75,7 +75,7 @@ export default function Members() {
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="row" style={{ padding: '12px 18px', borderBottom: '1px solid #E9E0CC', flexWrap: 'wrap' }}>
-          <input aria-label="Cari member" placeholder="Cari nama, email, atau IG…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, flex: '1 1 240px' }} />
+          <input aria-label="Cari member" placeholder="Cari nama, username, atau IG…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, flex: '1 1 240px' }} />
           <select aria-label="Filter role" value={fRole} onChange={(e) => setFRole(e.target.value)} style={inputStyle}>
             <option value="">Semua role</option>
             {ROLES.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -102,7 +102,7 @@ export default function Members() {
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 10, alignItems: 'center', fontSize: 13, padding: '9px 18px', borderTop: '1px solid #F0E9DA', opacity: r.active ? 1 : 0.55 }}>
               <div className="col" style={{ minWidth: 0 }}>
                 <span style={{ fontWeight: 700 }}>{r.full_name || '—'}{self && <span className="chip" style={{ marginLeft: 6, background: '#E3EFE6', color: '#1F4D3A' }}>KAMU</span>}</span>
-                <span className="muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}{r.ig_handle ? ' · ' + r.ig_handle : ''}</span>
+                <span className="muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{r.username}{r.ig_handle ? ' · IG ' + r.ig_handle : ''}{r.contact_email ? ' · ' + r.contact_email : ''}</span>
               </div>
               {roleLocked ? <span>{roleName(r.role_id)}</span> : (
                 <select aria-label={`Role ${r.full_name}`} value={r.role_id} onChange={(e) => update(r, { role_id: e.target.value }, `${r.full_name} → ${roleName(e.target.value)}`)} style={{ ...inputStyle, height: 32 }}>

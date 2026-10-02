@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Without Supabase keys the app runs in **demo mode**: the login page shows sample accounts (Super Admin, Challenge PIC, Captain, Group Leader, Member), every demo account uses password `demo1234`, and data lives in your browser's localStorage.
+Without Supabase keys the app runs in **demo mode**: the login page shows sample accounts (Super Admin, Challenge PIC, Captain, Group Leader, Member), sign in with the username on the card (e.g. `angel`, `nadia.p`) and password `demo1234`, and data lives in your browser's localStorage.
 
 ## Supabase setup (real login)
 
@@ -19,6 +19,7 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
    - [`0002_game.sql`](supabase/migrations/0002_game.sql): game data (see **Database** below), the `submission-media` storage bucket, and seed data (10 groups, R1–R6 + 3 side quests, R1's 10 riddles).
    - [`0003_notifications.sql`](supabase/migrations/0003_notifications.sql): notifications + read receipts, their triggers, and a `pg_cron` job for deadline reminders. If it fails on `pg_cron`, enable the extension under **Database → Extensions** and run it again.
    - [`0004_groups_crud.sql`](supabase/migrations/0004_groups_crud.sql): editable groups. It lifts the fixed 01–10 numbering, adds per-group min/max size, and points `profiles.group_no` at `groups` (renumber cascades; delete un-assigns members). A group with submissions can't be deleted.
+   - [`0005_usernames.sql`](supabase/migrations/0005_usernames.sql): `profiles.username` (unique; backfilled from existing emails) and optional `contact_email`. Usernames can only be changed through the Edge Function, so the hidden login email changes with them.
 3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
    ```bash
    npx supabase login
@@ -28,11 +29,11 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
    `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to the function automatically.
 4. **Authentication → Providers → Email:** keep Email enabled and turn **off** "Allow new users to sign up", since only admins create accounts. Admin-created accounts are confirmed automatically.
 5. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). On Vercel, add the same two under Settings → Environment Variables.
-6. Create your own account in the Supabase dashboard (Authentication → Users → Add user, with a password), then make yourself Super Admin in the SQL editor:
+6. Create your own account in the Supabase dashboard (Authentication → Users → Add user, auto-confirm, with a password). Use the email **`<your-username>@users.flourish.local`**, e.g. `angel@users.flourish.local`. You'll log in as `angel`. Then make yourself Super Admin in the SQL editor:
    ```sql
-   update public.profiles set role_id = 'super_admin' where email = 'you@example.com';
+   update public.profiles set role_id = 'super_admin' where username = 'angel';
    ```
-7. Register everyone else from **Groups → + Tambah member** (straight into a group) or **Members → + Daftarkan member**, and give each person their email and starting password.
+7. Register everyone else from **Groups → + Tambah member** (straight into a group) or **Members → + Daftarkan member**, and give each person their **username** and starting password.
 
 ## Database
 
@@ -82,7 +83,7 @@ The Validation Queue scores each submission with its challenge's own rules. The 
 
 ## Login & roles
 
-One login page (`#/login`) for admins and members: **email + password only**. There is no public sign-up, Google or magic link. Forgotten passwords are reset by an admin (edit the member → Reset password). After sign-in, people with **Buka Admin Dashboard** go to the admin; everyone else goes to the portal.
+One login page (`#/login`) for admins and members: **username + password only**. Each account has a hidden Supabase Auth email `<username>@users.flourish.local` that nobody types or sees; a real email is optional contact info. There is no public sign-up, Google or magic link. Forgotten passwords are reset by an admin (edit the member → Reset password). After sign-in, people with **Buka Admin Dashboard** go to the admin; everyone else goes to the portal.
 
 | Role | Default access |
 | --- | --- |
@@ -103,7 +104,7 @@ Edit the grants in **Roles & Access**; changes apply immediately. The database e
 | Challenges | `challenges.manage` | Create / edit / delete challenges, status workflow, schedule, scoring rules, riddle bank + draw (see **Challenges** above) |
 | Validation Queue | `submissions.validate` | Real submissions per challenge, filter by group / status. `A` approve · `R` reject · `←`/`→` move. Photo, IG link, tagged members, riddle + answer key, checklist, headcount → score by the challenge's rules, override (with reason), reject / resubmit reasons |
 | Scoring & Leaderboard | `scores.view` | Standings from validated submissions, one column per main round + Side Quest, rank by any column, ties share a rank |
-| Members | `members.view` / `members.manage` | Search/filter, change role/group inline, activate/deactivate, register members, Edit dialog (incl. password reset) |
+| Members | `members.view` / `members.manage` | Search by name / username / IG, change role/group inline, activate/deactivate, register members (username suggested from the name), Edit dialog (change username, reset password, contact email) |
 | Roles & Access | `roles.manage` | Role × permission matrix |
 
 ## User Game Portal (`#/portal/home`)

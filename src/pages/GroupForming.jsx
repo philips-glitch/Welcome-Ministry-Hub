@@ -79,7 +79,7 @@ export default function GroupForming() {
         title={canEdit ? 'Klik untuk edit · seret untuk pindah grup' : p.full_name}
         style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 7, background: bad ? '#FBE4E0' : isL ? '#E3EFE6' : p.is_ministry_tl ? '#FBF1D8' : '#FBF8F0', border: `1px solid ${bad ? '#D9695A' : '#EFE7D6'}`, cursor: canEdit ? 'grab' : 'default', fontSize: 11, opacity: dragId === p.id ? 0.4 : 1 }}
       >
-        <span style={{ fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.full_name || p.email}</span>
+        <span style={{ fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.full_name || '@' + p.username}</span>
         <span style={{ fontSize: 9, fontWeight: 800, color: isL ? '#1F4D3A' : '#7A5410' }}>{isL ? '★ GL' : p.is_ministry_tl ? 'TL' : ''}</span>
         {groupNo !== undefined && <span className="mono muted" style={{ fontSize: 9, fontWeight: 700 }}>{p.service_team || ''}</span>}
       </div>
