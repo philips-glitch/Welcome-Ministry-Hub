@@ -53,13 +53,14 @@ const accounts = [
   ...['Ana Satu', 'Budi Dua', 'Cici Tiga'].map((f, i) => ({ full_name: f, username: f.split(' ')[0].toLowerCase(), role_id: 'member', group_no: '01', service_team: 'Tim ' + i, is_ministry_tl: i === 0 })),
   ...['Dodi Empat', 'Eka Lima', 'Fani Enam'].map((f, i) => ({ full_name: f, username: f.split(' ')[0].toLowerCase(), role_id: 'member', group_no: '02', service_team: 'Tim ' + i })),
   { full_name: 'Kapten', username: 'kapten', role_id: 'captain', group_no: '01' },
+  { full_name: 'Kapten Dua', username: 'kaptendua', role_id: 'captain', group_no: '02' },
   { full_name: 'Pici', username: 'pici', role_id: 'challenge_pic', group_no: null },
 ];
 const outsider = client();
 await rejects(outsider.call('importRoster', { groups, accounts }), /Sesi berakhir/);
 const imp = await admin.call('importRoster', { groups, accounts });
-assert.equal(imp.created.length, 8);
-assert.ok(imp.created.every((a) => /^[A-Za-z0-9]{8}$/.test(a.password))); ok('roster import: 8 accounts, 8-char passwords, outsiders refused');
+assert.equal(imp.created.length, 9);
+assert.ok(imp.created.every((a) => /^[A-Za-z0-9]{8}$/.test(a.password))); ok('roster import: 9 accounts, 8-char passwords, outsiders refused');
 const pw = Object.fromEntries(imp.created.map((a) => [a.username, a.password]));
 assert.deepEqual((await admin.call('listGroups')).map((g) => g.name), ['Group 1', 'Group 2']); ok('groups replaced');
 
@@ -82,20 +83,34 @@ const s1 = await ana.call('createSubmission', sub(ids.budi));
 await rejects(ana.call('createSubmission', sub(ids.budi)), /sudah kamu submit/);
 await ana.call('createSubmission', sub(ids.cici));
 assert.equal(s1.version, 1); ok('connect rules: not self, own group only, once per person');
+const kapten = client(); await kapten.login('kapten', pw.kapten);
+const kapten2 = client(); await kapten2.login('kaptendua', pw.kaptendua);
+await kapten.call('createSubmission', sub(ids.budi));
+const cici = client(); await cici.login('cici', pw.cici);
+await cici.call('createSubmission', sub(ids.kapten)); ok('captains play Get to Know Me like members, both ways');
+const k1sees = await kapten.call('listSubmissions', { challengeId: r1.id });
+assert.deepEqual([...new Set(k1sees.map((x) => x.submitted_by))], [ids.kapten]);
+assert.equal((await kapten2.call('listSubmissions', { challengeId: r1.id })).length, 4);
+await admin.call('saveGtkm', { id: ids.budi, data: { words: 'w', enjoy: 'e', talent: 't' } });
+await admin.call('saveGtkm', { id: ids.pici, data: { words: 'w', enjoy: 'e', talent: 't' } });
+assert.deepEqual(await kapten.call('getGtkm', { ids: [ids.budi] }), {});
+assert.ok((await kapten2.call('getGtkm', { ids: [ids.budi] }))[ids.budi]);
+assert.ok((await admin.call('getGtkm', { ids: [ids.budi, ids.pici] }))[ids.pici]);
+ok("a captain sees their own group like a member: no group-mates' answers, no answer key");
 const budi = client(); await budi.login('budi', pw.budi);
 assert.equal((await budi.call('listSubmissions', { challengeId: r1.id, groupNo: '01' })).length, 0); ok("members can't see group-mates' answers");
 const r2 = ch.find((c) => c.code === 'R2');
 await rejects(ana.call('createSubmission', { sub: { challenge_id: r2.id, group_no: '01' } }), /tidak menerima|Group Leader/); ok('non-connect challenge needs Group Leader (and live)');
 
 // 5 · validation + scores + notifications
-const kapten = client(); await kapten.login('kapten', pw.kapten);
 await rejects(ana.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /izin/);
-const rev = await kapten.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
+await rejects(kapten.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /captain\/PIC lain/);
+const rev = await kapten2.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(rev.score, 12);
 const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
-// 1 member took part with 12/24 → 12/24×70 = 35; 1 of 3 players → 0.333×30 = 10 → 45
-assert.equal(g1.points, 45); ok('validator review → team score 45 (= playbook formula)');
+// 1 member took part with 12/24 → 12/24×70 = 35; 1 of 4 players (3 members + captain) → 0.25×30 = 7.5 → 42.5
+assert.equal(g1.points, 42.5); ok("captain can't validate own group; another captain's review → team score 42.5 (captain counts in the team)");
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });

@@ -12,6 +12,12 @@ const PLAYER_ROLES = ['member', 'group_leader'];
 export const isPlayer = (p) => p.active && !p.is_committee && PLAYER_ROLES.includes(p.role_id);
 // Captains/PICs attached to a group (shown on the card, not counted in its size).
 export const isStaffOf = (p, no) => p.active && p.group_no === no && !PLAYER_ROLES.includes(p.role_id);
+// Who plays the challenges: the players plus each group's captain (not sorted or counted by Group Forming,
+// but in the game like a member: Get to Know Me both ways, photo tags, participation).
+export const isGamePlayer = (p) => !!p && (isPlayer(p) || (p.active && p.role_id === 'captain' && !!p.group_no));
+export const GAME_PLAYER_SQL = (t = '') => `${t}active and ${t}group_no is not null and ((not ${t}is_committee and ${t}role_id in ('member', 'group_leader')) or ${t}role_id = 'captain')`;
+// A validator who plays in a group doesn't validate it or see its answer key: the group they play in, if any.
+export const playGroupOf = (p) => (isGamePlayer(p) ? p.group_no : null);
 
 export function groupView(profiles, groupRows = []) {
   const players = profiles.filter(isPlayer);

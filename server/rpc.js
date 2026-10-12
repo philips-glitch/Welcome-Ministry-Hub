@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, 
 import { notifyReview, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
 import { isConnect, unitKey, groupPoints, withDefaults } from '../src/lib/game.js';
-import { isPlayer } from '../src/lib/groups.js';
+import { isGamePlayer, playGroupOf, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
 
@@ -155,7 +155,9 @@ const methods = {
     needUser(me);
     if (!can(me, 'submissions.validate') && !can(me, 'members.manage')) return {};
     if (!ids?.length) return {};
-    const { rows } = await db.query('select profile_id, words, enjoy, talent from profile_gtkm where profile_id = any($1::uuid[])', [ids]);
+    // A captain plays in their group, so its answer key stays hidden from them.
+    const { rows } = await db.query(`select g.profile_id, g.words, g.enjoy, g.talent from profile_gtkm g join profiles p on p.id = g.profile_id
+      where g.profile_id = any($1::uuid[]) and ($2::text is null or p.group_no is distinct from $2::text)`, [ids, playGroupOf(me)]);
     return Object.fromEntries(rows.map(({ profile_id, ...g }) => [profile_id, g]));
   },
   async saveGtkm({ db, me }, { id, data }) {
@@ -299,6 +301,10 @@ const methods = {
       // Own group only; in connect challenges only one's own entries (so answers can't be copied).
       p.push(me.group_no); where.push(`s.group_no = $${p.length}`);
       p.push(me.id); where.push(`(coalesce(c.scoring->>'type', '') <> 'connect' or s.submitted_by = $${p.length})`);
+    } else if (playGroupOf(me)) {
+      // Staff who play (captains): other groups in full, their own group like a member.
+      p.push(playGroupOf(me)); const g = p.length;
+      p.push(me.id); where.push(`(s.group_no <> $${g} or coalesce(c.scoring->>'type', '') <> 'connect' or s.submitted_by = $${p.length})`);
     }
     const { rows } = await db.query(`select s.* from submissions s join challenges c on c.id = s.challenge_id
       ${where.length ? 'where ' + where.join(' and ') : ''} order by s.submitted_at`, p);
@@ -317,9 +323,9 @@ const methods = {
       answers: sub.answers || null, declaration: !!sub.declaration,
     };
     if (connect) {
-      if (!isPlayer(me)) bad('Challenge ini untuk peserta grup.');
+      if (!isGamePlayer(me)) bad('Challenge ini untuk peserta grup.');
       const { rows: [t] } = await db.query(`select ${PCOLS} from profiles where id = $1`, [row.target_id]);
-      if (!t || t.id === me.id || t.group_no !== me.group_no || !isPlayer(t)) bad('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
+      if (!t || t.id === me.id || t.group_no !== me.group_no || !isGamePlayer(t)) bad('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
       const mine = (await db.query('select target_id, status, version from submissions where challenge_id = $1 and submitted_by = $2 and target_id is not null', [c.id, me.id])).rows;
       const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
       const cur = latest(t.id);
@@ -349,8 +355,9 @@ const methods = {
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
-    const { rows: [before] } = await db.query('select status from submissions where id = $1', [id]);
+    const { rows: [before] } = await db.query('select status, group_no from submissions where id = $1', [id]);
     if (!before) bad('Submission tidak ditemukan.');
+    if (before.group_no === playGroupOf(me)) deny('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
     const keys = REVIEW.filter((k) => k in patch);
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}
       where id = $1 returning *`, [id, ...keys.map((k) => val(k, patch[k])), me.id]);
@@ -362,7 +369,7 @@ const methods = {
     const challenges = (await db.query(`select * from challenges where status <> 'draft'`)).rows;
     const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score from submissions where status = 'validated'`)).rows.map(subRow);
     const roster = {};
-    (await db.query(`select group_no, count(*)::int as n from profiles where active and not is_committee and role_id in ('member', 'group_leader') and group_no is not null group by group_no`)).rows
+    (await db.query(`select group_no, count(*)::int as n from profiles where ${GAME_PLAYER_SQL()} group by group_no`)).rows
       .forEach((r) => { roster[r.group_no] = r.n; });
     const out = [];
     for (const c of challenges) {

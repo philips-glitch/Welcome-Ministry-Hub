@@ -148,7 +148,7 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
           {editing && !self && <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={f.active} onChange={set('active')} /> Akun aktif</label>}
         </div>
 
-        {['member', 'group_leader'].includes(f.role_id) && (
+        {['member', 'group_leader', 'captain'].includes(f.role_id) && (
           <details style={{ borderRadius: 12, background: '#F6F0E2', padding: '10px 12px' }} open={GTKM_FIELDS.some(([k]) => gtkm[k])}>
             <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Get to Know Me · jawaban Member Form (kunci validasi R1)</summary>
             <div className="col" style={{ gap: 8, marginTop: 10 }}>

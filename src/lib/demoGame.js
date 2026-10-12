@@ -2,7 +2,7 @@
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
 import { isConnect, marksScore, unitKey, groupPoints, withDefaults } from './game.js';
-import { isPlayer } from './groups.js';
+import { isGamePlayer, playGroupOf } from './groups.js';
 import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
@@ -39,7 +39,7 @@ export function seedGame(profiles) {
   const riddles = RIDDLES.map(([prompt, answer], i) => ({ id: `r-${i + 1}`, challenge_id: 'c-r2', no: i + 1, prompt, answer }));
   const draws = [];
 
-  const players = profiles.filter(isPlayer);
+  const players = profiles.filter(isGamePlayer);
   const gtkm = Object.fromEntries(players.map((p, i) => [p.id, { words: WORDS[i % WORDS.length], enjoy: ENJOY[(i * 3) % ENJOY.length], talent: TALENT[(i * 7) % TALENT.length] }]));
 
   // Get to Know Me (live on the demo clock): some members already sent 1–2 people; the first ~60% are validated.
@@ -188,13 +188,15 @@ export function gameMethods({ load, save, delay, fail }) {
       save();
       return this.saveChallenge({ id: challengeId, draw_seed: seed });
     },
-    // Members only see their own entries in connect challenges (so answers can't be copied); staff see all.
+    // Members only see their own entries in connect challenges (so answers can't be copied); staff see all,
+    // except a captain's own group, which they see like a member.
     async listSubmissions({ challengeId, groupNo } = {}) {
       const s = load();
       const staff = canDemo(s, 'submissions.validate') || canDemo(s, 'scores.view');
+      const own = playGroupOf(s.profiles.find((p) => p.id === s.sessionId));
       const connect = new Set(s.challenges.filter(isConnect).map((c) => c.id));
       return delay(structuredClone(s.submissions.filter((x) => (!challengeId || x.challenge_id === challengeId) && (!groupNo || x.group_no === groupNo)
-        && (staff || !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
+        && ((staff && x.group_no !== own) || !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
         .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)));
     },
     // Same checks as prepare_submission() in SQL.
@@ -205,8 +207,9 @@ export function gameMethods({ load, save, delay, fail }) {
       const me = s.profiles.find((p) => p.id === s.sessionId);
       if (!me?.active || me.group_no !== sub.group_no) return fail('Hanya bisa submit untuk grup sendiri.');
       if (isConnect(c)) {
+        if (!isGamePlayer(me)) return fail('Challenge ini untuk peserta grup.');
         const t = s.profiles.find((p) => p.id === sub.target_id);
-        if (!t || t.id === me.id || t.group_no !== me.group_no || !isPlayer(t)) return fail('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
+        if (!t || t.id === me.id || t.group_no !== me.group_no || !isGamePlayer(t)) return fail('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
         const mine = s.submissions.filter((x) => x.challenge_id === c.id && x.submitted_by === me.id);
         const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
         const cur = latest(t.id);
@@ -233,7 +236,10 @@ export function gameMethods({ load, save, delay, fail }) {
     async getGtkm(ids) {
       const s = load();
       if (!canDemo(s, 'submissions.validate') && !canDemo(s, 'members.manage')) return delay({});
-      return delay(Object.fromEntries(ids.filter((id) => s.gtkm?.[id]).map((id) => [id, { ...s.gtkm[id] }])));
+      // A captain plays in their group, so its answer key stays hidden from them.
+      const own = playGroupOf(s.profiles.find((p) => p.id === s.sessionId));
+      const hidden = (id) => own && s.profiles.find((p) => p.id === id)?.group_no === own;
+      return delay(Object.fromEntries(ids.filter((id) => s.gtkm?.[id] && !hidden(id)).map((id) => [id, { ...s.gtkm[id] }])));
     },
     async saveGtkm(id, data) {
       const s = load();
@@ -246,6 +252,7 @@ export function gameMethods({ load, save, delay, fail }) {
       const s = load();
       const i = s.submissions.findIndex((x) => x.id === id);
       if (i < 0) return fail('Submission tidak ditemukan.');
+      if (s.submissions[i].group_no === playGroupOf(s.profiles.find((p) => p.id === s.sessionId))) return fail('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
       const prevStatus = s.submissions[i].status;
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
@@ -256,7 +263,7 @@ export function gameMethods({ load, save, delay, fail }) {
     async groupScores() {
       const s = load();
       const roster = {};
-      s.profiles.filter((p) => isPlayer(p) && p.group_no).forEach((p) => { roster[p.group_no] = (roster[p.group_no] || 0) + 1; });
+      s.profiles.filter(isGamePlayer).forEach((p) => { roster[p.group_no] = (roster[p.group_no] || 0) + 1; });
       const out = [];
       s.challenges.filter((c) => c.status !== 'draft').forEach((c) => {
         const valid = s.submissions.filter((x) => x.challenge_id === c.id && x.status === 'validated');

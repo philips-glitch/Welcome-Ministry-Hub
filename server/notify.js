@@ -1,6 +1,7 @@
 // Automatic notifications, same kinds and wording as demo mode (src/lib/demoNotify.js):
 // review results → the group, Scheduled/Live → everyone, deadline reminders (24 h / 3 h) → groups with work left.
 // Reminders are created when someone opens their notifications (no scheduled job needed).
+import { GAME_PLAYER_SQL } from '../src/lib/groups.js';
 
 const wibShort = (v) => new Date(v).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':');
 
@@ -48,7 +49,7 @@ export async function syncReminders(db, now = Date.now()) {
       let left;
       if (connect) {
         left = Number((await q(`select count(*)::int as n from profiles p
-          where p.group_no = $1 and p.active and not p.is_committee and p.role_id in ('member', 'group_leader')
+          where p.group_no = $1 and ${GAME_PLAYER_SQL('p.')}
             and (select count(distinct s.target_id) from submissions s
                  where s.challenge_id = $2 and s.submitted_by = p.id and s.status in ('submitted', 'validated')) < $3`, [no, c.id, people])).rows[0].n);
       } else if (c.riddles_per_group > 0) {

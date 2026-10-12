@@ -1,7 +1,7 @@
 // Demo-mode notifications, mirroring server/notify.js:
 // same three automatic kinds, same dedupe keys, same wording. Times follow the demo clock.
 import { DEMO_NOW } from '../data.js';
-import { isPlayer } from './groups.js';
+import { isGamePlayer } from './groups.js';
 
 const T0 = Date.now();
 export const demoNow = () => DEMO_NOW + (Date.now() - T0);
@@ -48,7 +48,7 @@ export function syncReminders(s, now = demoNow()) {
       const people = c.scoring?.people || 2;
       const sentBy = (pid) => new Set(s.submissions.filter((x) => x.challenge_id === c.id && x.submitted_by === pid && ['submitted', 'validated'].includes(x.status)).map((x) => x.target_id)).size;
       const connect = c.scoring?.type === 'connect';
-      const left = connect ? s.profiles.filter((p) => isPlayer(p) && p.group_no === no && sentBy(p.id) < people).length
+      const left = connect ? s.profiles.filter((p) => isGamePlayer(p) && p.group_no === no && sentBy(p.id) < people).length
         : c.riddles_per_group > 0
           ? s.draws.filter((d) => d.challenge_id === c.id && d.group_no === no && !active(d.riddle_id)).length
           : (s.submissions.some((x) => x.challenge_id === c.id && x.group_no === no && ['submitted', 'validated'].includes(x.status)) ? 0 : 1);

@@ -6,7 +6,7 @@ import { roleName } from '../lib/permissions.js';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { buildStandings, isConnect } from '../lib/game.js';
-import { isPlayer } from '../lib/groups.js';
+import { isGamePlayer } from '../lib/groups.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
 import ChallengeList from './ChallengeList.jsx';
@@ -51,7 +51,7 @@ export default function PortalApp({ route }) {
   const gr = game.groupOf(profile.group_no);
   const g = gr && [gr.no, gr.name, gr.color];
   // Connect challenges (Get to Know Me) are done by every player; the rest by whoever has portal.submit (Group Leader).
-  const canSubmitFor = (c) => !!g && (isConnect(c) ? isPlayer(profile) : can('portal.submit'));
+  const canSubmitFor = (c) => !!g && (isConnect(c) ? isGamePlayer(profile) : can('portal.submit'));
   const me = {
     id: profile.id,
     first: (profile.full_name || profile.username || '').split(' ')[0],
@@ -139,7 +139,7 @@ function useGroupChallenge(challenge, groupNo) {
     ]);
     const mine = draw.filter((d) => d.group_no === groupNo).sort((a, b) => a.slot - b.slot);
     const ids = new Set(mine.map((d) => d.riddle_id));
-    setState({ riddles: riddles.filter((r) => ids.has(r.id)), draw: mine, subs, roster: profiles.filter((p) => isPlayer(p) && p.group_no === groupNo), loading: false });
+    setState({ riddles: riddles.filter((r) => ids.has(r.id)), draw: mine, subs, roster: profiles.filter((p) => isGamePlayer(p) && p.group_no === groupNo), loading: false });
   }, [id, groupNo]);
   useEffect(() => { setState((s) => ({ ...s, loading: true })); reload().catch(() => setState((s) => ({ ...s, loading: false }))); }, [reload]);
   const latest = (riddleId) => state.subs.filter((x) => !x.target_id && (x.riddle_id ?? null) === (riddleId ?? null)).sort((a, b) => b.version - a.version)[0] || null;

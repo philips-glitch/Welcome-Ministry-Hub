@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, isStaffOf, isPlayer } from '../lib/groups.js';
+import { leaderName, isStaffOf, isGamePlayer } from '../lib/groups.js';
 import { fmtWIB, statusMeta, isConnect, latestPerUnit } from '../lib/game.js';
 import useCountdown from '../useCountdown.js';
 
@@ -58,7 +58,7 @@ export default function Overview({ onNavigate }) {
   // Connect challenges (every member submits): count people, not riddles.
   const connect = isConnect(focus);
   const people = focus?.scoring?.people || 2;
-  const players = members.filter(isPlayer);
+  const players = members.filter(isGamePlayer);
 
   const rows = GROUPS.map(({ no, name, color }) => {
     const mine = subs.filter((x) => x.group_no === no);
