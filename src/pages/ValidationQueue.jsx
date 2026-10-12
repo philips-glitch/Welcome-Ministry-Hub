@@ -3,26 +3,30 @@ import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { leaderName } from '../lib/groups.js';
-import { computeScore, scoreParts, DEFAULT_SCORING, fmtWIB } from '../lib/game.js';
+import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
 import { Lightbox } from '../components/Photo.jsx';
 
+// Defaults for riddle-photo challenges; other challenges set their own in challenges.form.
 const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 'Jumlah peserta sesuai tag', 'Aturan diikuti · tanpa nama gereja', 'Tidak ada wajah jemaat tanpa izin'];
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
 const STATUS_CHIP = { submitted: ['PENDING', '#E3ECF8', '#244F8F'], validated: ['VALID', '#E3EFE6', '#1F4D3A'], rejected: ['DITOLAK', '#FBE4E0', '#9A2A1E'], resubmit: ['ULANG', '#F8E9C4', '#7A5410'] };
 const TOAST = { ok: ['#E3EFE6', '#1F4D3A'], warn: ['#F8E9C4', '#7A5410'], bad: ['#FBE4E0', '#9A2A1E'] };
 const selectStyle = { height: 36, padding: '0 10px', borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', font: 'inherit', fontSize: 13, fontWeight: 700 };
+const first = (name) => (name || '').split(' ')[0];
 
 export default function ValidationQueue() {
   const { challenges, focus, reloadScores, groups: groupRows } = useGame();
   // [no, name, color] for a group number (falls back for a group that was deleted).
   const group = (no) => { const g = (groupRows || []).find((x) => x.no === no); return g ? [g.no, g.name, g.color] : [no, 'Grup ' + no, '#999']; };
   const members = useMembers().rows || [];
+  const nameOf = (id) => members.find((p) => p.id === id)?.full_name || '?';
   const reviewable = (challenges || []).filter((c) => c.status !== 'draft');
   const [chId, setChId] = useState(null);
   const [fGroup, setFGroup] = useState('');
   const [fStatus, setFStatus] = useState('submitted');
   const [subs, setSubs] = useState(null);
   const [riddles, setRiddles] = useState([]);
+  const [gtkm, setGtkm] = useState({});
   const [selId, setSelId] = useState(null);
   const [review, setReview] = useState(null);
   const [toast, setToast] = useState(null);
@@ -32,12 +36,22 @@ export default function ValidationQueue() {
 
   useEffect(() => { if (!chId && challenges) setChId((focus || reviewable[0])?.id ?? null); }, [challenges]); // eslint-disable-line react-hooks/exhaustive-deps
   const challenge = reviewable.find((c) => c.id === chId);
-  const scoring = { ...(challenge?.scoring?.type === 'riddle' ? DEFAULT_SCORING : {}), ...challenge?.scoring };
+  const scoring = withDefaults(challenge?.scoring);
+  const form = formOf(challenge);
+  const connect = isConnect(challenge);
+  const checksList = form.checks?.length ? form.checks : CHECKS;
+  const reasons = form.reasons?.length ? form.reasons : REASONS;
+  const max = itemMax(scoring);
 
   useEffect(() => {
     if (!chId) return;
-    setSubs(null); setSelId(null);
-    Promise.all([api.listSubmissions({ challengeId: chId }), api.listRiddles(chId)]).then(([s, r]) => { setSubs(s); setRiddles(r); });
+    setSubs(null); setSelId(null); setGtkm({});
+    Promise.all([api.listSubmissions({ challengeId: chId }), api.listRiddles(chId)]).then(([s, r]) => {
+      setSubs(s); setRiddles(r);
+      // Get to Know Me answers of everyone being described: the key for Q1–Q3.
+      const ids = [...new Set(s.map((x) => x.target_id).filter(Boolean))];
+      if (ids.length) api.getGtkm(ids).then(setGtkm).catch(() => {});
+    });
   }, [chId]);
 
   const list = useMemo(() => (subs || []).filter((s) => (!fGroup || s.group_no === fGroup) && (fStatus === 'all' || s.status === fStatus)), [subs, fGroup, fStatus]);
@@ -56,8 +70,9 @@ export default function ValidationQueue() {
   function select(s) {
     setSelId(s.id);
     setReview({
-      checks: s.checks || [true, true, true, true, true],
+      checks: s.checks || checksList.map(() => true),
       count: s.participant_count ?? s.tagged_ids.length,
+      marks: { ...(s.marks || {}) },
       reason: s.reject_reason || null,
       override: false, overrideScore: '', overrideNote: '',
       manual: s.score ?? '',
@@ -69,18 +84,29 @@ export default function ValidationQueue() {
     select(list[(i + d + list.length) % list.length]);
   };
 
-  const auto = cur && review ? computeScore(scoring, { location_correct: review.checks[1], participant_count: review.count, manual: review.manual }) : 0;
-  const score = review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(scoring.max, Number(review.overrideScore))) : auto;
-  const parts = cur && review ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
+  const auto = cur && review ? computeScore(scoring, { location_correct: review.checks[1], participant_count: review.count, manual: review.manual, marks: review.marks }) : 0;
+  const score = review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
+  const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
+  const missing = review ? marksMissing(scoring, review.marks) : [];
   const G = cur ? group(cur.group_no) : null;
+  const titleOf = (s) => (s.target_id ? `${first(nameOf(s.submitted_by))} → ${first(nameOf(s.target_id))}` : `${group(s.group_no)[1]}${riddleNo(s) ? ` · Riddle ${riddleNo(s)}` : ''}`);
+
+  // Rubric challenges: team participation = everyone tagged across the group's validated submissions.
+  const teamTagged = cur && scoring.type === 'rubric'
+    ? new Set((subs || []).filter((s) => s.group_no === cur.group_no && s.status === 'validated' && s.id !== cur.id).flatMap((s) => s.tagged_ids)) : null;
+  const teamWith = teamTagged ? new Set([...teamTagged, ...cur.tagged_ids]).size : 0;
 
   const decide = async (kind) => {
     if (!cur || !review) return;
     if (cur.status !== 'submitted') return setToast(['warn', 'Submission ini sudah diputuskan. Pilih yang masih pending.']);
     if ((kind === 'rejected' || kind === 'resubmit') && !review.reason) return setToast(['warn', 'Pilih alasan dulu sebelum menolak / minta resubmit.']);
+    if (kind === 'validated' && missing.length && !review.override) return setToast(['warn', `Beri nilai dulu: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}.`]);
     if (kind === 'validated' && review.override && !review.overrideNote.trim()) return setToast(['warn', 'Override skor wajib pakai alasan.']);
     const patch = {
-      status: kind, checks: review.checks, location_correct: review.checks[1], participant_count: review.count,
+      status: kind, checks: review.checks,
+      location_correct: scoring.type === 'riddle' ? review.checks[1] : null,
+      participant_count: scoring.type === 'riddle' ? review.count : null,
+      marks: ['connect', 'rubric'].includes(scoring.type) ? review.marks : null,
       score: kind === 'validated' ? score : null,
       override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
       reject_reason: kind === 'validated' ? null : review.reason,
@@ -90,7 +116,7 @@ export default function ValidationQueue() {
       const next = subs.map((s) => (s.id === row.id ? row : s));
       setSubs(next);
       reloadScores();
-      const label = `${G[1]}${riddleNo(cur) ? ' Riddle ' + riddleNo(cur) : ''}`;
+      const label = titleOf(cur);
       setToast([kind === 'validated' ? 'ok' : 'bad', kind === 'validated' ? `Disetujui · ${label} · ${score} pts` : kind === 'rejected' ? `Ditolak · ${label} · “${review.reason}”` : `Resubmit diminta · ${label}`]);
       // Advance to the next pending item.
       const i = next.findIndex((s) => s.id === row.id);
@@ -117,8 +143,11 @@ export default function ValidationQueue() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const tagged = cur ? cur.tagged_ids.map((id) => (members.find((p) => p.id === id)?.full_name || '').split(' ')[0]).filter(Boolean) : [];
+  const tagged = cur ? cur.tagged_ids.map((id) => first(members.find((p) => p.id === id)?.full_name)).filter(Boolean) : [];
   const setR = (patch) => setReview((r) => ({ ...r, ...patch }));
+  const setMark = (k, v) => setReview((r) => ({ ...r, marks: { ...r.marks, [k]: v } }));
+  const link = cur?.ig_url && (cur.ig_url.startsWith('http') ? cur.ig_url : 'https://' + cur.ig_url);
+  const showMedia = cur && (form.photo !== 'none' || cur.media_path);
 
   return (
     <div className="col" style={{ minWidth: 0, minHeight: '100vh' }}>
@@ -149,8 +178,8 @@ export default function ValidationQueue() {
                 <button key={s.id} onClick={() => select(s)} className="row" style={{ textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid #F0E9DA', background: on ? '#FFFDF8' : 'transparent', borderLeft: `4px solid ${on ? '#1F4D3A' : 'transparent'}` }}>
                   <span style={{ width: 34, height: 34, borderRadius: 10, background: g[2], color: '#fff', font: "800 13px 'Bricolage Grotesque'", display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{riddleNo(s) ?? g[1][0]}</span>
                   <div className="col" style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{g[1]}{riddleNo(s) ? ` · Riddle ${riddleNo(s)}` : ''}{s.version > 1 ? ` · v${s.version}` : ''}</span>
-                    <span className="muted" style={{ fontSize: 11 }}>{fmtWIB(s.submitted_at, { day: undefined, month: undefined })} · {s.tagged_ids.length} org ditag</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titleOf(s)}{s.version > 1 ? ` · v${s.version}` : ''}</span>
+                    <span className="muted" style={{ fontSize: 11 }}>{fmtWIB(s.submitted_at, { day: undefined, month: undefined })} · {s.target_id ? g[1] : `${s.tagged_ids.length} org ditag`}</span>
                   </div>
                   <span className="chip" style={{ background: bg, color: fg }}>{label}</span>
                 </button>
@@ -161,31 +190,47 @@ export default function ValidationQueue() {
           {cur && review ? (
             <>
               <div className="col" style={{ padding: 20, gap: 14, minWidth: 0 }}>
-                <div className="row">
+                <div className="row" style={{ flexWrap: 'wrap' }}>
                   <span style={{ width: 12, height: 12, borderRadius: 4, background: G[2] }} />
-                  <span style={{ font: "800 20px 'Bricolage Grotesque'" }}>{G[1]}{riddle ? ` · Riddle ${riddle.no}` : ''}</span>
-                  <span className="muted" style={{ fontSize: 12 }}>dikirim {fmtWIB(cur.submitted_at)} · leader {leaderName(members, cur.group_no)} · v{cur.version}</span>
+                  <span style={{ font: "800 20px 'Bricolage Grotesque'" }}>{cur.target_id ? `${nameOf(cur.submitted_by)} → ${nameOf(cur.target_id)}` : `${G[1]}${riddle ? ` · Riddle ${riddle.no}` : ''}`}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{cur.target_id ? `${G[1]} · ` : ''}dikirim {fmtWIB(cur.submitted_at)}{cur.target_id ? '' : ` · leader ${leaderName(members, cur.group_no)}`} · v{cur.version}</span>
                 </div>
-                <div className={media ? '' : 'placeholder-stripes'} style={{ height: 380, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, color: '#6B665A', overflow: 'hidden', background: media ? '#14281F' : undefined, position: 'relative' }}>
-                  {media ? (
-                    <button onClick={() => setZoom(true)} title="Klik untuk memperbesar" style={{ width: '100%', height: '100%', padding: 0, cursor: 'zoom-in', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={media} alt={`Foto ${G[1]}`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                      <span style={{ position: 'absolute', right: 10, bottom: 10, fontSize: 12, fontWeight: 700, color: '#FBF6EA', background: 'rgba(20,40,31,.75)', padding: '4px 10px', borderRadius: 999 }}>⤢ Perbesar · {cur.media_name}</span>
-                    </button>
-                  ) : (
-                    <>
-                      <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{cur.media_name || 'tanpa foto'}</span>
-                      <span style={{ fontSize: 12 }}>{mediaLoading ? 'Memuat foto…' : cur.media_path ? 'Foto tidak ditemukan di penyimpanan' : 'Submission ini tidak menyertakan foto tersimpan'}</span>
-                    </>
-                  )}
-                </div>
-                {zoom && media && <Lightbox src={media} alt={`Foto ${G[1]}`} caption={`${G[1]}${riddle ? ' · Riddle ' + riddle.no : ''} · v${cur.version}`} onClose={() => setZoom(false)} />}
+
+                {connect && <AnswerSheet scoring={scoring} answers={cur.answers || {}} key_={gtkm[cur.target_id]} marks={review.marks} setMark={setMark} locked={cur.status !== 'submitted'} />}
+
+                {form.photo === 'none' && !cur.media_path && (
+                  <a href={link || undefined} target="_blank" rel="noreferrer" className="card" style={{ borderRadius: 14, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: '#1B2620', opacity: link ? 1 : 0.6 }}>
+                    <span style={{ width: 48, height: 48, borderRadius: 14, background: '#1F4D3A', color: '#FBF6EA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flex: 'none' }}>▶</span>
+                    <div className="col" style={{ minWidth: 0 }}>
+                      <span style={{ fontWeight: 800 }}>{link ? `Buka · ${form.link_label}` : 'Tidak ada link'}</span>
+                      <span className="muted" style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{cur.ig_url || '—'}</span>
+                    </div>
+                  </a>
+                )}
+
+                {showMedia && (
+                  <div className={media ? '' : 'placeholder-stripes'} style={{ height: connect ? 260 : 380, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, color: '#6B665A', overflow: 'hidden', background: media ? '#14281F' : undefined, position: 'relative' }}>
+                    {media ? (
+                      <button onClick={() => setZoom(true)} title="Klik untuk memperbesar" style={{ width: '100%', height: '100%', padding: 0, cursor: 'zoom-in', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img src={media} alt={`Foto ${titleOf(cur)}`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                        <span style={{ position: 'absolute', right: 10, bottom: 10, fontSize: 12, fontWeight: 700, color: '#FBF6EA', background: 'rgba(20,40,31,.75)', padding: '4px 10px', borderRadius: 999 }}>⤢ Perbesar · {cur.media_name}</span>
+                      </button>
+                    ) : (
+                      <>
+                        <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{cur.media_name || (form.photo === 'optional' ? 'tanpa foto (opsional)' : 'tanpa foto')}</span>
+                        <span style={{ fontSize: 12 }}>{mediaLoading ? 'Memuat foto…' : cur.media_path ? 'Foto tidak ditemukan di penyimpanan' : cur.media_name ? 'Submission ini tidak menyertakan foto tersimpan' : connect ? 'Tidak ada bonus foto' : 'Submission ini tidak menyertakan foto'}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+                {zoom && media && <Lightbox src={media} alt={`Foto ${titleOf(cur)}`} caption={`${titleOf(cur)} · v${cur.version}`} onClose={() => setZoom(false)} />}
                 <div style={{ display: 'grid', gridTemplateColumns: riddle ? '1fr 1fr' : '1fr', gap: 10 }}>
                   {riddle && (
                     <>
                       <div className="card" style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span className="muted" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em' }}>RIDDLE (dilihat member)</span>
                         <span style={{ fontSize: 14, fontStyle: 'italic' }}>“{riddle.prompt}”</span>
+                        {cur.answers?.answer && <span style={{ fontSize: 13, marginTop: 4 }}><b>Jawaban tim:</b> {cur.answers.answer}</span>}
                       </div>
                       <div style={{ background: '#14281F', color: '#FBF6EA', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span style={{ fontSize: 11, fontWeight: 800, color: '#E3A92B', letterSpacing: '.06em' }}>🔒 KUNCI JAWABAN · ADMIN ONLY</span>
@@ -195,9 +240,9 @@ export default function ValidationQueue() {
                     </>
                   )}
                   <div className="card" style={{ borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1 / -1', fontSize: 12, lineHeight: 1.5 }}>
-                    <span><b>Link Image:</b> {cur.ig_url ? <a href={cur.ig_url.startsWith('http') ? cur.ig_url : 'https://' + cur.ig_url} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>
-                    <span><b>Deklarasi No-AI:</b> {cur.declaration ? '✓ dicentang oleh leader' : '✕ tidak dicentang'}</span>
-                    <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>
+                    {form.link !== 'none' && <span><b>{form.link_label}:</b> {link ? <a href={link} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>}
+                    <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
+                    {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
                     {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}</span>}
                   </div>
                 </div>
@@ -205,10 +250,10 @@ export default function ValidationQueue() {
 
               <div className="col" style={{ borderLeft: '1px solid #E9E0CC', background: '#FFFDF8', padding: 20, gap: 12 }}>
                 <span style={{ font: "700 16px 'Bricolage Grotesque'" }}>Checklist</span>
-                {CHECKS.map((label, i) => {
-                  const on = review.checks[i];
+                {checksList.map((label, i) => {
+                  const on = review.checks[i] ?? true;
                   return (
-                    <button key={label} onClick={() => setR({ checks: review.checks.map((v, j) => (j === i ? !v : v)) })} className="row" style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', background: on ? '#FFFDF8' : '#FBE4E0' }}>
+                    <button key={label} onClick={() => setR({ checks: checksList.map((_, j) => (j === i ? !on : review.checks[j] ?? true)) })} className="row" style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', background: on ? '#FFFDF8' : '#FBE4E0' }}>
                       <span style={{ width: 22, height: 22, borderRadius: 6, border: '2px solid #1F4D3A', background: on ? '#1F4D3A' : 'transparent', color: '#FBF6EA', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{on ? '✓' : ''}</span>
                       <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{label}</span>
                     </button>
@@ -228,16 +273,55 @@ export default function ValidationQueue() {
                     <input type="number" min="0" max={scoring.max} value={review.manual} onChange={(e) => setR({ manual: e.target.value })} style={{ width: 70, height: 32, borderRadius: 8, border: '1px solid #DCD2BC', padding: '0 8px', font: 'inherit' }} />
                   </label>
                 )}
+                {connect && (
+                  <button onClick={() => setMark('photo', !review.marks.photo)} disabled={!cur.media_name && !cur.media_path} className="row" style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', opacity: cur.media_name || cur.media_path ? 1 : 0.5 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 6, border: '2px solid #1F4D3A', background: review.marks.photo ? '#1F4D3A' : 'transparent', color: '#FBF6EA', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{review.marks.photo ? '✓' : ''}</span>
+                    <div className="col" style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>Foto valid · +{scoring.photo_bonus}</span>
+                      <span className="muted" style={{ fontSize: 11 }}>Jelas berdua · saat/sekitar ngobrol · pantas</span>
+                    </div>
+                  </button>
+                )}
+                {scoring.type === 'rubric' && (
+                  <div className="col" style={{ gap: 8 }}>
+                    {scoring.criteria.map((k) => (
+                      <div key={k.key} className="col" style={{ gap: 6, padding: '10px 12px', borderRadius: 10, border: `1px solid ${review.marks[k.key] == null || review.marks[k.key] === '' ? '#E3C987' : '#E9E0CC'}` }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{k.label}</span>
+                          {k.binary ? (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {[[k.max, `Benar · ${k.max}`], [0, 'Salah · 0']].map(([v, l]) => (
+                                <button key={v} onClick={() => setMark(k.key, v)} style={{ fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 8, border: '1px solid #DCD2BC', background: review.marks[k.key] === v ? (v ? '#1F4D3A' : '#9A2A1E') : '#FFFDF8', color: review.marks[k.key] === v ? '#FBF6EA' : '#3C4A42' }}>{l}</button>
+                              ))}
+                            </div>
+                          ) : (
+                            <label className="row" style={{ gap: 4, fontSize: 12 }}>
+                              <input type="number" min="0" max={k.max} aria-label={k.label} value={review.marks[k.key] ?? ''} onChange={(e) => setMark(k.key, e.target.value === '' ? '' : Math.max(0, Math.min(k.max, Number(e.target.value))))} style={{ width: 56, height: 30, borderRadius: 8, border: '1px solid #DCD2BC', padding: '0 6px', font: 'inherit' }} />
+                              <span className="muted">/ {k.max}</span>
+                            </label>
+                          )}
+                        </div>
+                        {k.hint && <span className="muted" style={{ fontSize: 11 }}>{k.hint}</span>}
+                      </div>
+                    ))}
+                    <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>
+                      Partisipasi tim (otomatis, sekali per tim): {teamWith} orang ditag di submission tervalidasi{cur.status === 'submitted' ? ' termasuk yang ini' : ''} → <b style={{ color: '#1B2620' }}>{tierPoints(scoring.participation?.tiers, teamWith)} poin</b>
+                    </span>
+                  </div>
+                )}
                 <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <span className="num" style={{ font: "800 36px/1 'Bricolage Grotesque'" }}>{score}</span>
-                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {scoring.max} · {review.override ? 'override manual' : review.checks[0] ? 'dihitung otomatis' : 'IG tag belum ✓ — sebaiknya tolak'}</span>
+                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
                   </div>
-                  {scoring.type === 'riddle' && parts && (
+                  {parts && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
                       <span>Lokasi {review.checks[1] ? 'benar' : 'salah'} × {scoring.location_weight}%</span><span className="num">{parts.loc.toFixed(1)}</span>
                       <span>Partisipasi {review.count} org → {parts.tier} × {scoring.participation_weight}%</span><span className="num">{parts.part.toFixed(1)}</span>
                     </div>
+                  )}
+                  {connect && (
+                    <span style={{ fontSize: 12, opacity: 0.9 }}>Skor orang ini. Skor tim = rata-rata member ÷ {scoring.people * max} × {scoring.individual_weight} + partisipasi × {scoring.participation_weight}.</span>
                   )}
                   {scoring.type === 'flat' && <span style={{ fontSize: 12, opacity: 0.9 }}>Poin tetap untuk submission yang tervalidasi.</span>}
                 </div>
@@ -246,14 +330,14 @@ export default function ValidationQueue() {
                   <div className="col" style={{ gap: 6, padding: 10, borderRadius: 10, background: '#F8E9C4' }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#7A5410' }}>Override skor wajib pakai alasan</span>
                     <div className="row" style={{ gap: 6 }}>
-                      <input type="number" min="0" max={scoring.max} aria-label="Skor override" placeholder="Skor" value={review.overrideScore} onChange={(e) => setR({ overrideScore: e.target.value })} style={{ width: 70, height: 36, borderRadius: 8, background: '#FFFDF8', border: '1px solid #E3C987', padding: '0 8px', font: 'inherit' }} />
-                      <input aria-label="Alasan override" value={review.overrideNote} onChange={(e) => setR({ overrideNote: e.target.value })} placeholder="mis. “1 anggota tertutup, dikonfirmasi captain”" style={{ flex: 1, height: 36, borderRadius: 8, background: '#FFFDF8', border: '1px solid #E3C987', padding: '0 10px', font: 'inherit', fontSize: 13 }} />
+                      <input type="number" min="0" max={max} aria-label="Skor override" placeholder="Skor" value={review.overrideScore} onChange={(e) => setR({ overrideScore: e.target.value })} style={{ width: 70, height: 36, borderRadius: 8, background: '#FFFDF8', border: '1px solid #E3C987', padding: '0 8px', font: 'inherit' }} />
+                      <input aria-label="Alasan override" value={review.overrideNote} onChange={(e) => setR({ overrideNote: e.target.value })} placeholder="mis. “dikonfirmasi captain”" style={{ flex: 1, height: 36, borderRadius: 8, background: '#FFFDF8', border: '1px solid #E3C987', padding: '0 10px', font: 'inherit', fontSize: 13 }} />
                     </div>
                   </div>
                 )}
                 <span className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>Alasan (untuk tolak / minta ulang)</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {REASONS.map((label) => {
+                  {reasons.map((label) => {
                     const on = review.reason === label;
                     return <button key={label} onClick={() => setR({ reason: on ? null : label })} style={{ fontSize: 12, fontWeight: 600, padding: '6px 10px', borderRadius: 999, background: on ? '#9A2A1E' : '#FBF6EA', color: on ? '#fff' : '#3C4A42', border: `1px solid ${on ? '#9A2A1E' : '#E9E0CC'}` }}>{label}</button>;
                   })}
@@ -272,6 +356,37 @@ export default function ValidationQueue() {
           ) : <div className="muted" style={{ padding: 24, gridColumn: 'span 2' }}>Pilih submission di kiri.</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+// Connect challenges: each answer next to the person's Member Form answer, scored 0 / half / full.
+function AnswerSheet({ scoring, answers, key_, marks, setMark, locked }) {
+  return (
+    <div className="card" style={{ borderRadius: 14, overflow: 'hidden' }}>
+      {scoring.questions.map((q, i) => {
+        const ref = q.ref ? key_?.[q.ref] : null;
+        const steps = [0, q.max / 2, q.max];
+        return (
+          <div key={q.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid #F0E9DA' : 'none', alignItems: 'center' }}>
+            <div className="col" style={{ gap: 6, minWidth: 0 }}>
+              <span className="muted" style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.04em' }}>Q{i + 1} · {q.text}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{answers[q.key] || <span className="muted" style={{ fontWeight: 500 }}>— kosong —</span>}</span>
+              {q.ref ? (
+                <span style={{ fontSize: 12, background: '#14281F', color: '#FBF6EA', borderRadius: 8, padding: '6px 10px', alignSelf: 'flex-start' }}>
+                  <b style={{ color: '#E3A92B' }}>🔒 Member Form:</b> {ref || <span style={{ opacity: 0.7 }}>belum ada data — cek hasil Member Form</span>}
+                </span>
+              ) : <span className="muted" style={{ fontSize: 11 }}>Discovery: {q.max} spesifik & asli · {q.max / 2} relevan tapi umum · 0 kosong / disalin dari profil</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 4 }} role="radiogroup" aria-label={`Nilai Q${i + 1}`}>
+              {steps.map((v) => {
+                const on = marks[q.key] === v;
+                return <button key={v} role="radio" aria-checked={on} disabled={locked} onClick={() => setMark(q.key, v)} style={{ width: 40, height: 36, borderRadius: 8, fontWeight: 800, fontSize: 14, border: '1px solid #DCD2BC', background: on ? (v === q.max ? '#1F4D3A' : v ? '#C98A12' : '#9A2A1E') : '#FFFDF8', color: on ? '#FBF6EA' : '#3C4A42' }}>{v}</button>;
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

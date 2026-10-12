@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../lib/demoStore.js';
 import { roleName } from '../lib/permissions.js';
@@ -20,6 +20,9 @@ export default function Login({ notice }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(notice || null);
   const demo = api.mode === 'demo';
+  // After a roster import most sample accounts are gone; show only the cards that still work.
+  const [cards, setCards] = useState(DEMO_ACCOUNTS);
+  useEffect(() => { if (demo) api.demoAccountsPresent(DEMO_ACCOUNTS).then(setCards).catch(() => {}); }, [demo]);
 
   const run = async (fn) => {
     setBusy(true); setMsg(null);
@@ -76,9 +79,9 @@ export default function Login({ notice }) {
           {demo && (
             <div className="login-demo">
               <span className="login-demo-title">Mode demo · Supabase belum dikonfigurasi</span>
-              <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau ketik username di kartu dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>
+              <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau ketik username{cards.length < DEMO_ACCOUNTS.length ? ' (mis. dari daftar login hasil import)' : ' di kartu'} dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>
               <div className="login-demo-grid">
-                {DEMO_ACCOUNTS.map((id) => {
+                {cards.map((id) => {
                   const [name, role, sub, user] = DEMO_LABELS[id];
                   return (
                     <button type="button" key={id} onClick={() => run(() => api.signInDemo(id))}>

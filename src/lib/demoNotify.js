@@ -1,6 +1,7 @@
 // Demo-mode notifications, mirroring supabase/migrations/0003_notifications.sql:
 // same three automatic kinds, same dedupe keys, same wording. Times follow the demo clock.
 import { DEMO_NOW } from '../data.js';
+import { isPlayer } from './groups.js';
 
 const T0 = Date.now();
 export const demoNow = () => DEMO_NOW + (Date.now() - T0);
@@ -18,7 +19,8 @@ export function notifyReview(s, sub, at) {
   const c = s.challenges.find((x) => x.id === sub.challenge_id);
   if (!c) return;
   const r = s.riddles.find((x) => x.id === sub.riddle_id);
-  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}`;
+  const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
   const base = { kind: 'review', challenge_id: c.id, group_no: sub.group_no };
   if (sub.status === 'validated') push(s, { ...base, title: 'Submission disetujui 🎉', body: `${label} tervalidasi: +${sub.score ?? 0} poin.`, tone: 'good', dedupe_key: `review:${sub.id}:validated` }, at);
   else if (sub.status === 'rejected') push(s, { ...base, title: 'Submission ditolak', body: `${label}: ${sub.reject_reason || 'lihat detail'}. Kirim ulang sebelum deadline.`, tone: 'bad', dedupe_key: `review:${sub.id}:rejected` }, at);
@@ -42,13 +44,18 @@ export function syncReminders(s, now = demoNow()) {
     const label = dl <= now + 3 * H ? '3' : '24';
     s.groups.forEach(({ no }) => {
       const active = (riddleId) => s.submissions.some((x) => x.challenge_id === c.id && x.group_no === no && (x.riddle_id ?? null) === riddleId && ['submitted', 'validated'].includes(x.status));
-      const left = c.riddles_per_group > 0
-        ? s.draws.filter((d) => d.challenge_id === c.id && d.group_no === no && !active(d.riddle_id)).length
-        : (s.submissions.some((x) => x.challenge_id === c.id && x.group_no === no && ['submitted', 'validated'].includes(x.status)) ? 0 : 1);
+      // Connect: members who haven't sent all their people yet (latest version submitted/validated counts).
+      const people = c.scoring?.people || 2;
+      const sentBy = (pid) => new Set(s.submissions.filter((x) => x.challenge_id === c.id && x.submitted_by === pid && ['submitted', 'validated'].includes(x.status)).map((x) => x.target_id)).size;
+      const connect = c.scoring?.type === 'connect';
+      const left = connect ? s.profiles.filter((p) => isPlayer(p) && p.group_no === no && sentBy(p.id) < people).length
+        : c.riddles_per_group > 0
+          ? s.draws.filter((d) => d.challenge_id === c.id && d.group_no === no && !active(d.riddle_id)).length
+          : (s.submissions.some((x) => x.challenge_id === c.id && x.group_no === no && ['submitted', 'validated'].includes(x.status)) ? 0 : 1);
       if (!left) return;
       push(s, {
         kind: 'reminder', challenge_id: c.id, group_no: no, tone: 'warn', title: `Deadline ${label} jam lagi ⏰`,
-        body: `${c.name}: ${c.riddles_per_group > 0 ? `${left} riddle belum dikirim` : 'grup kamu belum submit'}. Tutup ${wibShort(c.deadline_at)} WIB.`,
+        body: `${c.name}: ${connect ? `${left} anggota belum submit ${people} orang` : c.riddles_per_group > 0 ? `${left} riddle belum dikirim` : 'grup kamu belum submit'}. Tutup ${wibShort(c.deadline_at)} WIB.`,
         dedupe_key: `reminder${label}:${c.id}:${no}`,
       }, now);
     });

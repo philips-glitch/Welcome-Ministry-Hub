@@ -20,6 +20,8 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
    - [`0003_notifications.sql`](supabase/migrations/0003_notifications.sql): notifications + read receipts, their triggers, and a `pg_cron` job for deadline reminders. If it fails on `pg_cron`, enable the extension under **Database → Extensions** and run it again.
    - [`0004_groups_crud.sql`](supabase/migrations/0004_groups_crud.sql): editable groups. It lifts the fixed 01–10 numbering, adds per-group min/max size, and points `profiles.group_no` at `groups` (renumber cascades; delete un-assigns members). A group with submissions can't be deleted.
    - [`0005_usernames.sql`](supabase/migrations/0005_usernames.sql): `profiles.username` (unique; backfilled from existing emails) and optional `contact_email`. Usernames can only be changed through the Edge Function, so the hidden login email changes with them.
+   - [`0006_playbook_events.sql`](supabase/migrations/0006_playbook_events.sql): the Mini Events from the Welcome UR Outing 2026 playbook (see **Mini Events** below). Adds per-member "connect" challenges, rubric scoring with team participation, `challenges.form`, the staff-only `profile_gtkm` answer key, and replaces the seeded challenges with the playbook's. Written for a fresh database (it renumbers the 0002 seed).
+   - [`0007_roster_fields.sql`](supabase/migrations/0007_roster_fields.sql): `profiles.position` and `profiles.ministry_role` from the ministry roster (see **Roster import**).
 3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
    ```bash
    npx supabase login
@@ -33,7 +35,7 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
    ```sql
    update public.profiles set role_id = 'super_admin' where username = 'angel';
    ```
-7. Register everyone else from **Groups → + Tambah member** (straight into a group) or **Members → + Daftarkan member**, and give each person their **username** and starting password.
+7. Load the roster with **Members → Import Excel** (see **Roster import**), or register people one by one from **Groups → + Tambah member** / **Members → + Daftarkan member**. Give each person their **username** and starting password.
 
 ## Database
 
@@ -46,7 +48,8 @@ Without Supabase keys the app runs in **demo mode**: the login page shows sample
 | `riddles` | Riddle prompts per challenge | Staff see all · members only their group's drawn riddles, once the challenge is Live |
 | `riddle_answers` | Answer key, separate table | Only `challenges.manage` / `submissions.validate` (never sent to members) |
 | `riddle_draws` | Which riddles each group got (slot 1..N) | Staff · members see their own group's draw once Live |
-| `submissions` | Photo (storage path), IG link, tagged members, No-AI declaration, version; review: checks, location, headcount, score, override note, reject reason | Own group + validators/scorers · insert needs `portal.submit` · review needs `submissions.validate` |
+| `submissions` | Photo (storage path), link, tagged members, declaration, version; connect: `target_id` (the person) + `answers`; riddles: `answers.answer`; review: checks, `marks` (points per question / criterion), location, headcount, score, override note, reject reason | Own group + validators/scorers; in connect challenges members see only their own · insert needs `portal.submit` (connect: any player with `portal.view`) · review needs `submissions.validate` |
+| `profile_gtkm` | Get to Know Me answers from the Member Form (3 words, enjoys, hidden talent): the key for R1 Q1–Q3 | `submissions.validate` / `members.manage` read · `members.manage` writes · never members |
 | `group_scores()` | Function: validated points per group per challenge | Everyone (leaderboard) without exposing other groups' submissions |
 
 Database rules (triggers) enforce the game flow:
@@ -66,6 +69,30 @@ The bell in the portal header shows the unread count and opens **Notifikasi**. T
 
 Tables: `notifications` (`group_no` null = everyone; `dedupe_key` stops repeats) and `notification_reads` (per user). Members can read only their own audience and mark their own reads. Clients can't create notifications. In demo mode the same rules run in the browser on the demo clock.
 
+## Roster import
+
+**Members → Import Excel** (Super Admin) replaces the whole roster from a spreadsheet: one row per member with an **Assigned Group** and a **Name** column; **Team** (original team), **Role** (ministry status: "Team Leader" becomes Ministry TL) and **Positions** are used when present. Other columns (phone, gender, …) are ignored. The file is read in the browser only and never stored in the repo.
+
+1. Pick the .xlsx (or .csv). The preview shows each group with its member, Team Leader and inactive counts.
+2. Paste the Team Captains, one per line in group order (line 1 → the first group), and the Challenge PICs. Challenges whose PIC has the same first name are linked to the new account.
+3. Confirm. Everything from the old roster is deleted first: every account except Super Admins, all groups not in the file, all submissions (with photos), scores, notifications, riddle draws and Get to Know Me answers. Challenges and riddle banks stay.
+4. Accounts are created with short usernames (first name, else first.last). With Supabase each gets a random starting password; **download the login list (CSV)** on the result screen, the only place the passwords are shown. In demo mode every account uses `demo1234` and the data stays in that browser.
+5. Pick one Group Leader per group in **Groups**.
+
+With Supabase, step 3 runs in the `admin-users` Edge Function (`reset_roster`, Super Admin only), so redeploy it after pulling this change.
+
+## Mini Events (Playbook - Welcome UR Outing 2026)
+
+| Code | Mini Event | Dates (WIB) | Who submits | Scoring |
+| --- | --- | --- | --- | --- |
+| R1 | Get to Know Me | 12–18 Oct, deadline 23:59 | Every player, about 2 group-mates | Q1–Q3 0/1/2, Q4 0/2/4, photo +2 → max 12 per person, 24 per member. Team = avg ÷ 24 × 70 + participation rate × 30 (max 100) |
+| R2 | Guess, Find, Snap! | 21–25 Oct, deadline 23:59 | Group Leader, per clue (4 random) | Correct photo 10 / wrong 0, + team participation 10/6/2 (≥10 / ≥7 / fewer people tagged) → max 50 |
+| R3 | Give and Grow | 28 Oct–1 Nov, deadline 23:59 | Group Leader, one video link | Rubric 20 + 15 + 10 + 5, + team participation 50/35/20 → max 100 |
+| R4 | Spice It Up | — | — | Unchanged draft (cancelled in the playbook) |
+| R5 | Ingatlah hari ini | opens 10 Nov, deadline 15 Nov 23:59 | Group Leader, scrapbook photo | Rules and scoring "to be announced" |
+
+The texts (purpose, how to play, rules, scoring) live in [`src/lib/playbook.js`](src/lib/playbook.js) for demo mode and in `0006_playbook_events.sql` for Supabase; both are editable afterwards in **Challenges**. The R2 riddle bank is still the sample set from the design: replace it with the real clues before the draw.
+
 ## Challenges (admin)
 
 **Challenges** lists every round and side quest.
@@ -74,8 +101,12 @@ Tables: `notifications` (`group_no` null = everyone; `dedupe_key` stops repeats)
 - **Status:** Draft → Scheduled → Live → Closed → Results Published. Drafts are hidden from members. Scheduled and Live need a deadline, and Live needs the riddle draw first.
 - **Scoring rules:**
   - *Riddle foto:* location weight + participation weight (must total 100%), with editable headcount tiers.
+  - *Rubrik + partisipasi tim:* criteria per submission (yes/no or 0–max), plus one team participation tier from everyone tagged in the group's validated submissions.
+  - *Kenalan (individu):* every player submits for themselves about N group-mates; questions scored 0 / half / full against the person's Member Form answers (set in the member dialog), optional photo bonus; team score = average member score × individual weight + participation rate × participation weight.
   - *Poin tetap:* every validated submission gets the max points.
   - *Nilai manual:* the validator enters 0–max.
+  - *Skor belum diumumkan* hides the scoring from members ("menyusul").
+- **Form submit & validasi:** photo and link required / optional / none, link label, typed answer, member tags, the rules members tick, the validator checklist and reject reasons.
 - **Riddle bank & draw:** add, edit and delete riddles with answers, set N riddles per group, draw with a random seed (saved immediately), then **Kunci undian** to lock it.
 - **Delete** removes the challenge with its riddles, draw and submissions, after a confirmation.
 
@@ -91,7 +122,7 @@ One login page (`#/login`) for admins and members: **username + password only**.
 | Challenge PIC | Admin: Overview, Challenges, Validation Queue, Scoring, view Members · Portal |
 | Captain | Admin: Overview, Validation Queue, Scoring, view Members · Portal |
 | Group Leader | Portal, including Submit |
-| Member | Portal (read-only; can't submit) |
+| Member | Portal; submits only their own entries in per-member challenges (R1 Get to Know Me) |
 
 Edit the grants in **Roles & Access**; changes apply immediately. The database enforces them too (RLS + a trigger): only `members.manage` can change role/group/status, nobody can change their own role, and granting or revoking Super Admin needs `roles.manage`. The `admin-users` Edge Function checks `members.manage` before creating accounts or resetting passwords.
 

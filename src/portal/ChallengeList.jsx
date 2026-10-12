@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { DEMO_NOW } from '../data.js';
-import { fmtWIB, statusMeta } from '../lib/game.js';
+import { fmtWIB, statusMeta, teamMax, isConnect, latestPerUnit } from '../lib/game.js';
+import { useGame } from '../lib/gameStore.jsx';
 import { CountUp, urgency } from './motion.jsx';
 
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
@@ -30,9 +31,14 @@ export default function ChallengeList({ me, challenges, openChallenge }) {
       api.getDraw(c.id).then((d) => setDraws((x) => ({ ...x, [c.id]: d.filter((r) => r.group_no === me.group.no) }))).catch(() => {}));
   }, [me.group?.no, challenges]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { scores } = useGame();
   const progress = (c) => {
     const mine = subs.filter((s) => s.challenge_id === c.id);
-    const pts = Math.round(mine.filter((s) => s.status === 'validated').reduce((a, s) => a + Number(s.score || 0), 0) * 10) / 10;
+    const pts = scores.find((x) => x.group_no === me.group?.no && x.challenge_id === c.id)?.points ?? 0;
+    if (isConnect(c)) {
+      const active = latestPerUnit(mine.filter((s) => s.submitted_by === me.id && s.target_id)).filter((s) => ['submitted', 'validated'].includes(s.status));
+      return { total: c.scoring?.people || 2, sent: active.length, pts };
+    }
     if (c.riddles_per_group > 0) {
       const slots = draws[c.id] || [];
       const sent = slots.filter((d) => mine.some((s) => s.riddle_id === d.riddle_id)).length;
@@ -47,7 +53,7 @@ export default function ChallengeList({ me, challenges, openChallenge }) {
     <div className="p-stack">
       <div className="col" style={{ gap: 4 }}>
         <span className="p-title">Challenges</span>
-        <span className="muted" style={{ fontSize: 13 }}>{me.group ? `Progres grup ${me.group.name}` : 'Kamu belum masuk grup'} · diumumkan tiap Kamis 20:00 WIB</span>
+        <span className="muted" style={{ fontSize: 13 }}>{me.group ? `Progres grup ${me.group.name}` : 'Kamu belum masuk grup'}</span>
       </div>
       {!any && <div className="p-card muted">Belum ada challenge yang diumumkan. Pantau terus ya!</div>}
       {SECTIONS.map(([key, title, f]) => {
@@ -77,13 +83,13 @@ function Card({ c, p, section, me, onOpen }) {
         <div style={{ width: 44, height: 44, borderRadius: 13, background: c.kind === 'side' ? '#E3EFE6' : live ? '#1F4D3A' : '#F8E9C4', color: c.kind === 'side' ? '#1F4D3A' : live ? '#FBF6EA' : '#7A5410', display: 'flex', alignItems: 'center', justifyContent: 'center', font: "800 13px 'Bricolage Grotesque'", flex: 'none' }}>{c.code}</div>
         <div className="col" style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <span style={{ font: "700 16px/1.2 'Bricolage Grotesque'" }}>{c.name}</span>
-          <span className="muted" style={{ fontSize: 12 }}>{c.kind === 'side' ? `Side quest · +${c.scoring?.max ?? '?'} poin` : `Round ${c.round ?? '—'} · maks ${c.scoring?.max ?? '?'}${c.riddles_per_group ? '/riddle' : ''}`}</span>
+          <span className="muted" style={{ fontSize: 12 }}>{c.kind === 'side' ? `Side quest · +${teamMax(c)} poin` : `Mini Event #${c.round ?? '—'} · ${c.scoring?.tba ? 'skor menyusul' : `maks ${teamMax(c)}`}`}</span>
         </div>
         <span style={{ fontSize: 10, fontWeight: 800, padding: '4px 8px', borderRadius: 999, background: soon ? '#EDE6D6' : bg, color: soon ? '#56655C' : fg, whiteSpace: 'nowrap' }}>{soon ? 'SOON' : label.toUpperCase()}</span>
       </div>
 
       {soon ? (
-        <span style={{ fontSize: 13, color: '#3C4A42' }}>{c.announce_at ? <>Diumumkan <b>{fmtWIB(c.announce_at)}</b></> : 'Tanggal diumumkan nanti'}</span>
+        <span style={{ fontSize: 13, color: '#3C4A42' }}>{c.open_at ? <>Dibuka <b>{fmtWIB(c.open_at)}</b></> : c.announce_at ? <>Diumumkan <b>{fmtWIB(c.announce_at)}</b></> : 'Tanggal diumumkan nanti'}</span>
       ) : (
         <>
           {me.group && (
@@ -97,7 +103,7 @@ function Card({ c, p, section, me, onOpen }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
                 <span style={{ fontWeight: 700, color: done ? '#2F7A55' : '#3C4A42' }}>
-                  {c.riddles_per_group ? `${p.sent}/${p.total} riddle terkirim` : p.sent ? (p.status === 'validated' ? '✓ Tervalidasi' : p.status === 'submitted' ? 'Menunggu validasi' : 'Perlu kirim ulang') : 'Belum dikirim'}
+                  {isConnect(c) ? `${p.sent}/${p.total} teman baru kamu` : c.riddles_per_group ? `${p.sent}/${p.total} riddle terkirim` : p.sent ? (p.status === 'validated' ? '✓ Tervalidasi' : p.status === 'submitted' ? 'Menunggu validasi' : 'Perlu kirim ulang') : 'Belum dikirim'}
                 </span>
                 <span style={{ fontWeight: 800, color: '#1F4D3A' }}><CountUp value={p.pts} /> pts</span>
               </div>

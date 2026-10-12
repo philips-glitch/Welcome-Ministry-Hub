@@ -2,6 +2,10 @@
 //   POST { action: 'create', username, password, full_name, contact_email?, role_id?, group_no?, service_team?, ig_handle?, is_ministry_tl?, is_committee? }
 //   POST { action: 'set_password', id, password }
 //   POST { action: 'set_username', id, username }
+//   POST { action: 'reset_roster', groups: [{ no, name, color, min_size, max_size, sort }] }   (Super Admin only)
+//        Roster import, step 1: deletes every account except Super Admins, all submissions (and their photos),
+//        draws, notifications and Get to Know Me answers, then replaces the groups. The app then creates the
+//        new accounts one by one with 'create'.
 // Members log in with a username; Supabase Auth gets a hidden email "<username>@users.flourish.local".
 // Caller must be signed in and hold `members.manage`; touching Super Admin also needs `roles.manage`.
 // Deploy: supabase functions deploy admin-users
@@ -18,8 +22,8 @@ const cors = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-const PROFILE_FIELDS = ['full_name', 'contact_email', 'role_id', 'group_no', 'service_team', 'ig_handle', 'is_ministry_tl', 'is_committee'] as const;
-const PROFILE_COLS = 'id,email,username,contact_email,full_name,role_id,group_no,service_team,is_ministry_tl,is_committee,ig_handle,active,created_at';
+const PROFILE_FIELDS = ['full_name', 'contact_email', 'role_id', 'group_no', 'service_team', 'position', 'ministry_role', 'ig_handle', 'is_ministry_tl', 'is_committee'] as const;
+const PROFILE_COLS = 'id,email,username,contact_email,full_name,role_id,group_no,service_team,position,ministry_role,is_ministry_tl,is_committee,ig_handle,active,created_at';
 const normUser = (u: unknown) => String(u ?? '').trim().toLowerCase().replace(/^@/, '');
 
 Deno.serve(async (req) => {
@@ -94,6 +98,51 @@ Deno.serve(async (req) => {
     const { data: profile, error: pErr } = await admin.from('profiles').update({ username, email }).eq('id', id).select(PROFILE_COLS).single();
     if (pErr) return json(500, { error: 'Login diubah, tapi profil gagal disimpan: ' + pErr.message });
     return json(200, { profile });
+  }
+
+  if (body.action === 'reset_roster') {
+    if (!(await can('roles.manage'))) return json(403, { error: 'Hanya Super Admin yang bisa import roster.' });
+    const groups = Array.isArray(body.groups) ? body.groups as Record<string, unknown>[] : [];
+    if (!groups.length || groups.some((g) => !/^[0-9]{2,3}$/.test(String(g.no)) || !String(g.name ?? '').trim())) {
+      return json(400, { error: 'Daftar grup tidak valid.' });
+    }
+    const fail = (step: string, e: { message: string } | null) => (e ? json(500, { error: `Reset gagal (${step}): ${e.message}` }) : null);
+
+    // Game data tied to the old roster. Photos first, while their paths are still known.
+    const bucket = admin.storage.from('submission-media');
+    const { data: dirs } = await bucket.list('', { limit: 1000 });
+    for (const d of dirs ?? []) {
+      const { data: files } = await bucket.list(d.name, { limit: 1000 });
+      if (files?.length) await bucket.remove(files.map((x) => `${d.name}/${x.name}`));
+    }
+    let r = fail('submissions', (await admin.from('submissions').delete().not('id', 'is', null)).error)
+      ?? fail('notifications', (await admin.from('notifications').delete().not('id', 'is', null)).error)
+      ?? fail('draws', (await admin.from('riddle_draws').delete().not('challenge_id', 'is', null)).error)
+      ?? fail('Get to Know Me', (await admin.from('profile_gtkm').delete().not('profile_id', 'is', null)).error)
+      ?? fail('challenges', (await admin.from('challenges').update({ draw_seed: null, draw_locked: false }).not('id', 'is', null)).error)
+      ?? fail('super admin', (await admin.from('profiles').update({ group_no: null }).eq('role_id', 'super_admin')).error);
+    if (r) return r;
+
+    // Every account except Super Admins (profiles go with them: on delete cascade).
+    const { data: old, error: oErr } = await admin.from('profiles').select('id').neq('role_id', 'super_admin');
+    if ((r = fail('accounts', oErr))) return r;
+    let removed = 0;
+    for (const { id } of old ?? []) {
+      const { error } = await admin.auth.admin.deleteUser(id);
+      if (error) return json(500, { error: `Reset berhenti setelah ${removed} akun dihapus: ${error.message}` });
+      removed++;
+    }
+
+    // Groups: drop the ones not in the file, then insert/rename the rest.
+    const nos = groups.map((g) => String(g.no));
+    r = fail('groups', (await admin.from('groups').delete().not('no', 'in', `(${nos.join(',')})`)).error)
+      ?? fail('groups', (await admin.from('groups').upsert(groups.map((g, i) => ({
+        no: String(g.no), name: String(g.name).trim(), color: String(g.color ?? '#1F4D3A'),
+        min_size: Number(g.min_size) || 0, max_size: Math.max(Number(g.max_size) || 0, Number(g.min_size) || 0),
+        sort: Number(g.sort) || i + 1, locked_at: null, locked_by: null,
+      })), { onConflict: 'no' })).error);
+    if (r) return r;
+    return json(200, { removed });
   }
 
   return json(400, { error: 'Action tidak dikenal.' });

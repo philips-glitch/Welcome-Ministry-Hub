@@ -3,7 +3,8 @@ import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import {
-  STATUSES, statusMeta, SECTIONS, SCORING_TYPES, DEFAULT_SCORING, computeScore, drawRiddles, fmtWIB, toLocalInput, fromLocalInput,
+  STATUSES, statusMeta, SECTIONS, SCORING_TYPES, DEFAULT_SCORING, DEFAULT_RUBRIC, DEFAULT_CONNECT, GTKM_FIELDS, withDefaults, formOf,
+  itemMax, teamMax, computeScore, drawRiddles, fmtWIB, toLocalInput, fromLocalInput,
 } from '../lib/game.js';
 
 const input = { height: 36, borderRadius: 8, border: '1px solid #DCD2BC', background: '#FFFDF8', padding: '0 10px', font: 'inherit', fontSize: 13, color: '#1B2620', minWidth: 0 };
@@ -75,7 +76,8 @@ function Editor({ challenge, save, remove, say }) {
   const dirty = strip(f) !== strip(challenge);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setScoring = (patch) => setF((x) => ({ ...x, scoring: { ...x.scoring, ...patch } }));
-  const scoring = { ...(f.scoring.type === 'riddle' ? DEFAULT_SCORING : {}), ...f.scoring };
+  const scoring = withDefaults(f.scoring);
+  const setForm = (patch) => setF((x) => ({ ...x, form: { ...x.form, ...patch } }));
   const staff = (members || []).filter((p) => p.active && !['member', 'group_leader'].includes(p.role_id));
 
   const [riddles, setRiddles] = useState(null);
@@ -89,6 +91,8 @@ function Editor({ challenge, save, remove, say }) {
   if (!f.code.trim()) problems.push('Kode wajib diisi.');
   if (!f.name.trim()) problems.push('Nama wajib diisi.');
   if (scoring.type === 'riddle' && Number(scoring.location_weight) + Number(scoring.participation_weight) !== 100) problems.push('Bobot lokasi + partisipasi harus 100%.');
+  if (scoring.type === 'connect' && (!scoring.questions.length || scoring.questions.some((q) => !q.text.trim()))) problems.push('Setiap pertanyaan wajib diisi.');
+  if (scoring.type === 'rubric' && (!scoring.criteria.length || scoring.criteria.some((k) => !k.label.trim() || !(Number(k.max) > 0)))) problems.push('Setiap kriteria butuh nama dan poin maks.');
   if (f.open_at && f.deadline_at && f.deadline_at <= f.open_at) problems.push('Deadline harus setelah waktu Open.');
   if (['scheduled', 'live'].includes(f.status) && !f.deadline_at) problems.push('Status Scheduled/Live butuh deadline.');
   if (f.status === 'live' && f.riddles_per_group > 0 && !draw.length) problems.push('Riddle belum diundi untuk grup.');
@@ -162,11 +166,12 @@ function Editor({ challenge, save, remove, say }) {
               ])}
             </div>
           </div>
-          <ScoringEditor scoring={scoring} setScoring={setScoring} />
+          <ScoringEditor challenge={f} scoring={scoring} setScoring={setScoring} replace={(sc) => set('scoring', sc)} />
+          <FormEditor challenge={f} setForm={setForm} />
         </div>
       </div>
 
-      {(scoring.type === 'riddle' || f.riddles_per_group > 0 || (riddles && riddles.length > 0)) && (
+      {(['riddle', 'rubric'].includes(scoring.type) || f.riddles_per_group > 0 || (riddles && riddles.length > 0)) && (
         <RiddleBank challenge={challenge} form={f} set={set} riddles={riddles} setRiddles={setRiddles} draw={draw} setDraw={setDraw} save={save} say={say} />
       )}
 
@@ -188,17 +193,24 @@ function Editor({ challenge, save, remove, say }) {
   );
 }
 
-function ScoringEditor({ scoring, setScoring }) {
+function ScoringEditor({ challenge, scoring, setScoring, replace }) {
   const s = scoring;
   const num = (v) => (v === '' ? '' : Number(v));
   const ex1 = s.type === 'riddle' && computeScore(s, { location_correct: true, participant_count: 11 });
   const ex2 = s.type === 'riddle' && computeScore(s, { location_correct: false, participant_count: 8 });
+  const computed = ['connect', 'rubric'].includes(s.type);
+  const pick = (type) => replace(
+    type === 'riddle' ? { ...DEFAULT_SCORING, max: s.max || 10 } : type === 'rubric' ? structuredClone(DEFAULT_RUBRIC)
+      : type === 'connect' ? structuredClone(DEFAULT_CONNECT) : { type, max: Number(s.max) || 20 });
+  const setRow = (k, i, patch) => setScoring({ [k]: s[k].map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   return (
     <div style={card}>
       <div className="row"><span style={h}>Formula skor</span>
-        <label className="row muted" style={{ marginLeft: 'auto', gap: 6, fontSize: 12 }}>Maks<input type="number" min="0" aria-label="Skor maksimal" value={s.max} onChange={(e) => setScoring({ max: num(e.target.value) })} style={{ ...input, width: 64, height: 30 }} /></label>
+        {computed
+          ? <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>Maks per submission <b style={{ color: '#1B2620' }}>{itemMax(s)}</b> · tim <b style={{ color: '#1B2620' }}>{teamMax({ ...challenge, scoring: s })}</b></span>
+          : <label className="row muted" style={{ marginLeft: 'auto', gap: 6, fontSize: 12 }}>Maks<input type="number" min="0" aria-label="Skor maksimal" value={s.max} onChange={(e) => setScoring({ max: num(e.target.value) })} style={{ ...input, width: 64, height: 30 }} /></label>}
       </div>
-      <select aria-label="Jenis skor" value={s.type} onChange={(e) => setScoring(e.target.value === 'riddle' ? { ...DEFAULT_SCORING, max: s.max || 10 } : { type: e.target.value })} style={input}>
+      <select aria-label="Jenis skor" value={s.type} onChange={(e) => pick(e.target.value)} style={input}>
         {SCORING_TYPES.map(([k, l, d]) => <option key={k} value={k}>{l} — {d}</option>)}
       </select>
       {s.type === 'riddle' && (
@@ -212,27 +224,144 @@ function ScoringEditor({ scoring, setScoring }) {
             <span><b>Partisipasi</b> · tier di bawah</span>
             <label className="row" style={{ gap: 2 }}><input type="number" min="0" max="100" aria-label="Bobot partisipasi" value={s.participation_weight} onChange={(e) => setScoring({ participation_weight: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />%</label>
           </div>
-          <div className="col" style={{ gap: 6 }}>
-            {s.tiers.map((t, i) => (
-              <div key={i} className="row" style={{ gap: 6, fontSize: 12 }}>
-                <span className="muted">≥</span>
-                <input type="number" min="0" aria-label={`Tier ${i + 1} minimal orang`} value={t.min} onChange={(e) => setScoring({ tiers: s.tiers.map((x, j) => (j === i ? { ...x, min: num(e.target.value) } : x)) })} style={{ ...input, width: 56, height: 30 }} />
-                <span className="muted">org →</span>
-                <input type="number" min="0" aria-label={`Tier ${i + 1} poin`} value={t.pts} onChange={(e) => setScoring({ tiers: s.tiers.map((x, j) => (j === i ? { ...x, pts: num(e.target.value) } : x)) })} style={{ ...input, width: 56, height: 30 }} />
-                <span className="muted">poin</span>
-                <button className="link" style={{ marginLeft: 'auto', color: '#9A2A1E' }} disabled={s.tiers.length <= 1} onClick={() => setScoring({ tiers: s.tiers.filter((_, j) => j !== i) })}>Hapus</button>
-              </div>
-            ))}
-            <button className="link" style={{ textAlign: 'left' }} onClick={() => setScoring({ tiers: [...s.tiers, { min: 0, pts: 0 }] })}>+ Tier</button>
-          </div>
+          <TierRows tiers={s.tiers} onChange={(tiers) => setScoring({ tiers })} />
           <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>
             Contoh: lokasi benar + 11 orang = <b style={{ color: '#1B2620' }}>{ex1}</b> · salah + 8 orang = <b style={{ color: '#1B2620' }}>{ex2}</b>
           </span>
         </>
       )}
+      {s.type === 'rubric' && (
+        <>
+          <span className="muted" style={{ fontSize: 12 }}>Kriteria per submission{challenge.riddles_per_group > 0 ? ` (× ${challenge.riddles_per_group} riddle)` : ''}. “Ya/tidak” = validator pilih penuh atau 0.</span>
+          {s.criteria.map((k, i) => (
+            <div key={i} className="col" style={{ gap: 4, padding: 8, borderRadius: 8, background: '#FBF8F0', border: '1px solid #EFE7D6' }}>
+              <div className="row" style={{ gap: 6 }}>
+                <input aria-label={`Kriteria ${i + 1}`} value={k.label} onChange={(e) => setRow('criteria', i, { label: e.target.value })} style={{ ...input, flex: 1, height: 30 }} />
+                <input type="number" min="1" aria-label={`Poin maks kriteria ${i + 1}`} value={k.max} onChange={(e) => setRow('criteria', i, { max: num(e.target.value) })} style={{ ...input, width: 56, height: 30 }} />
+              </div>
+              <div className="row" style={{ gap: 6, fontSize: 12 }}>
+                <label className="row muted" style={{ gap: 4 }}><input type="checkbox" checked={!!k.binary} onChange={(e) => setRow('criteria', i, { binary: e.target.checked })} />Ya/tidak</label>
+                <input aria-label={`Petunjuk kriteria ${i + 1}`} placeholder="Petunjuk untuk validator (opsional)" value={k.hint || ''} onChange={(e) => setRow('criteria', i, { hint: e.target.value })} style={{ ...input, flex: 1, height: 28, fontSize: 12 }} />
+                <button className="link" style={{ color: '#9A2A1E' }} disabled={s.criteria.length <= 1} onClick={() => setScoring({ criteria: s.criteria.filter((_, j) => j !== i) })}>Hapus</button>
+              </div>
+            </div>
+          ))}
+          <button className="link" style={{ textAlign: 'left' }} onClick={() => setScoring({ criteria: [...s.criteria, { key: 'k' + Date.now().toString(36), label: '', max: 10 }] })}>+ Kriteria</button>
+          <span style={{ fontSize: 12.5 }}><b>Partisipasi tim</b> · sekali per tim, dari semua yang ditag di submission tervalidasi</span>
+          <TierRows tiers={s.participation?.tiers || []} onChange={(tiers) => setScoring({ participation: { ...s.participation, tiers } })} />
+        </>
+      )}
+      {s.type === 'connect' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px', gap: '6px 8px', fontSize: 12.5, alignItems: 'center' }}>
+            <span><b>Orang per member</b></span>
+            <input type="number" min="1" max="10" aria-label="Orang per member" value={s.people} onChange={(e) => setScoring({ people: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />
+            <span><b>Bonus foto</b> per orang</span>
+            <input type="number" min="0" aria-label="Bonus foto" value={s.photo_bonus} onChange={(e) => setScoring({ photo_bonus: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />
+            <span><b>Rata-rata skor member</b></span>
+            <label className="row" style={{ gap: 2 }}><input type="number" min="0" aria-label="Bobot individu" value={s.individual_weight} onChange={(e) => setScoring({ individual_weight: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />pt</label>
+            <span><b>Tingkat partisipasi</b></span>
+            <label className="row" style={{ gap: 2 }}><input type="number" min="0" aria-label="Bobot partisipasi" value={s.participation_weight} onChange={(e) => setScoring({ participation_weight: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />pt</label>
+          </div>
+          <span className="muted" style={{ fontSize: 12 }}>Pertanyaan · validator memberi 0 / setengah / penuh. Kunci = jawaban Member Form orangnya.</span>
+          {s.questions.map((q, i) => (
+            <div key={i} className="col" style={{ gap: 4, padding: 8, borderRadius: 8, background: '#FBF8F0', border: '1px solid #EFE7D6' }}>
+              <div className="row" style={{ gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800 }}>Q{i + 1}</span>
+                <input aria-label={`Pertanyaan ${i + 1}`} value={q.text} onChange={(e) => setRow('questions', i, { text: e.target.value })} style={{ ...input, flex: 1, height: 30 }} />
+                <input type="number" min="1" aria-label={`Poin maks Q${i + 1}`} value={q.max} onChange={(e) => setRow('questions', i, { max: num(e.target.value) })} style={{ ...input, width: 52, height: 30 }} />
+              </div>
+              <div className="row" style={{ gap: 6, fontSize: 12 }}>
+                <select aria-label={`Kunci Q${i + 1}`} value={q.ref || ''} onChange={(e) => setRow('questions', i, { ref: e.target.value || undefined })} style={{ ...input, height: 28, fontSize: 12, flex: 1 }}>
+                  <option value="">Tanpa kunci (discovery)</option>
+                  {GTKM_FIELDS.map(([k, l]) => <option key={k} value={k}>Kunci: {l}</option>)}
+                </select>
+                <button className="link" style={{ color: '#9A2A1E' }} disabled={s.questions.length <= 1} onClick={() => setScoring({ questions: s.questions.filter((_, j) => j !== i) })}>Hapus</button>
+              </div>
+            </div>
+          ))}
+          <button className="link" style={{ textAlign: 'left' }} onClick={() => setScoring({ questions: [...s.questions, { key: 'q' + Date.now().toString(36), text: '', max: 2 }] })}>+ Pertanyaan</button>
+          <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>
+            Skor tim = rata-rata member ÷ {s.people * itemMax(s)} × {s.individual_weight} + (member yang submit ÷ anggota grup) × {s.participation_weight}
+          </span>
+        </>
+      )}
       {s.type === 'flat' && <span className="muted" style={{ fontSize: 12 }}>Setiap submission yang tervalidasi mendapat {s.max} poin.</span>}
       {s.type === 'manual' && <span className="muted" style={{ fontSize: 12 }}>Validator mengisi nilai 0–{s.max} saat approve.</span>}
+      <label className="row muted" style={{ gap: 6, fontSize: 12 }}><input type="checkbox" checked={!!s.tba} onChange={(e) => setScoring({ tba: e.target.checked || undefined })} />Skor belum diumumkan ke member (“menyusul”)</label>
     </div>
+  );
+}
+
+function TierRows({ tiers, onChange }) {
+  const num = (v) => (v === '' ? '' : Number(v));
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      {tiers.map((t, i) => (
+        <div key={i} className="row" style={{ gap: 6, fontSize: 12 }}>
+          <span className="muted">≥</span>
+          <input type="number" min="0" aria-label={`Tier ${i + 1} minimal orang`} value={t.min} onChange={(e) => onChange(tiers.map((x, j) => (j === i ? { ...x, min: num(e.target.value) } : x)))} style={{ ...input, width: 56, height: 30 }} />
+          <span className="muted">org →</span>
+          <input type="number" min="0" aria-label={`Tier ${i + 1} poin`} value={t.pts} onChange={(e) => onChange(tiers.map((x, j) => (j === i ? { ...x, pts: num(e.target.value) } : x)))} style={{ ...input, width: 56, height: 30 }} />
+          <span className="muted">poin</span>
+          <button className="link" style={{ marginLeft: 'auto', color: '#9A2A1E' }} disabled={tiers.length <= 1} onClick={() => onChange(tiers.filter((_, j) => j !== i))}>Hapus</button>
+        </div>
+      ))}
+      <button className="link" style={{ textAlign: 'left' }} onClick={() => onChange([...tiers, { min: 0, pts: 0 }])}>+ Tier</button>
+    </div>
+  );
+}
+
+// What the portal form asks for and what validators tick (challenges.form).
+function FormEditor({ challenge, setForm }) {
+  const fm = formOf(challenge);
+  const connect = challenge.scoring?.type === 'connect';
+  const opt = (k, label) => (
+    <label className="row" style={{ gap: 6, fontSize: 12.5 }}>
+      <span style={{ width: 54 }}><b>{label}</b></span>
+      <select aria-label={label} value={fm[k]} onChange={(e) => setForm({ [k]: e.target.value })} style={{ ...input, height: 30, fontSize: 12 }}>
+        <option value="required">Wajib</option><option value="optional">Opsional</option><option value="none">Tidak ada</option>
+      </select>
+    </label>
+  );
+  return (
+    <div style={card}>
+      <span style={h}>Form submit & validasi</span>
+      <span className="muted" style={{ fontSize: 12 }}>{connect ? 'Setiap anggota submit sendiri: pilih orang, jawab pertanyaan.' : 'Group Leader submit untuk grup.'}</span>
+      {opt('photo', 'Foto')}
+      {opt('link', 'Link')}
+      {fm.link !== 'none' && <input aria-label="Label link" value={fm.link_label} onChange={(e) => setForm({ link_label: e.target.value })} style={{ ...input, height: 30, fontSize: 12 }} />}
+      {!connect && (
+        <>
+          <label className="row" style={{ gap: 6, fontSize: 12.5 }}><input type="checkbox" checked={!!fm.answer_label} onChange={(e) => setForm({ answer_label: e.target.checked ? 'Jawaban kalian' : null })} />Tim mengetik jawaban</label>
+          <label className="row" style={{ gap: 6, fontSize: 12.5 }}><input type="checkbox" checked={!!fm.tags} onChange={(e) => setForm({ tags: e.target.checked })} />Tag anggota</label>
+          {fm.tags && <input aria-label="Label tag" value={fm.tag_label} onChange={(e) => setForm({ tag_label: e.target.value })} style={{ ...input, height: 30, fontSize: 12 }} />}
+        </>
+      )}
+      <label className="col" style={{ gap: 4, fontSize: 12, fontWeight: 700 }}>Aturan yang dicentang saat submit (1 per baris)
+        <Lines value={fm.confirm} onChange={(v) => setForm({ confirm: v })} placeholder="Kosong = aturan bawaan (foto asli, IG tag, No-AI)" />
+      </label>
+      <label className="col" style={{ gap: 4, fontSize: 12, fontWeight: 700 }}>Checklist validator (1 per baris)
+        <Lines value={fm.checks} onChange={(v) => setForm({ checks: v })} placeholder="Kosong = checklist riddle foto" />
+      </label>
+      <label className="col" style={{ gap: 4, fontSize: 12, fontWeight: 700 }}>Alasan tolak (1 per baris)
+        <Lines value={fm.reasons} onChange={(v) => setForm({ reasons: v })} placeholder="Kosong = alasan bawaan" />
+      </label>
+    </div>
+  );
+}
+
+// One item per line. Keeps its own text so blank lines survive while typing; saves the non-empty lines.
+function Lines({ value, onChange, placeholder }) {
+  const parse = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
+  const joined = (value || []).join('\n');
+  const [text, setText] = useState(joined);
+  // Follow outside changes (e.g. "Batalkan"), not our own edits.
+  useEffect(() => { if (parse(text).join('\n') !== joined) setText(joined); }, [joined]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <textarea rows={3} value={text} placeholder={placeholder}
+      onChange={(e) => { setText(e.target.value); onChange(parse(e.target.value)); }}
+      style={{ font: 'inherit', fontSize: 12, fontWeight: 400, lineHeight: 1.5, border: '1px solid #EFE7D6', borderRadius: 8, padding: '6px 8px', background: '#FBF8F0', resize: 'vertical' }} />
   );
 }
 

@@ -1,45 +1,55 @@
 import useCountdown from '../useCountdown.js';
 import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
+import { useGame } from '../lib/gameStore.jsx';
 import { SUB_CHIP } from './portalData.js';
-import { fmtWIB, statusMeta, DEFAULT_SCORING } from '../lib/game.js';
+import { fmtWIB, statusMeta, withDefaults, formOf, isConnect, itemMax, teamMax, latestPerUnit } from '../lib/game.js';
 import { CountUp, urgency } from './motion.jsx';
 import { PhotoThumb } from '../components/Photo.jsx';
 
 const STATUS = { validated: 'Validated', submitted: 'Submitted', rejected: 'Rejected', resubmit: 'Rejected' };
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const EXTRA = [['connection', 'The Connection'], ['what_we_need', 'What We Need'], ['make_it_flourish', 'Make It Flourish'], ['flourish_hub', 'Flourish Hub'], ['duration', 'Durasi']];
+const first = (name) => (name || '').split(' ')[0];
 
 export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle, justSent }) {
   const cd = useCountdown(c?.deadline_at ? new Date(c.deadline_at).getTime() : 0);
+  const { scores } = useGame();
   if (!c) return <div className="p-card muted">Challenge tidak ditemukan.</div>;
   const open = c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
-  const scoring = { ...(c.scoring?.type === 'riddle' ? DEFAULT_SCORING : {}), ...c.scoring };
-  const riddleMode = c.riddles_per_group > 0;
-  const nameOf = (id) => data.roster.find((p) => p.id === id)?.full_name?.split(' ')[0] || 'leader';
+  const scoring = withDefaults(c.scoring);
+  const form = formOf(c);
+  const connect = isConnect(c);
+  const riddleMode = !connect && c.riddles_per_group > 0;
+  const nameOf = (id) => first(data.roster.find((p) => p.id === id)?.full_name) || 'leader';
   const [, statusLabel] = statusMeta(c.status);
+  const perItem = itemMax(scoring);
+  const metaFor = (sub) => (!sub ? 'Belum ada submission'
+    : sub.status === 'validated' ? `${sub.score}/${perItem} pts${form.tags && !connect ? ` · ${sub.participant_count ?? sub.tagged_ids.length} orang` : ''}`
+    : sub.status === 'submitted' ? `Dikirim ${fmtWIB(sub.submitted_at)}${connect ? '' : ` oleh ${nameOf(sub.submitted_by)}`}`
+    : `${sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}: ${sub.reject_reason || '—'}`);
 
-  const riddleRows = data.draw.map((d) => {
+  const riddleRows = riddleMode ? data.draw.map((d) => {
     const r = data.riddles.find((x) => x.id === d.riddle_id);
     const sub = data.latest(d.riddle_id);
-    const st = sub ? STATUS[sub.status] : 'Not Started';
-    const meta = !sub ? 'Belum ada submission'
-      : sub.status === 'validated' ? `${sub.score}/${scoring.max} pts · ${sub.participant_count ?? sub.tagged_ids.length} orang`
-      : sub.status === 'submitted' ? `Dikirim ${fmtWIB(sub.submitted_at)} oleh ${nameOf(sub.submitted_by)}`
-      : `${sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}: ${sub.reject_reason || '—'}`;
     const canSend = open && me.canSubmit && (!sub || ['rejected', 'resubmit'].includes(sub.status));
-    return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st, meta, canSend, resend: !!sub, sub };
-  });
-  const single = !riddleMode ? data.latest(null) : null;
+    return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st: sub ? STATUS[sub.status] : 'Not Started', meta: metaFor(sub), canSend, resend: !!sub, sub };
+  }) : [];
+  const single = !riddleMode && !connect ? data.latest(null) : null;
   const canSingle = open && me.canSubmit && (!single || ['rejected', 'resubmit'].includes(single.status));
 
-  // Group progress for the hero.
-  const latestAll = riddleMode ? riddleRows.map((r) => data.latest(r.id)).filter(Boolean) : single ? [single] : [];
+  // Connect: my people (latest entry per person), plus empty slots up to `people`.
+  const people = scoring.people || 2;
+  const mine = connect ? latestPerUnit(data.subs.filter((x) => x.submitted_by === me.id && x.target_id)).sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)) : [];
+  const activeMine = mine.filter((x) => ['submitted', 'validated'].includes(x.status));
+  const canAdd = open && me.canSubmit && activeMine.length < people;
+
+  // Progress for the hero.
+  const latestAll = connect ? activeMine : riddleMode ? riddleRows.map((r) => r.sub).filter(Boolean) : single ? [single] : [];
   const sent = latestAll.length;
-  const total = riddleMode ? riddleRows.length || c.riddles_per_group : 1;
-  const pts = Math.round(data.subs.filter((s) => s.status === 'validated').reduce((a, s) => a + Number(s.score || 0), 0) * 10) / 10;
+  const total = connect ? people : riddleMode ? riddleRows.length || c.riddles_per_group : 1;
   const waiting = latestAll.filter((s) => s.status === 'submitted').length;
-  const maxPts = scoring.max * (riddleMode ? total : 1);
+  const pts = scores.find((s) => s.group_no === me.group?.no && s.challenge_id === c.id)?.points ?? 0;
 
   return (
     <div className="p-stack">
@@ -48,7 +58,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
         <div style={{ position: 'absolute', right: -50, top: -50, width: 190, height: 190, borderRadius: '50%', background: '#2F7A55', opacity: 0.45 }} />
         <div className="row" style={{ gap: 10, position: 'relative' }}>
           <button onClick={() => go('challenges')} aria-label="Kembali ke daftar challenge" style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(251,246,234,.14)', color: '#FBF6EA', fontSize: 20, flex: 'none' }}>‹</button>
-          <span style={{ fontSize: 13, opacity: 0.85, fontWeight: 600 }}>{c.code} · {c.kind === 'side' ? 'Side quest' : `Round ${c.round ?? '—'}`}</span>
+          <span style={{ fontSize: 13, opacity: 0.85, fontWeight: 600 }}>{c.code} · {c.kind === 'side' ? 'Side quest' : `Mini Event #${c.round ?? '—'}`}</span>
           <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', padding: '4px 9px', borderRadius: 999, background: c.status === 'live' ? '#E3A92B' : 'rgba(251,246,234,.18)', color: c.status === 'live' ? '#1B2620' : '#FBF6EA' }}>{statusLabel.toUpperCase()}</span>
         </div>
         <div className="col" style={{ gap: 6, position: 'relative' }}>
@@ -60,8 +70,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
           <Stat label={open ? 'Tutup dalam' : c.status === 'scheduled' ? 'Dibuka' : 'Deadline'}
             value={open && c.deadline_at ? `${cd.d}h ${cd.h}:${cd.m}:${cd.s}` : c.status === 'scheduled' ? (c.open_at ? fmtWIB(c.open_at).replace(' WIB', '') : 'TBD') : c.deadline_at ? 'Ditutup' : '—'}
             sub={c.deadline_at ? fmtWIB(c.deadline_at) : 'belum diatur'} wide urgency={open ? urgency(c.deadline_at) : 'calm'} />
-          {me.group && <Stat label={riddleMode ? 'Riddle terkirim' : 'Submission'} value={`${sent}/${total}`} sub={waiting ? `${waiting} menunggu validasi` : sent >= total ? 'semua terkirim' : 'ayo kirim!'} />}
-          {me.group && <Stat label="Poin grup" value={<CountUp value={pts} />} sub={`dari maks ${maxPts}`} />}
+          {me.group && <Stat label={connect ? 'Teman baru kamu' : riddleMode ? 'Riddle terkirim' : 'Submission'} value={`${sent}/${total}`} sub={waiting ? `${waiting} menunggu validasi` : sent >= total ? 'semua terkirim' : 'ayo kirim!'} />}
+          {me.group && <Stat label="Poin grup" value={<CountUp value={pts} />} sub={scoring.tba ? 'skor menyusul' : `dari maks ${teamMax(c)}`} />}
         </div>
         {me.group && (
           <div style={{ display: 'flex', gap: 4, position: 'relative' }}>
@@ -77,7 +87,49 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
       <div className="p-cols">
         {/* Main: what to do */}
         <div className="p-stack">
-          {riddleMode ? (
+          {connect ? (
+            <section className="col" style={{ gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span className="p-h">Kenalan kamu</span><span className="muted" style={{ fontSize: 12 }}>{people} orang dari grup kamu</span>
+              </div>
+              {!me.group && <div className="p-card muted" style={{ fontSize: 13 }}>Kamu belum masuk grup.</div>}
+              {me.group && (
+                <div className="p-grid-2">
+                  {mine.map((s) => {
+                    const st = STATUS[s.status];
+                    const [cbg, cfg] = SUB_CHIP[st];
+                    const doneCard = s.status === 'validated';
+                    const resend = open && me.canSubmit && ['rejected', 'resubmit'].includes(s.status) && activeMine.length < people;
+                    return (
+                      <div key={s.id} className={'p-card' + (justSent && justSent === s.target_id ? ' p-flash' : '')} style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: doneCard ? '#F3F8F4' : undefined }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span style={{ font: "800 13px 'Bricolage Grotesque'", width: 30, height: 30, borderRadius: 9, background: doneCard ? '#2F7A55' : '#1F4D3A', color: '#FBF6EA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{doneCard ? '✓' : (data.roster.find((p) => p.id === s.target_id)?.full_name || '?')[0]}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>{data.roster.find((p) => p.id === s.target_id)?.full_name || 'Anggota grup'}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '4px 8px', borderRadius: 999, background: cbg, color: cfg }}>{st.toUpperCase()}</span>
+                        </div>
+                        {s.answers?.q4 && <span style={{ fontSize: 13.5, lineHeight: 1.45, fontStyle: 'italic' }}>“{s.answers.q4}”</span>}
+                        {(s.media_path || s.media_name) && <PhotoThumb path={s.media_path} name={s.media_name} height={140} caption={`Foto bareng · versi ${s.version}`} placeholder="Foto lama, tidak tersimpan" />}
+                        <span className="muted" style={{ fontSize: 12 }}>{metaFor(s)}</span>
+                        {resend && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                            <button onClick={() => pickRiddle(s.target_id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Kirim ulang</button>
+                            <button onClick={() => pickRiddle(null)} style={{ height: 42, borderRadius: 12, border: '1px solid #DCD2BC', fontWeight: 700, fontSize: 13 }}>Orang lain</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {Array.from({ length: Math.max(0, people - mine.length) }, (_, i) => (
+                    <div key={'slot' + i} className="p-card" style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, borderStyle: 'dashed', borderColor: canAdd ? '#1F4D3A' : undefined }}>
+                      <span className="muted" style={{ fontSize: 13, fontWeight: 700 }}>Teman baru #{mine.length + i + 1}</span>
+                      <span className="muted" style={{ fontSize: 12, lineHeight: 1.45, flex: 1 }}>{open ? 'Ajak ngobrol satu orang di grup kamu, lalu jawab Q1–Q4 tentang dia.' : c.status === 'scheduled' ? 'Bisa diisi saat challenge dibuka.' : 'Challenge sudah ditutup.'}</span>
+                      {canAdd && <button onClick={() => pickRiddle(null)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>+ Pilih orang</button>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : riddleMode ? (
             <section className="col" style={{ gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <span className="p-h">Riddle grup kamu</span><span className="muted" style={{ fontSize: 12 }}>diundi acak oleh panitia</span>
@@ -98,6 +150,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '4px 8px', borderRadius: 999, background: cbg, color: cfg }}>{r.st.toUpperCase()}</span>
                       </div>
                       <span style={{ fontSize: 15, lineHeight: 1.45, fontWeight: 500, fontStyle: 'italic', flex: 1 }}>“{r.text}”</span>
+                      {r.sub?.answers?.answer && <span style={{ fontSize: 13 }}><b>Jawaban kalian:</b> {r.sub.answers.answer}</span>}
                       {r.sub && (r.sub.media_path || r.sub.media_name) && (
                         <PhotoThumb path={r.sub.media_path} name={r.sub.media_name} height={150} caption={`Riddle ${r.no} · versi ${r.sub.version}`} placeholder="Foto lama, tidak tersimpan" />
                       )}
@@ -114,6 +167,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
               <span className="muted" style={{ fontSize: 13 }}>
                 {!single ? 'Belum ada submission dari grup kamu.' : `Status: ${STATUS[single.status]}${single.score != null ? ` · ${single.score} pts` : ''}${single.reject_reason ? ` · “${single.reject_reason}”` : ''} · versi ${single.version}`}
               </span>
+              {single?.ig_url && form.photo === 'none' && <a href={single.ig_url.startsWith('http') ? single.ig_url : 'https://' + single.ig_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1F4D3A', overflowWrap: 'anywhere' }}>▶ {single.ig_url}</a>}
               {single && (single.media_path || single.media_name) && <PhotoThumb path={single.media_path} name={single.media_name} height={200} caption={`${c.name} · versi ${single.version}`} placeholder="Foto lama, tidak tersimpan" />}
               {canSingle
                 ? <button className="p-btn-lg" onClick={() => pickRiddle(null)} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{single ? 'Kirim ulang' : 'Submit challenge'}</button>
@@ -121,26 +175,21 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
             </section>
           )}
           <span className="muted" style={{ fontSize: 12 }}>
-            {open ? (me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.') : c.status === 'scheduled' ? 'Challenge ini belum dibuka.' : 'Challenge ini sudah ditutup.'}
+            {!open ? (c.status === 'scheduled' ? 'Challenge ini belum dibuka.' : 'Challenge ini sudah ditutup.')
+              : connect ? (me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia.' : 'Challenge ini dikerjakan tiap peserta grup.')
+              : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
           </span>
         </div>
 
         {/* Side: the rules, collapsible */}
         <div className="p-sticky">
           <Fold title="Cara main" open>
-            {c.sections?.how_to_play ? <p style={para}>{c.sections.how_to_play}</p> : <p style={{ ...para, color: '#56655C' }}>Detail menyusul dari panitia.</p>}
+            {c.sections?.how_to_play ? <Prose text={c.sections.how_to_play} /> : <p style={{ ...para, color: '#56655C' }}>Detail menyusul dari panitia.</p>}
           </Fold>
-          <Fold title={`Cara skor · maks ${scoring.max}${riddleMode ? ' per riddle' : ''}`} open>
-            {scoring.type === 'riddle' ? (
-              <div className="col" style={{ gap: 10 }}>
-                <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden' }}><div style={{ flex: scoring.location_weight, background: '#1F4D3A' }} /><div style={{ flex: scoring.participation_weight, background: '#E3A92B' }} /></div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, lineHeight: 1.4 }}>
-                  <div className="col"><span style={{ fontWeight: 700 }}>{scoring.location_weight}% Lokasi benar</span><span className="muted">Benar penuh · Salah 0</span></div>
-                  <div className="col"><span style={{ fontWeight: 700 }}>{scoring.participation_weight}% Partisipasi</span><span className="muted">{[...scoring.tiers].sort((a, b) => b.min - a.min).map((t) => `≥${t.min} org: ${t.pts}`).join(' · ')}</span></div>
-                </div>
-              </div>
-            ) : <p style={para}>{scoring.type === 'flat' ? `Tervalidasi = ${scoring.max} poin.` : `Dinilai panitia, 0–${scoring.max} poin.`}</p>}
-            {c.sections?.points_rewards && <p style={{ ...para, color: '#56655C', marginTop: 8 }}>{c.sections.points_rewards}</p>}
+          {c.sections?.rules && <Fold title="Aturan" open><Prose text={c.sections.rules} /></Fold>}
+          <Fold title={scoring.tba ? 'Cara skor · menyusul' : `Cara skor · maks ${teamMax(c)}`} open={!scoring.tba}>
+            {!scoring.tba && <ScoringSummary c={c} scoring={scoring} />}
+            {c.sections?.points_rewards && <div style={{ marginTop: scoring.tba ? 0 : 10 }}><Prose text={c.sections.points_rewards} muted /></div>}
           </Fold>
           {scoring.type === 'riddle' && (
             <Fold title="Do's & Don'ts">
@@ -163,8 +212,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
           </Fold>
           {EXTRA.some(([k]) => c.sections?.[k]) && (
             <Fold title="Info lainnya">
-              <div className="col" style={{ gap: 8 }}>
-                {EXTRA.filter(([k]) => c.sections?.[k]).map(([k, t]) => <p key={k} style={para}><b>{t}:</b> {c.sections[k]}</p>)}
+              <div className="col" style={{ gap: 10 }}>
+                {EXTRA.filter(([k]) => c.sections?.[k]).map(([k, t]) => <div key={k} className="col" style={{ gap: 2 }}><b style={{ fontSize: 13 }}>{t}</b><Prose text={c.sections[k]} /></div>)}
               </div>
             </Fold>
           )}
@@ -175,6 +224,68 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
 }
 
 const para = { margin: 0, fontSize: 13.5, lineHeight: 1.55, color: '#3C4A42' };
+
+// Section text: "- " lines become a bullet list, other lines paragraphs.
+function Prose({ text, muted }) {
+  const blocks = [];
+  String(text).split('\n').map((l) => l.trim()).filter(Boolean).forEach((t) => {
+    const last = blocks[blocks.length - 1];
+    if (t.startsWith('- ')) { if (last?.items) last.items.push(t.slice(2)); else blocks.push({ items: [t.slice(2)] }); }
+    else blocks.push({ text: t });
+  });
+  const style = muted ? { ...para, color: '#56655C' } : para;
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      {blocks.map((b, i) => (b.items
+        ? <ul key={i} style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{b.items.map((x, j) => <li key={j} style={style}>{x}</li>)}</ul>
+        : <p key={i} style={style}>{b.text}</p>))}
+    </div>
+  );
+}
+
+function ScoringSummary({ c, scoring: s }) {
+  const tiers = (ts) => [...(ts || [])].sort((a, b) => b.min - a.min).map((t) => `≥${t.min} org: ${t.pts}`).join(' · ');
+  const bar = (parts) => <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden' }}>{parts.map(([w, col], i) => <div key={i} style={{ flex: w || 0.001, background: col }} />)}</div>;
+  const grid = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, lineHeight: 1.4 };
+  if (s.type === 'riddle') {
+    return (
+      <div className="col" style={{ gap: 10 }}>
+        {bar([[s.location_weight, '#1F4D3A'], [s.participation_weight, '#E3A92B']])}
+        <div style={grid}>
+          <div className="col"><span style={{ fontWeight: 700 }}>{s.location_weight}% Lokasi benar</span><span className="muted">Benar penuh · Salah 0</span></div>
+          <div className="col"><span style={{ fontWeight: 700 }}>{s.participation_weight}% Partisipasi</span><span className="muted">{tiers(s.tiers)}</span></div>
+        </div>
+      </div>
+    );
+  }
+  if (s.type === 'connect') {
+    return (
+      <div className="col" style={{ gap: 10 }}>
+        {bar([[s.individual_weight, '#1F4D3A'], [s.participation_weight, '#E3A92B']])}
+        <div style={grid}>
+          <div className="col"><span style={{ fontWeight: 700 }}>{s.individual_weight}% Rata-rata skor</span><span className="muted">Maks {itemMax(s)} per orang × {s.people} orang</span></div>
+          <div className="col"><span style={{ fontWeight: 700 }}>{s.participation_weight}% Partisipasi</span><span className="muted">Anggota yang submit ÷ anggota grup</span></div>
+        </div>
+      </div>
+    );
+  }
+  if (s.type === 'rubric') {
+    const items = c.riddles_per_group > 0 ? c.riddles_per_group : 1;
+    return (
+      <div className="col" style={{ gap: 8, fontSize: 13, lineHeight: 1.4 }}>
+        {s.criteria.map((k) => (
+          <div key={k.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span>{k.label}{items > 1 ? ` (per riddle)` : ''}</span><b className="num">{k.binary ? `${k.max} / 0` : k.max}</b>
+          </div>
+        ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: '1px solid #EFE7D6', paddingTop: 8 }}>
+          <span>Partisipasi tim <span className="muted">({tiers(s.participation?.tiers)})</span></span><b className="num">{Math.max(0, ...(s.participation?.tiers || []).map((t) => t.pts))}</b>
+        </div>
+      </div>
+    );
+  }
+  return <p style={para}>{s.type === 'flat' ? `Tervalidasi = ${s.max} poin.` : `Dinilai panitia, 0–${s.max} poin.`}</p>;
+}
 
 // urgency: 'soon' (< 24 h) pulses amber, 'urgent' (< 3 h) turns red and pulses.
 function Stat({ label, value, sub, wide, urgency: u = 'calm' }) {

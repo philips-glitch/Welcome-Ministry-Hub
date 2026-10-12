@@ -76,12 +76,13 @@ export default function GroupForming() {
         onDragStart={(e) => { e.dataTransfer.setData('text/plain', p.id); setDragId(p.id); }}
         onDragEnd={() => { setDragId(null); setOver(null); }}
         onClick={() => canEdit && setDialog({ member: p })}
-        title={canEdit ? 'Klik untuk edit · seret untuk pindah grup' : p.full_name}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 7, background: bad ? '#FBE4E0' : isL ? '#E3EFE6' : p.is_ministry_tl ? '#FBF1D8' : '#FBF8F0', border: `1px solid ${bad ? '#D9695A' : '#EFE7D6'}`, cursor: canEdit ? 'grab' : 'default', fontSize: 11, opacity: dragId === p.id ? 0.4 : 1 }}
+        title={[p.full_name, p.service_team && 'Tim ' + p.service_team, p.position, p.ministry_role, canEdit && 'Klik untuk edit · seret untuk pindah grup'].filter(Boolean).join(' · ')}
+        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0 4px', padding: '3px 6px', borderRadius: 7, background: bad ? '#FBE4E0' : isL ? '#E3EFE6' : p.is_ministry_tl ? '#FBF1D8' : '#FBF8F0', border: `1px solid ${bad ? '#D9695A' : '#EFE7D6'}`, cursor: canEdit ? 'grab' : 'default', fontSize: 11, opacity: dragId === p.id ? 0.4 : 1 }}
       >
         <span style={{ fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.full_name || '@' + p.username}</span>
         <span style={{ fontSize: 9, fontWeight: 800, color: isL ? '#1F4D3A' : '#7A5410' }}>{isL ? '★ GL' : p.is_ministry_tl ? 'TL' : ''}</span>
-        {groupNo !== undefined && <span className="mono muted" style={{ fontSize: 9, fontWeight: 700 }}>{p.service_team || ''}</span>}
+        {/* Team on its own line: roster teams are named after their team leader, too long to share the name's line. */}
+        {groupNo !== undefined && p.service_team && <span className="muted" style={{ flexBasis: '100%', fontSize: 9.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Tim {p.service_team}{/inactive/i.test(p.ministry_role || '') ? ' · inactive' : ''}</span>}
       </div>
     );
   };
@@ -174,7 +175,7 @@ export default function GroupForming() {
             <span style={{ font: "700 14px 'Bricolage Grotesque'", color: '#1B2620' }}>Legenda</span>
             <span><b style={{ color: '#7A5410' }}>TL</b> Ministry TL (peran di tim pelayanan)</span>
             <span><b style={{ color: '#1F4D3A' }}>★ GL</b> Group Leader (tidak boleh TL)</span>
-            <span><b className="mono">LB</b> kode tim pelayanan</span>
+            <span><span className="muted">Tim …</span> tim asal di pelayanan (tidak boleh dobel dalam satu grup)</span>
             <span>Garis merah = melanggar aturan</span>
             {canEdit && <span>Klik nama untuk edit · seret untuk pindah</span>}
           </div>

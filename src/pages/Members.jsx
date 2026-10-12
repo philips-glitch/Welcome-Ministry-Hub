@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useMembers } from '../lib/members.jsx';
 import MemberDialog from '../components/MemberDialog.jsx';
+import RosterImportDialog from '../components/RosterImportDialog.jsx';
 import { ROLES, roleName } from '../lib/permissions.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useGame } from '../lib/gameStore.jsx';
 
 const PAGE = 25;
-const COLS = 'minmax(200px,1.6fr) 150px 130px 80px 90px 90px 60px';
+const COLS = 'minmax(200px,1.6fr) 150px 130px minmax(110px,1fr) 100px 90px 60px';
 const inputStyle = { height: 36, borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', padding: '0 10px', font: 'inherit', fontSize: 13 };
 
 export default function Members() {
@@ -24,13 +25,14 @@ export default function Members() {
   const [page, setPage] = useState(0);
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null); // { member } | {}
+  const [importing, setImporting] = useState(false);
   useEffect(() => setPage(0), [q, fRole, fGroup, fStatus]);
 
   const filtered = useMemo(() => {
     if (!rows) return [];
     const s = q.trim().toLowerCase();
     return rows.filter((r) =>
-      (!s || (r.full_name || '').toLowerCase().includes(s) || (r.username || '').includes(s.replace(/^@/, '')) || (r.contact_email || '').toLowerCase().includes(s) || (r.ig_handle || '').toLowerCase().includes(s)) &&
+      (!s || (r.full_name || '').toLowerCase().includes(s) || (r.username || '').includes(s.replace(/^@/, '')) || (r.contact_email || '').toLowerCase().includes(s) || (r.ig_handle || '').toLowerCase().includes(s) || (r.service_team || '').toLowerCase().includes(s) || (r.position || '').toLowerCase().includes(s)) &&
       (!fRole || r.role_id === fRole) &&
       (!fGroup || (fGroup === 'none' ? !r.group_no : r.group_no === fGroup)) &&
       (fStatus === 'all' || (fStatus === 'active' ? r.active : !r.active)));
@@ -61,7 +63,8 @@ export default function Members() {
           <span className="muted" style={{ fontSize: 13 }}>{rows ? `${counts.active} aktif dari ${counts.all} akun` : 'Memuat…'}{api.mode === 'demo' ? ' · data demo' : ''}</span>
           <span className="h1">Member Management</span>
         </div>
-        {canManage && <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setDialog({})}>+ Daftarkan member</button>}
+        {canRoles && <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setImporting(true)}>Import Excel</button>}
+        {canManage && <button className="btn btn-primary" style={{ marginLeft: canRoles ? 0 : 'auto' }} onClick={() => setDialog({})}>+ Daftarkan member</button>}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${ROLES.length},1fr)`, gap: 10 }}>
@@ -75,7 +78,7 @@ export default function Members() {
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="row" style={{ padding: '12px 18px', borderBottom: '1px solid #E9E0CC', flexWrap: 'wrap' }}>
-          <input aria-label="Cari member" placeholder="Cari nama, username, atau IG…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, flex: '1 1 240px' }} />
+          <input aria-label="Cari member" placeholder="Cari nama, username, tim, posisi, atau IG…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...inputStyle, flex: '1 1 240px' }} />
           <select aria-label="Filter role" value={fRole} onChange={(e) => setFRole(e.target.value)} style={inputStyle}>
             <option value="">Semua role</option>
             {ROLES.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -102,7 +105,7 @@ export default function Members() {
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 10, alignItems: 'center', fontSize: 13, padding: '9px 18px', borderTop: '1px solid #F0E9DA', opacity: r.active ? 1 : 0.55 }}>
               <div className="col" style={{ minWidth: 0 }}>
                 <span style={{ fontWeight: 700 }}>{r.full_name || '—'}{self && <span className="chip" style={{ marginLeft: 6, background: '#E3EFE6', color: '#1F4D3A' }}>KAMU</span>}</span>
-                <span className="muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{r.username}{r.ig_handle ? ' · IG ' + r.ig_handle : ''}{r.contact_email ? ' · ' + r.contact_email : ''}</span>
+                <span className="muted" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{r.username}{r.position ? ' · ' + r.position : ''}{r.ministry_role ? ' · ' + r.ministry_role : ''}{r.ig_handle ? ' · IG ' + r.ig_handle : ''}{r.contact_email ? ' · ' + r.contact_email : ''}</span>
               </div>
               {roleLocked ? <span>{roleName(r.role_id)}</span> : (
                 <select aria-label={`Role ${r.full_name}`} value={r.role_id} onChange={(e) => update(r, { role_id: e.target.value }, `${r.full_name} → ${roleName(e.target.value)}`)} style={{ ...inputStyle, height: 32 }}>
@@ -115,10 +118,11 @@ export default function Members() {
                   {GROUPS.map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
                 </select>
               ) : <span>{r.group_no ? `${r.group_no} ${groupName(r.group_no)}` : '—'}</span>}
-              <span className="mono muted" style={{ fontSize: 12 }}>{r.service_team || '—'}</span>
+              <span className="muted" title={r.service_team || ''} style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.service_team || '—'}</span>
               <span style={{ display: 'flex', gap: 4 }}>
                 {r.is_ministry_tl && <span className="chip" style={{ background: '#FBF1D8', color: '#7A5410' }}>TL</span>}
                 {r.is_committee && <span className="chip" style={{ background: '#EDE6D6', color: '#56655C' }}>PANITIA</span>}
+                {/inactive/i.test(r.ministry_role || '') && <span className="chip" title={r.ministry_role} style={{ background: '#FBE4E0', color: '#9A2A1E' }}>INACTIVE</span>}
               </span>
               {canManage && !self ? (
                 <button onClick={() => update(r, { active: !r.active }, `${r.full_name} ${r.active ? 'dinonaktifkan' : 'diaktifkan'}`)} className="chip" style={{ fontSize: 11, padding: '5px 10px', justifySelf: 'start', background: r.active ? '#E3EFE6' : '#FBE4E0', color: r.active ? '#1F4D3A' : '#9A2A1E' }}>
@@ -142,6 +146,7 @@ export default function Members() {
           {toast[1]}
         </div>
       )}
+      {importing && <RosterImportDialog onClose={() => setImporting(false)} onDone={(msg) => { setImporting(false); setToast(['ok', msg]); }} />}
       {dialog && <MemberDialog member={dialog.member} onClose={() => setDialog(null)} onSaved={(msg) => { setDialog(null); setToast(['ok', msg]); }} />}
     </div>
   );

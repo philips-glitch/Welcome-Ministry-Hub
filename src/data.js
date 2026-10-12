@@ -23,10 +23,6 @@ export const RIDDLES = [
   ['Tempat paling tenang untuk berdoa sebelum melayani.', 'Prayer room volunteer'],
 ];
 
-export const DRAW0 = [[1, 5, 8, 10], [4, 6, 2, 9], [7, 3, 10, 1], [3, 7, 2, 9], [5, 8, 6, 4], [10, 2, 1, 7], [9, 4, 5, 3], [6, 1, 9, 8], [2, 10, 4, 6], [8, 9, 7, 5]];
-// Per group, per riddle: V validated · S submitted/pending · D draft · N not started · X rejected
-export const R1STAT = ['VVSS', 'VVVS', 'VSSD', 'VSDN', 'VVSN', 'VXSD', 'SSDN', 'VSNN', 'SDNN', 'XDNN'];
-
 // Sort by `key` desc and assign competition ranks (1, 2, 2, 4).
 export function rank(rows, key) {
   const sorted = [...rows].sort((a, b) => b[key] - a[key] || a.no.localeCompare(b.no));

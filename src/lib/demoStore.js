@@ -5,7 +5,7 @@ import { DEFAULT_GRANTS } from './permissions.js';
 import { seedGame, gameMethods } from './demoGame.js';
 import { normalizeUsername, usernameError, authEmail } from './username.js';
 
-const KEY = 'flourish-demo-v3';
+const KEY = 'flourish-demo-v4';
 export const DEMO_PASSWORD = 'demo1234';
 const slug = (s) => s.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '');
 
@@ -151,6 +151,35 @@ export const demoApi = {
     s.grants[role] = [...set];
     save();
   },
+  // Roster import, same effect as reset_roster + create in Supabase: every account except Super Admins,
+  // every submission, draw, notification and Get to Know Me answer goes; groups are replaced.
+  // Demo accounts all log in with DEMO_PASSWORD.
+  async importRoster({ groups, accounts }, onProgress = () => {}) {
+    const s = load();
+    if (s.profiles.find((p) => p.id === s.sessionId)?.role_id !== 'super_admin') return fail('Hanya Super Admin yang bisa import roster.');
+    const keep = s.profiles.filter((p) => p.role_id === 'super_admin');
+    const keepIds = new Set(keep.map((p) => p.id));
+    const removed = s.profiles.length - keep.length;
+    keep.forEach((p) => { p.group_no = null; });
+    s.profiles = keep;
+    s.passwords = Object.fromEntries(Object.entries(s.passwords).filter(([id]) => keepIds.has(id)));
+    s.groups = groups.map((g) => ({ locked_at: null, locked_by: null, ...g }));
+    s.submissions = []; s.draws = []; s.notifications = []; s.notificationReads = {}; s.gtkm = {};
+    s.challenges.forEach((c) => { c.draw_seed = null; c.draw_locked = false; if (!keepIds.has(c.pic_id)) c.pic_id = null; });
+    const now = new Date().toISOString();
+    const stamp = Date.now().toString(36);
+    const created = accounts.map((a, i) => ({
+      id: `m-${stamp}-${i}`, contact_email: null, ig_handle: null, is_committee: false, is_ministry_tl: false, active: true,
+      service_team: null, position: null, ministry_role: null, group_no: null, created_at: now, ...a, email: authEmail(a.username),
+    }));
+    s.profiles.push(...created);
+    // No emit(): the signed-in Super Admin stays, and an auth event would remount the admin (and this dialog).
+    save();
+    onProgress(accounts.length, accounts.length);
+    return delay({ removed, created: created.map((r) => ({ ...r, password: DEMO_PASSWORD })), failed: [] });
+  },
+  // Which of the demo login cards still exist (an import removes them).
+  async demoAccountsPresent(ids) { const s = load(); return ids.filter((id) => s.profiles.some((p) => p.id === id && p.active)); },
   resetDemo() { state = seed(); save(); emit(); },
   ...gameMethods({ load, save, delay, fail }),
 };

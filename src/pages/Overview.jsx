@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, isStaffOf } from '../lib/groups.js';
-import { fmtWIB, statusMeta } from '../lib/game.js';
+import { leaderName, isStaffOf, isPlayer } from '../lib/groups.js';
+import { fmtWIB, statusMeta, isConnect, latestPerUnit } from '../lib/game.js';
 import useCountdown from '../useCountdown.js';
 
 const DOT = { V: ['#2F7A55', 'none'], S: ['#6F95CF', 'none'], D: ['#E3A92B', 'none'], N: ['transparent', '1.5px solid #CFC4AA'], X: ['#C4533F', 'none'] };
@@ -55,9 +55,21 @@ export default function Overview({ onNavigate }) {
   const cd = useCountdown(focus?.deadline_at ? new Date(focus.deadline_at).getTime() : 0);
   const pic = members.find((p) => p.id === focus?.pic_id)?.full_name;
   const perGroup = focus?.riddles_per_group || 0;
+  // Connect challenges (every member submits): count people, not riddles.
+  const connect = isConnect(focus);
+  const people = focus?.scoring?.people || 2;
+  const players = members.filter(isPlayer);
 
   const rows = GROUPS.map(({ no, name, color }) => {
     const mine = subs.filter((x) => x.group_no === no);
+    if (connect) {
+      const cur = latestPerUnit(mine);
+      const roster = players.filter((p) => p.group_no === no).length;
+      const took = new Set(cur.filter((x) => ['submitted', 'validated'].includes(x.status)).map((x) => x.submitted_by)).size;
+      const last = mine.map((x) => x.submitted_at).sort().pop();
+      const captain = members.filter((p) => isStaffOf(p, no)).map((p) => p.full_name).join(', ') || '—';
+      return { no, name, color, captain, leader: leaderName(members, no), dots: [], took, roster, rec: cur.length, pen: cur.filter((x) => x.status === 'submitted').length, val: cur.filter((x) => x.status === 'validated').length, last: last ? fmtWIB(last, { day: undefined, month: undefined }).replace(' WIB', '') : '—' };
+    }
     const latest = (riddleId) => mine.filter((x) => x.riddle_id === riddleId).sort((a, b) => b.version - a.version)[0];
     const slots = draw.filter((d) => d.group_no === no).sort((a, b) => a.slot - b.slot);
     const dots = perGroup ? slots.map((d) => STATE[latest(d.riddle_id)?.status] || 'N') : [];
@@ -68,7 +80,7 @@ export default function Overview({ onNavigate }) {
   });
   const received = rows.reduce((a, r) => a + r.rec, 0);
   const pendingR1 = rows.reduce((a, r) => a + r.pen, 0);
-  const expected = perGroup * GROUPS.length;
+  const expected = connect ? players.filter((p) => p.group_no).length * people : perGroup * GROUPS.length;
 
   return (
     <div className="page">
@@ -95,7 +107,7 @@ export default function Overview({ onNavigate }) {
         <div className="card" style={statCard}>
           <span className="muted" style={{ fontSize: 13 }}>Submission {focus?.code ?? ''} masuk</span>
           <span style={bigNum}>{received}{expected ? <span className="muted" style={{ fontSize: 16 }}> / {expected}</span> : null}</span>
-          <span className="muted" style={{ fontSize: 12 }}>{perGroup ? `${perGroup} riddle × ${GROUPS.length} grup` : 'submission terbaru per grup'}</span>
+          <span className="muted" style={{ fontSize: 12 }}>{connect ? `${people} orang × ${players.filter((p) => p.group_no).length} anggota` : perGroup ? `${perGroup} riddle × ${GROUPS.length} grup` : 'submission terbaru per grup'}</span>
         </div>
         <div className="card" style={statCard}>
           <span className="muted" style={{ fontSize: 13 }}>Menunggu validasi</span>
@@ -153,13 +165,14 @@ export default function Overview({ onNavigate }) {
             </span>
           </div>
           <div className="muted" style={{ display: 'grid', gridTemplateColumns: COLS, fontSize: 12, fontWeight: 700, padding: '10px 18px', background: '#F6F0E2' }}>
-            <span>Grup</span><span>Captain · Leader</span><span>Riddle</span><span>Masuk</span><span>Pending</span><span>Valid</span><span>Aktivitas terakhir</span>
+            <span>Grup</span><span>Captain · Leader</span><span>{connect ? 'Anggota ikut' : 'Riddle'}</span><span>Masuk</span><span>Pending</span><span>Valid</span><span>Aktivitas terakhir</span>
           </div>
           {rows.map((g) => (
             <div key={g.no} style={{ display: 'grid', gridTemplateColumns: COLS, alignItems: 'center', fontSize: 13, padding: '9px 18px', borderTop: '1px solid #F0E9DA' }}>
               <span className="row" style={{ gap: 8, fontWeight: 700 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: g.color }} />{g.no} {g.name}</span>
               <span style={{ color: '#3C4A42' }}>{g.captain} · {g.leader}</span>
               <span style={{ display: 'flex', gap: 4 }}>
+                {connect && <span className="num" style={{ fontWeight: 700 }}>{g.took}/{g.roster}</span>}
                 {g.dots.map((d, k) => <span key={k} style={{ width: 18, height: 18, borderRadius: 5, background: DOT[d][0], border: DOT[d][1] }} />)}
               </span>
               <span className="num">{g.rec}</span>

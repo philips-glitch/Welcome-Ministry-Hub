@@ -1,7 +1,7 @@
 import useCountdown from '../useCountdown.js';
 import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
-import { fmtWIB, statusMeta } from '../lib/game.js';
+import { fmtWIB, statusMeta, isConnect, latestPerUnit } from '../lib/game.js';
 import { CountUp, urgency } from './motion.jsx';
 
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
@@ -15,8 +15,12 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
   const ahead = idx > 0 ? standings.slice(0, idx).reverse().find((g) => g.total > mine.total) : null;
   const rankHint = !mine ? 'Kamu belum masuk grup.' : mine.rank === 1 ? 'Grup kamu memimpin. Pertahankan!' : `Tinggal ${Math.round((ahead.total - mine.total) * 10) / 10} poin lagi ke #${ahead.rank}. Gas!`;
 
-  const slots = data?.draw.length || 0;
-  const sent = data ? data.draw.filter((d) => data.latest(d.riddle_id)).length : 0;
+  // Focus progress: my people for connect challenges, the group's riddles otherwise.
+  const connect = isConnect(focus);
+  const slots = connect ? (data ? focus.scoring?.people || 2 : 0) : data?.draw.length || 0;
+  const sent = !data ? 0 : connect
+    ? latestPerUnit(data.subs.filter((x) => x.submitted_by === me.id && x.target_id)).filter((x) => ['submitted', 'validated'].includes(x.status)).length
+    : data.draw.filter((d) => data.latest(d.riddle_id)).length;
   const others = challenges.filter((c) => c.id !== focus?.id);
   const week = focus ? [
     ['announce_at', 'Diumumkan'], ['deadline_at', 'Deadline'], ['validate_by', 'Validasi'],
@@ -46,7 +50,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, fontSize: 13, position: 'relative' }}>
               <span>{u === 'urgent' ? '⏰ Kurang dari 3 jam! · ' : u === 'soon' ? '⏳ Kurang dari 24 jam · ' : ''}{focus.deadline_at ? fmtWIB(focus.deadline_at) : 'Deadline belum diumumkan'}</span>
-              {slots > 0 && <span style={{ fontWeight: 700 }}>{sent} dari {slots} riddle terkirim</span>}
+              {slots > 0 && <span style={{ fontWeight: 700 }}>{sent} dari {slots} {connect ? 'teman baru kamu' : 'riddle terkirim'}</span>}
             </div>
             {slots > 0 && (
               <div style={{ height: 8, borderRadius: 4, background: 'rgba(251,246,234,.18)', position: 'relative' }}>
@@ -72,7 +76,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: c.kind === 'side' ? '#E3EFE6' : '#F8E9C4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.kind === 'side' ? '#1F4D3A' : '#7A5410', fontWeight: 800, fontSize: 12, flex: 'none' }}>{c.code}</div>
                   <div className="col" style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 700, fontSize: 15 }}>{c.name}</span>
-                    <span className="muted" style={{ fontSize: 12 }}>{soon ? (c.announce_at ? 'Diumumkan ' + fmtWIB(c.announce_at) : 'Tanggal TBD') : c.deadline_at ? 's/d ' + fmtWIB(c.deadline_at) : ''}</span>
+                    <span className="muted" style={{ fontSize: 12 }}>{soon ? (c.open_at ? 'Dibuka ' + fmtWIB(c.open_at) : c.announce_at ? 'Diumumkan ' + fmtWIB(c.announce_at) : 'Tanggal TBD') : c.deadline_at ? 's/d ' + fmtWIB(c.deadline_at) : ''}</span>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 9px', borderRadius: 999, background: soon ? '#EDE6D6' : bg, color: soon ? '#56655C' : fg }}>{soon ? 'SOON' : label.toUpperCase()}</span>
                 </button>

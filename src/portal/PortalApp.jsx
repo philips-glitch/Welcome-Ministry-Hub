@@ -5,7 +5,7 @@ import Logo from '../components/Logo.jsx';
 import { roleName } from '../lib/permissions.js';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
-import { buildStandings } from '../lib/game.js';
+import { buildStandings, isConnect } from '../lib/game.js';
 import { isPlayer } from '../lib/groups.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
@@ -50,11 +50,14 @@ export default function PortalApp({ route }) {
 
   const gr = game.groupOf(profile.group_no);
   const g = gr && [gr.no, gr.name, gr.color];
+  // Connect challenges (Get to Know Me) are done by every player; the rest by whoever has portal.submit (Group Leader).
+  const canSubmitFor = (c) => !!g && (isConnect(c) ? isPlayer(profile) : can('portal.submit'));
   const me = {
+    id: profile.id,
     first: (profile.full_name || profile.username || '').split(' ')[0],
     roleName: roleName(profile.role_id),
     group: g && { no: g[0], name: g[1], color: g[2] },
-    canSubmit: can('portal.submit') && !!g,
+    canSubmit: canSubmitFor(challenge),
   };
   const data = useGroupChallenge(challenge, me.group?.no);
   const notif = useNotifications();
@@ -62,7 +65,7 @@ export default function PortalApp({ route }) {
   const [justSent, setJustSent] = useState(null);
   const onSubmitted = (row) => {
     data.reload(); game.reloadScores(); notif.reload();
-    setJustSent(row?.riddle_id ?? 'single');
+    setJustSent(row?.target_id ?? row?.riddle_id ?? 'single');
     setTimeout(() => setJustSent(null), 6000);
   };
   // Bell rings whenever the unread count goes up.
@@ -78,7 +81,7 @@ export default function PortalApp({ route }) {
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
-  else if (page === 'submit') content = me.canSubmit ? <Submit go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} />;
+  else if (page === 'submit') content = me.canSubmit ? <Submit key={challenge?.id + ':' + riddleId} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;
@@ -139,15 +142,15 @@ function useGroupChallenge(challenge, groupNo) {
     setState({ riddles: riddles.filter((r) => ids.has(r.id)), draw: mine, subs, roster: profiles.filter((p) => isPlayer(p) && p.group_no === groupNo), loading: false });
   }, [id, groupNo]);
   useEffect(() => { setState((s) => ({ ...s, loading: true })); reload().catch(() => setState((s) => ({ ...s, loading: false }))); }, [reload]);
-  const latest = (riddleId) => state.subs.filter((x) => (x.riddle_id ?? null) === (riddleId ?? null)).sort((a, b) => b.version - a.version)[0] || null;
+  const latest = (riddleId) => state.subs.filter((x) => !x.target_id && (x.riddle_id ?? null) === (riddleId ?? null)).sort((a, b) => b.version - a.version)[0] || null;
   return { ...state, reload, latest };
 }
 
-function NoSubmit({ go }) {
+function NoSubmit({ go, connect }) {
   return (
     <div className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 24 }}>
-      <span style={{ font: "700 20px 'Bricolage Grotesque'" }}>Hanya Group Leader yang bisa submit</span>
-      <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>Kamu tetap bisa bantu: kirim foto ke Group Leader atau upload ke draft grup.</span>
+      <span style={{ font: "700 20px 'Bricolage Grotesque'" }}>{connect ? 'Challenge ini untuk peserta grup' : 'Hanya Group Leader yang bisa submit'}</span>
+      <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{connect ? 'Setiap anggota grup submit sendiri. Akun kamu belum masuk grup sebagai peserta.' : 'Kamu tetap bisa bantu: kirim foto ke Group Leader atau upload ke draft grup.'}</span>
       <button onClick={() => go('challenge')} style={{ alignSelf: 'flex-start', height: 44, padding: '0 18px', borderRadius: 14, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Kembali ke challenge</button>
     </div>
   );
@@ -185,7 +188,7 @@ function Soon({ title, go }) {
       <div style={{ width: 64, height: 64, borderRadius: 22, background: '#E3EFE6', color: '#2F7A55', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Leaf size={30} /></div>
       <span style={{ font: "700 20px 'Bricolage Grotesque'" }}>{title}</span>
       <span className="muted" style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 420 }}>Layar ini belum ada di design. Sementara itu, cek challenge yang sedang live.</span>
-      <button onClick={() => go('challenge')} style={{ height: 44, padding: '0 18px', borderRadius: 14, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Buka Photo Challenge</button>
+      <button onClick={() => go('challenge')} style={{ height: 44, padding: '0 18px', borderRadius: 14, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Buka challenge</button>
     </div>
   );
 }

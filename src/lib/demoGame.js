@@ -1,88 +1,84 @@
-// Demo-mode game data, mirroring supabase/migrations/0002_game.sql (same tables, same seed).
-import { GROUPS, RIDDLES, DRAW0, R1STAT } from '../data.js';
-import { DEFAULT_SCORING } from './game.js';
-import { notifyReview, notifyChallenge, syncReminders, seedNotifications } from './demoNotify.js';
+// Demo-mode game data, mirroring supabase/migrations/0002_game.sql + 0006_playbook_events.sql (same tables, same seed).
+import { GROUPS, RIDDLES, rng } from '../data.js';
+import { PLAYBOOK } from './playbook.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults } from './game.js';
+import { isPlayer } from './groups.js';
+import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
-
-const R1_SECTIONS = {
-  game_idea: 'Riddle berburu lokasi di area gereja. Tiap grup dapat 4 riddle acak dari bank 10.',
-  how_to_play: 'Pecahkan riddle → datang ke lokasi → selfie satu grup → post IG Story tag akun event → Leader submit di portal.',
-  connection: 'Memaksa grup bergerak bareng dan ngobrol di luar jam pelayanan biasa.',
-  points_rewards: 'Maks 10/riddle: 50% lokasi benar + 50% partisipasi. “First correct” direpost Rabu.',
-  flourish_hub: 'Submit: foto grup + link/screenshot IG Story + tag anggota + deklarasi No-AI. Verifikasi oleh captain.',
-  what_we_need: 'Venue: seluruh area gedung · Material: riddle card digital.',
-  make_it_flourish: 'Repost foto terbaik; captain kasih shout-out di grup WA.',
-  duration: 'Kam 15 Okt 20:00 – Min 18 Okt 23:55 WIB',
+// has_permission() for the signed-in demo user.
+const canDemo = (s, perm) => {
+  const me = s.profiles.find((p) => p.id === s.sessionId);
+  return !!me?.active && (s.grants?.[me.role_id] || []).includes(perm);
 };
+const EMPTY_REVIEW = { reviewed_by: null, reviewed_at: null, checks: null, location_correct: null, participant_count: null, score: null, override_note: null, reject_reason: null, marks: null };
+
+// Sample Member Form answers (Get to Know Me) for the demo roster.
+const WORDS = ['Ceria, jujur, spontan', 'Kalem, teliti, setia', 'Ramah, kreatif, ambisius', 'Lucu, peduli, berisik', 'Tenang, sabar, detail', 'Energik, optimis, ramah', 'Pemalu, hangat, rajin', 'Santai, humoris, loyal'];
+const ENJOY = ['Hiking', 'Masak pasta', 'Main badminton', 'Nonton drakor', 'Ngopi sambil baca', 'Fotografi jalanan', 'Bersepeda pagi', 'Main board game', 'Berkebun', 'Karaoke'];
+const TALENT = ['Main piano', 'Sulap kartu', 'Gambar karikatur', 'Hafal jalan Jakarta', 'Beatbox', 'Masak rendang', 'Main gitar', 'Bisa 4 bahasa', 'Origami', 'Menari salsa'];
+const FOUND = ['Pernah tinggal di Jepang 2 tahun waktu kuliah', 'Jago main catur sejak SD, pernah juara kecamatan', 'Pernah ikut lomba paduan suara nasional', 'Bangun jam 4 pagi buat lari 5 km', 'Dulu pemain basket kampus', 'Lagi belajar bahasa Korea buat liburan', 'Pernah mendaki Rinjani sampai puncak', 'Punya 3 kucing yang namanya dari tokoh film'];
 
 export function seedGame(profiles) {
   const pic = (name) => profiles.find((p) => p.full_name === name)?.id ?? null;
+  const PICS = { R1: 'Cindy', R2: 'Cindy', R3: 'Danny', R5: 'Rocky' };
   const ch = (code, kind, round, name, status, [announce, open, deadline, validate], extra = {}) => ({
     id: 'c-' + code.toLowerCase(), code, kind, round, name, pic_id: null, status,
     announce_at: wib(announce), open_at: wib(open), deadline_at: wib(deadline), validate_by: wib(validate),
-    sections: {}, scoring: { type: 'manual', max: 20 }, riddles_per_group: 0, draw_seed: null, draw_locked: false,
+    sections: {}, scoring: { type: 'manual', max: 20 }, form: {}, riddles_per_group: 0, draw_seed: null, draw_locked: false,
     sort: 0, created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', ...extra,
   });
   const challenges = [
-    ch('R1', 'main', 1, 'Photo Challenge', 'live', ['2026-10-15T20:00', '2026-10-15T20:00', '2026-10-18T23:55', '2026-10-20T23:59'],
-      { pic_id: pic('Cindy'), sections: R1_SECTIONS, scoring: DEFAULT_SCORING, riddles_per_group: 4, draw_seed: 7731, draw_locked: true, sort: 1 }),
-    ch('R4', 'main', 4, 'Scrapbook / Poster', 'scheduled', ['2026-10-15T20:00', '2026-10-15T20:00', '2026-11-19T23:55', null], { pic_id: pic('Rocky'), scoring: { type: 'manual', max: 30 }, sort: 4 }),
-    ch('R2', 'main', 2, 'Video Challenge', 'draft', ['2026-10-22T20:00', '2026-10-25T00:00', '2026-11-01T23:55', null], { pic_id: pic('Danny'), sort: 2 }),
-    ch('R3', 'main', 3, 'Spice It Up', 'draft', ['2026-11-04T20:00', '2026-11-06T20:00', '2026-11-08T23:55', null], { pic_id: pic('Maya'), sort: 3 }),
-    ch('R5', 'main', 5, 'Beyond UR', 'draft', [null, null, null, null], { sort: 5 }),
-    ch('R6', 'main', 6, 'The Legacy Challenge', 'draft', [null, null, null, null], { sort: 6 }),
-    ch('SQ1', 'side', null, 'Get To Know Me', 'live', ['2026-10-08T20:00', '2026-10-08T20:00', '2026-11-19T23:55', null], { scoring: { type: 'flat', max: 10 }, sort: 7 }),
-    ch('SQ2', 'side', null, 'Find Your Match', 'live', ['2026-10-08T20:00', '2026-10-08T20:00', '2026-11-19T23:55', null], { scoring: { type: 'flat', max: 15 }, sort: 8 }),
-    ch('SQ3', 'side', null, 'Connect 10', 'scheduled', ['2026-10-22T20:00', '2026-10-22T20:00', '2026-11-19T23:55', null], { scoring: { type: 'flat', max: 30 }, sort: 9 }),
-  ];
-  const riddles = RIDDLES.map(([prompt, answer], i) => ({ id: `r-${i + 1}`, challenge_id: 'c-r1', no: i + 1, prompt, answer }));
-  const draws = DRAW0.flatMap((nos, gi) => nos.map((n, k) => ({ challenge_id: 'c-r1', group_no: GROUPS[gi][0], slot: k + 1, riddle_id: `r-${n}` })));
+    ...PLAYBOOK.map(({ code, kind, round, name, status, schedule, ...rest }) => ch(code, kind, round, name, status, schedule, { ...rest, pic_id: pic(PICS[code]) })),
+    // Mini Event #4 is unchanged from before, only renumbered (was R3).
+    ch('R4', 'main', 4, 'Spice It Up', 'draft', ['2026-11-04T20:00', '2026-11-06T20:00', '2026-11-08T23:55', null], { pic_id: pic('Maya'), sort: 4 }),
+  ].sort((a, b) => a.sort - b.sort);
+  // Guess, Find, Snap! keeps the riddle bank; the draw happens when it goes live.
+  const riddles = RIDDLES.map(([prompt, answer], i) => ({ id: `r-${i + 1}`, challenge_id: 'c-r2', no: i + 1, prompt, answer }));
+  const draws = [];
 
-  // Submissions matching the Overview snapshot: V validated · S waiting · X rejected (D/N = nothing yet).
-  const roster = (no) => profiles.filter((p) => p.group_no === no && ['member', 'group_leader'].includes(p.role_id));
-  const leader = (no) => roster(no).find((p) => p.role_id === 'group_leader')?.id ?? null;
-  const VALID = [[true, 12, 10], [true, 8, 8], [true, 5, 6]]; // location, headcount → score
+  const players = profiles.filter(isPlayer);
+  const gtkm = Object.fromEntries(players.map((p, i) => [p.id, { words: WORDS[i % WORDS.length], enjoy: ENJOY[(i * 3) % ENJOY.length], talent: TALENT[(i * 7) % TALENT.length] }]));
+
+  // Get to Know Me (live on the demo clock): some members already sent 1–2 people; the first ~60% are validated.
+  // The demo login accounts (u-…) haven't submitted, so they can try it.
+  const r = rng(2026);
+  const pick = (xs) => xs[Math.floor(r() * xs.length)];
+  const c1 = challenges.find((c) => c.code === 'R1');
   const submissions = [];
-  let q = 0;
-  R1STAT.forEach((st, gi) => {
-    const no = GROUPS[gi][0];
-    [...st].forEach((c, k) => {
-      if (c === 'D' || c === 'N') return;
-      const base = {
-        id: uid(), challenge_id: 'c-r1', group_no: no, riddle_id: `r-${DRAW0[gi][k]}`, version: 1, submitted_by: leader(no),
-        media_path: null, media_name: 'IMG_2041.jpg', ig_url: `instagram.com/stories/${GROUPS[gi][1].toLowerCase().replace(/\s/g, '')}.wm${no}/3219`,
-        declaration: true, reviewed_by: null, reviewed_at: null, checks: null, location_correct: null, participant_count: null, score: null, override_note: null, reject_reason: null,
-      };
-      if (c === 'S') {
-        const n = [12, 9, 11, 13, 8, 10, 14, 7][q % 8];
-        const t = new Date(new Date(wib('2026-10-16T09:05')).getTime() + q * 21 * 60e3).toISOString();
-        q++;
-        submissions.push({ ...base, status: 'submitted', submitted_at: t, tagged_ids: roster(no).slice(0, n).map((p) => p.id) });
-      } else {
-        const [loc, n, score] = VALID[(gi + k) % 3];
+  const answer = (t, mark, k) => {
+    const g = gtkm[t.id];
+    if (k === 'q4') return mark === 4 ? pick(FOUND) : mark === 2 ? 'Orangnya asik dan gampang diajak ngobrol' : '';
+    const v = g[{ q1: 'words', q2: 'enjoy', q3: 'talent' }[k]];
+    return mark === 2 ? v : mark === 1 ? v.split(/[ ,]/)[0] + '…' : pick(['Lupa', 'Musik', 'Olahraga', '']);
+  };
+  GROUPS.forEach(([no], gi) => {
+    const roster = players.filter((p) => p.group_no === no);
+    const n = roster.length;
+    const takers = roster.filter((p) => !p.id.startsWith('u-')).slice(0, [9, 11, 6, 10, 5, 8, 12, 7, 4, 3][gi]);
+    takers.forEach((p, i) => {
+      const at = roster.indexOf(p);
+      const targets = [roster[(at + 1) % n], roster[(at + 3) % n]].slice(0, i % 4 === 3 ? 1 : 2);
+      const validated = i < Math.ceil(takers.length * 0.6);
+      targets.forEach((t, k) => {
+        const marks = { q1: pick([2, 2, 1, 0]), q2: pick([2, 2, 1, 2]), q3: pick([2, 1, 0, 2]), q4: pick([4, 4, 2, 0]) };
+        const photo = r() < 0.5;
+        if (photo) marks.photo = r() < 0.85;
+        const submitted = new Date(new Date(wib('2026-10-12T20:00')).getTime() + (gi * 37 + i * 61 + k * 13) * 60e3 * 1.2).toISOString();
         submissions.push({
-          ...base, status: c === 'V' ? 'validated' : 'rejected', submitted_at: wib('2026-10-15T22:30'), tagged_ids: roster(no).slice(0, n).map((p) => p.id),
-          reviewed_at: wib('2026-10-16T08:00'), location_correct: loc, participant_count: n, score: c === 'V' ? score : null,
-          checks: [c === 'V', true, true, true, true], reject_reason: c === 'X' ? 'IG tag tidak ada' : null,
+          id: uid(), challenge_id: c1.id, group_no: no, riddle_id: null, target_id: t.id, version: 1, submitted_by: p.id, submitted_at: submitted,
+          answers: Object.fromEntries(['q1', 'q2', 'q3', 'q4'].map((q) => [q, answer(t, marks[q], q)])),
+          media_path: null, media_name: photo ? 'foto-bareng.jpg' : null, ig_url: null, tagged_ids: [], declaration: true, ...EMPTY_REVIEW,
+          ...(validated ? { status: 'validated', marks, score: marksScore(c1.scoring, marks), checks: [true, true, true], reviewed_at: wib('2026-10-16T10:00') } : { status: 'submitted' }),
         });
-      }
-    });
-  });
-  // Side quests already validated before R1.
-  GROUPS.slice(0, 7).forEach(([no], gi) => {
-    const sq = gi < 2 ? ['c-sq2', 15] : ['c-sq1', 10];
-    submissions.push({
-      id: uid(), challenge_id: sq[0], group_no: no, riddle_id: null, version: 1, status: 'validated', submitted_by: leader(no),
-      submitted_at: wib('2026-10-11T19:00'), media_path: null, media_name: 'sidequest.jpg', ig_url: null, tagged_ids: [], declaration: true,
-      reviewed_by: null, reviewed_at: wib('2026-10-13T20:00'), checks: null, location_correct: null, participant_count: null, score: sq[1], override_note: null, reject_reason: null,
+      });
     });
   });
 
   const groups = GROUPS.map(([no, name, color], i) => ({ no, name, color, min_size: 13, max_size: 14, sort: i + 1, locked_at: null, locked_by: null }));
-  return { groups, challenges, riddles, draws, submissions };
+  return { groups, challenges, riddles, draws, submissions, gtkm };
 }
 
 // Game methods over the demo state. `ctx` = { load, save, delay, fail }.
@@ -192,28 +188,59 @@ export function gameMethods({ load, save, delay, fail }) {
       save();
       return this.saveChallenge({ id: challengeId, draw_seed: seed });
     },
+    // Members only see their own entries in connect challenges (so answers can't be copied); staff see all.
     async listSubmissions({ challengeId, groupNo } = {}) {
-      return delay(structuredClone(load().submissions.filter((x) => (!challengeId || x.challenge_id === challengeId) && (!groupNo || x.group_no === groupNo)))
+      const s = load();
+      const staff = canDemo(s, 'submissions.validate') || canDemo(s, 'scores.view');
+      const connect = new Set(s.challenges.filter(isConnect).map((c) => c.id));
+      return delay(structuredClone(s.submissions.filter((x) => (!challengeId || x.challenge_id === challengeId) && (!groupNo || x.group_no === groupNo)
+        && (staff || !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
         .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)));
     },
+    // Same checks as prepare_submission() in SQL.
     async createSubmission({ file, ...sub }) {
       const s = load();
       const c = s.challenges.find((x) => x.id === sub.challenge_id);
-      if (!c || c.status !== 'live') return fail('Challenge ini sedang tidak menerima submission.');
-      const prev = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no && x.riddle_id === (sub.riddle_id ?? null));
+      if (!c || c.status !== 'live' || (c.deadline_at && demoNow() > new Date(c.deadline_at).getTime())) return fail('Challenge ini sedang tidak menerima submission.');
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      if (!me?.active || me.group_no !== sub.group_no) return fail('Hanya bisa submit untuk grup sendiri.');
+      if (isConnect(c)) {
+        const t = s.profiles.find((p) => p.id === sub.target_id);
+        if (!t || t.id === me.id || t.group_no !== me.group_no || !isPlayer(t)) return fail('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
+        const mine = s.submissions.filter((x) => x.challenge_id === c.id && x.submitted_by === me.id);
+        const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
+        const cur = latest(t.id);
+        if (cur && !['rejected', 'resubmit'].includes(cur.status)) return fail(`${t.full_name} sudah kamu submit.`);
+        const active = new Set(mine.filter((x) => x.target_id !== t.id && ['submitted', 'validated'].includes(latest(x.target_id).status)).map((x) => x.target_id));
+        if (active.size >= withDefaults(c.scoring).people) return fail(`Maksimal ${withDefaults(c.scoring).people} orang per member.`);
+      } else if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
+      const row0 = { riddle_id: null, target_id: null, ...sub, submitted_by: s.sessionId };
+      const prev = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no && unitKey(x) === unitKey(row0));
       // Same path layout as the Supabase bucket: <group>/<id>-<name>.
       let media_path = null;
       if (file) {
-        media_path = `${sub.group_no}/${uid()}-${file.name.replace(/[^w.-]+/g, '_')}`;
+        media_path = `${sub.group_no}/${uid()}-${file.name.replace(/[^\w.-]+/g, '_')}`;
         try { await putMedia(media_path, file); } catch { return fail('Foto gagal disimpan di browser ini.'); }
       }
       const row = {
-        id: uid(), riddle_id: null, ig_url: null, tagged_ids: [], declaration: false, ...sub, media_path, media_name: file?.name ?? sub.media_name ?? null,
-        version: prev.length + 1, status: 'submitted', submitted_by: s.sessionId, submitted_at: new Date().toISOString(),
-        reviewed_by: null, reviewed_at: null, checks: null, location_correct: null, participant_count: null, score: null, override_note: null, reject_reason: null,
+        id: uid(), ig_url: null, tagged_ids: [], declaration: false, answers: null, ...row0, media_path, media_name: file?.name ?? sub.media_name ?? null,
+        version: prev.length + 1, status: 'submitted', submitted_at: new Date(demoNow()).toISOString(), ...EMPTY_REVIEW,
       };
       s.submissions.push(row);
       save(); return delay(structuredClone(row));
+    },
+    // Get to Know Me answers from the Member Form; only staff read them (answer key for R1).
+    async getGtkm(ids) {
+      const s = load();
+      if (!canDemo(s, 'submissions.validate') && !canDemo(s, 'members.manage')) return delay({});
+      return delay(Object.fromEntries(ids.filter((id) => s.gtkm?.[id]).map((id) => [id, { ...s.gtkm[id] }])));
+    },
+    async saveGtkm(id, data) {
+      const s = load();
+      if (!canDemo(s, 'members.manage')) return fail('Butuh hak “Daftarkan, ubah & nonaktifkan member”.');
+      s.gtkm ||= {};
+      s.gtkm[id] = { ...s.gtkm[id], ...data };
+      save(); return delay({ ...s.gtkm[id] });
     },
     async reviewSubmission(id, patch) {
       const s = load();
@@ -225,16 +252,20 @@ export function gameMethods({ load, save, delay, fail }) {
       save(); return delay(structuredClone(s.submissions[i]));
     },
     async mediaUrl(path) { return mediaObjectUrl(path); },
+    // Same rules as group_scores() in SQL (see groupPoints in game.js).
     async groupScores() {
       const s = load();
-      const open = new Set(s.challenges.filter((c) => c.status !== 'draft').map((c) => c.id));
-      const acc = {};
-      s.submissions.filter((x) => x.status === 'validated' && open.has(x.challenge_id)).forEach((x) => {
-        const k = x.group_no + '|' + x.challenge_id;
-        acc[k] ||= { group_no: x.group_no, challenge_id: x.challenge_id, points: 0, validated: 0 };
-        acc[k].points += Number(x.score) || 0; acc[k].validated++;
+      const roster = {};
+      s.profiles.filter((p) => isPlayer(p) && p.group_no).forEach((p) => { roster[p.group_no] = (roster[p.group_no] || 0) + 1; });
+      const out = [];
+      s.challenges.filter((c) => c.status !== 'draft').forEach((c) => {
+        const valid = s.submissions.filter((x) => x.challenge_id === c.id && x.status === 'validated');
+        [...new Set(valid.map((x) => x.group_no))].forEach((no) => {
+          const mine = valid.filter((x) => x.group_no === no);
+          out.push({ group_no: no, challenge_id: c.id, points: groupPoints(c, mine, roster[no] || 0), validated: mine.length });
+        });
       });
-      return delay(Object.values(acc));
+      return delay(out);
     },
   };
 }

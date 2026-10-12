@@ -3,18 +3,20 @@ import { ROLES } from '../lib/permissions.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { api } from '../lib/api.js';
-import { TEAMS } from '../data.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { normalizeUsername, usernameError, suggestUsername } from '../lib/username.js';
+import { GTKM_FIELDS } from '../lib/game.js';
 
 const input = { height: 38, borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', padding: '0 10px', font: 'inherit', fontSize: 13, fontWeight: 500, color: '#1B2620', width: '100%' };
 const field = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontWeight: 700, minWidth: 0 };
-const EDITABLE = ['full_name', 'contact_email', 'role_id', 'group_no', 'service_team', 'ig_handle', 'is_ministry_tl', 'is_committee', 'active'];
+const EDITABLE = ['full_name', 'contact_email', 'role_id', 'group_no', 'service_team', 'position', 'ministry_role', 'ig_handle', 'is_ministry_tl', 'is_committee', 'active'];
 
 // Register a new member (admin sets the starting password) or edit an existing one.
 export default function MemberDialog({ member, defaults = {}, onClose, onSaved }) {
   const { profile: me, can } = useAuth();
-  const { create, update, setPassword, setUsername } = useMembers();
+  const { rows, create, update, setPassword, setUsername } = useMembers();
+  // Suggestions from the current roster (teams are named after their team leader in the ministry data).
+  const options = (k) => [...new Set((rows || []).map((p) => p[k]).filter(Boolean))].sort();
   const GROUPS = useGame().groups || [];
   const editing = !!member;
   const canRoles = can('roles.manage');
@@ -22,13 +24,22 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
   const roleLocked = self || (editing && member.role_id === 'super_admin' && !canRoles);
 
   const [f, setF] = useState(() => ({
-    full_name: '', username: '', contact_email: '', password: '', role_id: 'member', group_no: '', service_team: '', ig_handle: '',
+    full_name: '', username: '', contact_email: '', password: '', role_id: 'member', group_no: '', service_team: '', position: '', ministry_role: '', ig_handle: '',
     is_ministry_tl: false, is_committee: false, active: true,
     ...defaults,
     ...(member && Object.fromEntries(Object.entries(member).map(([k, v]) => [k, v ?? '']))),
     password: '',
   }));
   const [newPw, setNewPw] = useState('');
+  // Member Form answers (Get to Know Me): the answer key for R1, readable by staff only.
+  const [gtkm, setGtkm] = useState({});
+  const [gtkm0, setGtkm0] = useState({});
+  useEffect(() => {
+    if (!editing) return;
+    api.getGtkm([member.id]).then((m) => { setGtkm(m[member.id] || {}); setGtkm0(m[member.id] || {}); }).catch(() => {});
+  }, [editing, member?.id]);
+  const gtkmChanged = GTKM_FIELDS.some(([k]) => (gtkm[k] || '').trim() !== (gtkm0[k] || '').trim());
+  const saveGtkm = (id) => (gtkmChanged ? api.saveGtkm(id, Object.fromEntries(GTKM_FIELDS.map(([k]) => [k, (gtkm[k] || '').trim() || null]))) : null);
   // While registering, the username follows the name until the admin types one.
   const [userTouched, setUserTouched] = useState(editing);
   const [busy, setBusy] = useState(false);
@@ -46,7 +57,7 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const clean = (k, v) => (['group_no', 'service_team', 'ig_handle', 'contact_email'].includes(k) ? (String(v).trim() || null) : k === 'full_name' ? String(v).trim() : v);
+  const clean = (k, v) => (['group_no', 'service_team', 'position', 'ministry_role', 'ig_handle', 'contact_email'].includes(k) ? (String(v).trim() || null) : k === 'full_name' ? String(v).trim() : v);
   const uname = normalizeUsername(f.username);
   const usernameChanged = editing && uname !== member.username;
 
@@ -63,6 +74,7 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
       if (!editing) {
         const fields = Object.fromEntries(EDITABLE.filter((k) => k !== 'active').map((k) => [k, clean(k, f[k])]));
         const row = await create({ ...fields, username: uname, password: f.password });
+        await saveGtkm(row.id);
         onSaved(`${row.full_name} terdaftar${row.group_no ? ` di grup ${row.group_no}` : ''}. Login: @${row.username} + password awal.`);
       } else {
         const patch = {};
@@ -72,7 +84,8 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
         if (Object.keys(patch).length) await update(member.id, patch);
         if (usernameChanged) await setUsername(member.id, uname);
         if (newPw) await setPassword(member.id, newPw);
-        onSaved(`${f.full_name.trim()} disimpan${usernameChanged ? ` · login sekarang @${uname}` : ''}${newPw ? ' · password baru aktif' : ''}.`);
+        await saveGtkm(member.id);
+        onSaved(`${f.full_name.trim()} disimpan${usernameChanged ? ` · login sekarang @${uname}` : ''}${newPw ? ' · password baru aktif' : ''}${gtkmChanged ? ' · data Get to Know Me diperbarui' : ''}.`);
       }
     } catch (x) { setErr(x.message); setBusy(false); }
   };
@@ -112,11 +125,19 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
               {ROLES.filter((r) => canRoles || r.id !== 'super_admin' || f.role_id === 'super_admin').map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </label>
-          <label style={field}>Tim pelayanan
-            <select value={f.service_team} onChange={set('service_team')} style={input}>
-              <option value="">—</option>
-              {TEAMS.map((t) => <option key={t}>{t}</option>)}
-            </select>
+          <label style={field}>Tim asal
+            <input list="md-teams" value={f.service_team} onChange={set('service_team')} placeholder="mis. Bryce Clement" style={input} />
+            <datalist id="md-teams">{options('service_team').map((t) => <option key={t} value={t} />)}</datalist>
+          </label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label style={field}>Posisi pelayanan
+            <input list="md-positions" value={f.position} onChange={set('position')} placeholder="mis. Usher" style={input} />
+            <datalist id="md-positions">{options('position').map((t) => <option key={t} value={t} />)}</datalist>
+          </label>
+          <label style={field}>Status pelayanan
+            <input list="md-mroles" value={f.ministry_role} onChange={set('ministry_role')} placeholder="mis. Volunteer" style={input} />
+            <datalist id="md-mroles">{options('ministry_role').map((t) => <option key={t} value={t} />)}</datalist>
           </label>
         </div>
         <label style={field}>Instagram<input placeholder="@username" value={f.ig_handle} onChange={set('ig_handle')} style={input} /></label>
@@ -126,6 +147,18 @@ export default function MemberDialog({ member, defaults = {}, onClose, onSaved }
           <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={f.is_committee} onChange={set('is_committee')} /> Panitia (tidak masuk grup)</label>
           {editing && !self && <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={f.active} onChange={set('active')} /> Akun aktif</label>}
         </div>
+
+        {['member', 'group_leader'].includes(f.role_id) && (
+          <details style={{ borderRadius: 12, background: '#F6F0E2', padding: '10px 12px' }} open={GTKM_FIELDS.some(([k]) => gtkm[k])}>
+            <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Get to Know Me · jawaban Member Form (kunci validasi R1)</summary>
+            <div className="col" style={{ gap: 8, marginTop: 10 }}>
+              {GTKM_FIELDS.map(([k, label]) => (
+                <label key={k} style={field}>{label}<input value={gtkm[k] || ''} onChange={(e) => setGtkm((g) => ({ ...g, [k]: e.target.value }))} style={input} /></label>
+              ))}
+              <span className="muted" style={{ fontSize: 11 }}>Hanya terlihat oleh panitia & validator, tidak pernah dikirim ke member.</span>
+            </div>
+          </details>
+        )}
 
         {editing && (
           <div className="col" style={{ gap: 6, padding: 12, borderRadius: 12, background: '#F6F0E2' }}>

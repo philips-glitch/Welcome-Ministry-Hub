@@ -1,5 +1,5 @@
 // Group composition over real member profiles (Supabase or demo store).
-import { TEAMS, rng } from '../data.js';
+import { rng } from '../data.js';
 
 // Defaults for groups that predate per-group size limits.
 export const GROUP_MIN = 13;
@@ -72,9 +72,10 @@ export function autoAssign(players, seed, { pickLeaders = true } = {}, groupRows
   const g = groupRows.map(() => []);
   const tls = players.filter((p) => p.is_ministry_tl).map((p) => [p, r()]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
   tls.forEach((p, i) => g[i % g.length].push(p));
-  const teamIdx = (p) => (p.service_team ? TEAMS.indexOf(p.service_team) : 99);
+  // Same team together (any team name), people without a team last.
+  const team = (p) => p.service_team || '￿';
   const rest = players.filter((p) => !p.is_ministry_tl).map((p) => [p, r()])
-    .sort((a, b) => teamIdx(a[0]) - teamIdx(b[0]) || a[1] - b[1]).map((x) => x[0]);
+    .sort((a, b) => team(a[0]).localeCompare(team(b[0])) || a[1] - b[1]).map((x) => x[0]);
   const hasTeam = (gi, t) => t && g[gi].some((p) => p.service_team === t);
   rest.forEach((p) => {
     const all = [...g.keys()];
