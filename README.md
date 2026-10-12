@@ -17,16 +17,15 @@ In plain `npm run dev` the login page also shows one-click sample accounts; the 
 
 - **Front end:** the Vite app (static files).
 - **API:** Vercel Functions in [`api/`](api/) → [`server/`](server/): `POST /api/rpc` (all data, one JSON method per call) and `GET /api/media?path=…` (submission photos). Every method checks the caller's permissions (role → `role_permissions`).
-- **Database:** Postgres (Neon via Vercel), connected through `DATABASE_URL`. Tables are created and seeded automatically on first use ([`server/schema.js`](server/schema.js)): roles and permissions, 10 groups, the playbook challenges and the R2 riddle bank.
+- **Database:** any Postgres connected to the Vercel project: `DATABASE_URL` (e.g. Neon) or `POSTGRES_URL` (e.g. the database Vercel's Supabase integration creates, used as plain Postgres). Every table has row-level security switched on with no policies and no rights for Supabase's `anon`/`authenticated` roles, so only this server can read or write it. Tables are created and seeded automatically on first use ([`server/schema.js`](server/schema.js)): roles and permissions, 10 groups, the playbook challenges and the R2 riddle bank.
 - **Login:** username + password. Passwords are hashed (scrypt); a signed, HttpOnly session cookie lasts 30 days. Changing a password signs that person out everywhere. 10 wrong passwords in 10 minutes block that username for a while.
 - **Photos:** stored in the database (shrunk to ~0.5 MB in the browser before upload), served only to the submitting group and validators.
 
-The app switches to server mode at build time when `DATABASE_URL` is present; without it the build runs on demo data.
+The app switches to server mode at build time when `DATABASE_URL` or `POSTGRES_URL` is present; without it the build runs on demo data.
 
 ## Setup on Vercel
 
-1. **Database:** Vercel → project → **Storage** → **Create Database** → **Neon** (free; region Singapore) → connect it to this project for Production and Preview. This adds `DATABASE_URL`.
-   If another database integration (e.g. Supabase) is connected, remove it first: its `POSTGRES_*` variables clash with Neon's.
+1. **Database:** a Postgres database connected to the project. Currently the one from Vercel's Supabase integration (`POSTGRES_URL`). To move to Neon later: Vercel → **Storage** → **Create Database** → **Neon** (Singapore) and connect it (this adds `DATABASE_URL`, which takes priority); disconnect the Supabase integration first, since its `POSTGRES_*` variables clash with Neon's.
 2. **First Super Admins:** Settings → Environment Variables → add `ADMIN_SETUP_PASSWORD` (8+ characters, Production + Preview). On first use the server creates **`angel`** and **`philips`** as Super Admins with that password (`ADMIN_SETUP_USERS` changes the names). It's only used while no Super Admin exists; afterwards passwords are changed in the app (Members → Edit → Reset password).
 3. **Redeploy** (push to `main`, or Deployments → Redeploy). Environment variables are read at build time.
 4. Log in as `angel` → **Members → Import Excel** (roster) → pick Group Leaders in **Groups** → **Members → Buat password** (new passwords, or "Pakai dari file Excel" for an existing login list).

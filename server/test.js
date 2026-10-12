@@ -7,7 +7,10 @@ import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
 
 process.env.ADMIN_SETUP_PASSWORD = 'setup-pass-123';
-setDb(fromPglite(new PGlite()));
+const lite = new PGlite();
+// Same roles a Supabase-hosted database exposes through its web API; they must get nothing.
+await lite.exec('create role anon nologin; create role authenticated nologin; grant usage on schema public to anon, authenticated;');
+setDb(fromPglite(lite));
 resetSecretCache();
 const db = await getDb();
 
@@ -123,5 +126,16 @@ await budi.login('budi', 'NewPass88'); ok('password reset signs out old sessions
 await rejects(kapten.call('setPassword', { id: adminId, password: 'hacked123' }), /izin|Super Admin/); ok('non-admins cannot change Super Admin passwords');
 for (let i = 0; i < 10; i++) await rejects(outsider.login('angel', 'nope'), /salah/);
 await rejects(outsider.login('angel', 'setup-pass-123'), /Terlalu banyak/); ok('login rate limit after 10 failures');
+
+// 9 · lockdown: the web API roles of hosted Postgres can't read or write anything
+const rls = (await db.query(`select count(*)::int as n from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relrowsecurity`)).rows[0].n;
+assert.ok(rls >= 15);
+for (const role of ['anon', 'authenticated']) {
+  await lite.exec(`set role ${role}`);
+  await rejects(lite.query('select username, password_hash from profiles'), /permission denied/);
+  await rejects(lite.query(`insert into app_meta values ('x', 'y')`), /permission denied/);
+  await lite.exec('reset role');
+}
+ok('tables locked: row-level security on, anon/authenticated have no access');
 
 console.log(`\nAll ${n} checks passed.`);

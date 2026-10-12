@@ -1,4 +1,5 @@
-// Postgres access for the API. On Vercel: Neon (or any Postgres) via DATABASE_URL.
+// Postgres access for the API. On Vercel: DATABASE_URL (Neon) or POSTGRES_URL (the database Vercel's
+// Supabase integration connects — used as plain Postgres through its connection pooler).
 // Locally (server/dev.js, server/test.js) a PGlite in-memory database is injected with setDb().
 import pg from 'pg';
 import { migrate } from './schema.js';
@@ -30,9 +31,13 @@ export function setDb(custom) { db = custom; ready = null; }
 
 export async function getDb() {
   if (!db) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error('Database belum terhubung (DATABASE_URL tidak ada).');
-    db = fromPool(new pg.Pool({ connectionString: url, max: 3, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } }));
+    const raw = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    if (!raw) throw new Error('Database belum terhubung (DATABASE_URL / POSTGRES_URL tidak ada).');
+    // TLS is set here; an sslmode in the URL would override it (and reject hosted poolers' certificates).
+    const u = new URL(raw);
+    u.searchParams.delete('sslmode');
+    const local = /^(localhost|127\.0\.0\.1)$/.test(u.hostname);
+    db = fromPool(new pg.Pool({ connectionString: u.toString(), max: 3, ssl: local ? false : { rejectUnauthorized: false } }));
   }
   // Schema + seed once per cold start (idempotent).
   ready ||= migrate(db).catch((e) => { ready = null; throw e; });

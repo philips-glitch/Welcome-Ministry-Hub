@@ -146,8 +146,23 @@ create table if not exists notification_reads (
 
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
 
+// Only this server may touch the data. Hosted Postgres (e.g. Supabase) also publishes the "public" tables
+// through a web API for its anon/authenticated roles: row-level security with no policies + revoked rights
+// shuts that door. The server connects as the tables' owner, which row-level security doesn't restrict.
+const TABLES = ['app_meta', 'roles', 'permissions', 'role_permissions', 'groups', 'profiles', 'profile_gtkm', 'login_attempts',
+  'challenges', 'riddles', 'riddle_draws', 'media', 'submissions', 'notifications', 'notification_reads'];
+const LOCKDOWN = `${TABLES.map((t) => `alter table ${t} enable row level security;`).join('\n')}
+do $$ declare r text; begin
+  foreach r in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('revoke all on ${TABLES.join(', ')} from %I', r);
+    end if;
+  end loop;
+end $$;`;
+
 export async function migrate(db) {
   await db.exec(SCHEMA);
+  await db.exec(LOCKDOWN);
   const { rows } = await db.query(`select value from app_meta where key = 'seeded'`);
   if (!rows.length) await db.tx((t) => seed(t));
   await bootstrapAdmins(db);
