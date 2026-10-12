@@ -5,10 +5,12 @@ import { demoApi } from './demoStore.js';
 import { randomPassword } from './roster.js';
 import { authEmail } from './username.js';
 
-// VITE_* (set by hand) or NEXT_PUBLIC_* (set by Vercel's Supabase integration).
+// VITE_* (set by hand) or NEXT_PUBLIC_* (set by Vercel's Supabase integration), always as a pair, so a URL
+// from one project is never combined with the key of another.
 const env = import.meta.env;
-const URL = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const [URL, KEY] = env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY
+  ? [env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY]
+  : [env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY];
 
 const PROFILE_COLS = 'id,email,username,contact_email,full_name,role_id,group_no,service_team,position,ministry_role,is_ministry_tl,is_committee,ig_handle,active,created_at';
 
