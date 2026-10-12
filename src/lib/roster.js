@@ -99,16 +99,27 @@ export function buildAccounts({ groups, people }, captains, pics, taken = []) {
   return [...members, ...staff];
 }
 
-// Random starting password: 10 characters without look-alikes (0/O, 1/l/I).
-export function randomPassword() {
-  const abc = 'abcdefghjkmnpqrstuvwxyz23456789';
-  return Array.from(crypto.getRandomValues(new Uint32Array(10)), (x) => abc[x % abc.length]).join('');
+// Random password: 8 alphanumeric characters (upper, lower, digits) without look-alikes (0/O/o, 1/l/I),
+// always with at least one letter and one digit.
+const ALNUM = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+export function randomPassword(length = 8) {
+  for (;;) {
+    const pw = Array.from(crypto.getRandomValues(new Uint32Array(length)), (x) => ALNUM[x % ALNUM.length]).join('');
+    if (/[A-Za-z]/.test(pw) && /\d/.test(pw)) return pw;
+  }
 }
 
 export const groupRows = (groups) => groups.map((g, i) => ({ no: g.no, name: g.name, color: PALETTE[i % PALETTE.length], min_size: g.size, max_size: g.size, sort: i + 1 }));
 
-// Login list for captains to hand out: username, name, group, role, starting password.
-export function credentialsCsv(rows) {
-  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return ['Username,Nama,Grup,Role,Password awal', ...rows.map((r) => [r.username, r.full_name, r.group_no || '', r.role_id, r.password].map(q).join(','))].join('\r\n');
+// Login list as an Excel sheet (see xlsxWrite.js): username, role, password, name, group — by role, group, name.
+const ROLE_ORDER = ['super_admin', 'challenge_pic', 'captain', 'group_leader', 'member'];
+export function credentialsSheet(rows, roleName, groupName = (no) => no) {
+  const sorted = [...rows].sort((a, b) => ROLE_ORDER.indexOf(a.role_id) - ROLE_ORDER.indexOf(b.role_id)
+    || (a.group_no || 'zz').localeCompare(b.group_no || 'zz') || a.full_name.localeCompare(b.full_name));
+  return {
+    sheet: 'Login',
+    header: ['Username', 'Role', 'Password', 'Nama', 'Grup'],
+    rows: sorted.map((r) => [r.username, roleName(r.role_id), r.password, r.full_name, r.group_no ? groupName(r.group_no) : '']),
+    widths: [22, 16, 14, 30, 14],
+  };
 }

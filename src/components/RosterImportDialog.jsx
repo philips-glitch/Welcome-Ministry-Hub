@@ -3,7 +3,9 @@ import { api } from '../lib/api.js';
 import { useMembers } from '../lib/members.jsx';
 import { useGame } from '../lib/gameStore.jsx';
 import { readSheets } from '../lib/xlsx.js';
-import { parseRoster, buildAccounts, groupRows, credentialsCsv } from '../lib/roster.js';
+import { parseRoster, buildAccounts, groupRows, credentialsSheet } from '../lib/roster.js';
+import { downloadXlsx } from '../lib/xlsxWrite.js';
+import { roleName } from '../lib/permissions.js';
 
 const area = { font: 'inherit', fontSize: 13, lineHeight: 1.5, border: '1px solid #DCD2BC', borderRadius: 10, padding: '8px 10px', background: '#FFFDF8', resize: 'vertical', width: '100%' };
 const lines = (t) => t.split('\n').map((x) => x.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
@@ -64,10 +66,8 @@ export default function RosterImportDialog({ onClose, onDone }) {
   };
 
   const download = () => {
-    const sorted = [...result.created].sort((a, b) => (a.group_no || 'zz').localeCompare(b.group_no || 'zz') || a.role_id.localeCompare(b.role_id) || a.full_name.localeCompare(b.full_name));
-    const url = URL.createObjectURL(new Blob(['﻿' + credentialsCsv(sorted)], { type: 'text/csv;charset=utf-8' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `login-flourish-hub-${new Date().toISOString().slice(0, 10)}.csv` });
-    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const name = Object.fromEntries(groupRows(roster.groups).map((g) => [g.no, g.name]));
+    downloadXlsx(`login-flourish-hub-${new Date().toISOString().slice(0, 10)}.xlsx`, credentialsSheet(result.created, roleName, (no) => name[no] || no));
   };
 
   const groups = roster?.groups || [];
@@ -99,7 +99,7 @@ export default function RosterImportDialog({ onClose, onDone }) {
               {' '}Langkah berikutnya: pilih 1 Group Leader per grup di <b>Groups</b>.
             </span>
             <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn btn-ghost" onClick={download}>Unduh daftar login (CSV)</button>
+              <button className="btn btn-ghost" onClick={download}>Unduh daftar login (Excel)</button>
               <button className="btn btn-primary" onClick={() => onDone(`Roster diimport: ${result.created.length} akun, ${groups.length} grup.`)}>Selesai</button>
             </div>
           </>

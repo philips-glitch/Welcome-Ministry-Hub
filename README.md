@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Without Supabase keys the app runs in **demo mode**: the login page shows sample accounts (Super Admin, Challenge PIC, Captain, Group Leader, Member), sign in with the username on the card (e.g. `angel`, `nadia.p`) and password `demo1234`, and data lives in your browser's localStorage.
+Without Supabase keys the app runs in **demo mode**: data lives in your browser's localStorage and every sample account uses password `demo1234` (e.g. `angel`, `nadia.p`). In local development (`npm run dev`) the login page also shows one-click sample accounts; the deployed site hides them unless `VITE_DEMO_LOGIN=true` is set.
 
 ## Supabase setup (real login)
 

@@ -7,7 +7,7 @@ import { LogoMark } from '../components/Logo.jsx';
 
 const DEMO_LABELS = {
   'u-angel': ['Angel', 'super_admin', 'Tim Acara', 'angel'],
-  'u-cindy': ['Cindy', 'challenge_pic', 'PIC Photo Challenge', 'cindy'],
+  'u-cindy': ['Cindy', 'challenge_pic', 'PIC Get to Know Me', 'cindy'],
   'u-yohan': ['Yohan', 'captain', 'Captain Olive', 'yohan'],
   'u-nadia': ['Nadia', 'group_leader', 'Vine · 04', 'nadia.p'],
   'u-grace': ['Grace', 'member', 'Vine · 04', 'grace.l'],
@@ -20,9 +20,12 @@ export default function Login({ notice }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(notice || null);
   const demo = api.mode === 'demo';
+  // One-click sample logins only in local development, or when VITE_DEMO_LOGIN=true is set on purpose.
+  // The deployed site shows a plain login form, without sample accounts or the demo password.
+  const demoPanel = demo && (import.meta.env.DEV || import.meta.env.VITE_DEMO_LOGIN === 'true');
   // After a roster import most sample accounts are gone; show only the cards that still work.
   const [cards, setCards] = useState(DEMO_ACCOUNTS);
-  useEffect(() => { if (demo) api.demoAccountsPresent(DEMO_ACCOUNTS).then(setCards).catch(() => {}); }, [demo]);
+  useEffect(() => { if (demoPanel) api.demoAccountsPresent(DEMO_ACCOUNTS).then(setCards).catch(() => {}); }, [demoPanel]);
 
   const run = async (fn) => {
     setBusy(true); setMsg(null);
@@ -76,7 +79,7 @@ export default function Login({ notice }) {
             Akun dibuat oleh panitia. Lupa password atau belum punya akun? Hubungi captain grup kamu.
           </span>
 
-          {demo && (
+          {demoPanel && (
             <div className="login-demo">
               <span className="login-demo-title">Mode demo · Supabase belum dikonfigurasi</span>
               <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau ketik username{cards.length < DEMO_ACCOUNTS.length ? ' (mis. dari daftar login hasil import)' : ' di kartu'} dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>

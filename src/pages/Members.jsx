@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { useMembers } from '../lib/members.jsx';
 import MemberDialog from '../components/MemberDialog.jsx';
 import RosterImportDialog from '../components/RosterImportDialog.jsx';
+import PasswordBatchDialog from '../components/PasswordBatchDialog.jsx';
 import { ROLES, roleName } from '../lib/permissions.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useGame } from '../lib/gameStore.jsx';
@@ -26,6 +27,7 @@ export default function Members() {
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null); // { member } | {}
   const [importing, setImporting] = useState(false);
+  const [passwords, setPasswords] = useState(false);
   useEffect(() => setPage(0), [q, fRole, fGroup, fStatus]);
 
   const filtered = useMemo(() => {
@@ -63,8 +65,9 @@ export default function Members() {
           <span className="muted" style={{ fontSize: 13 }}>{rows ? `${counts.active} aktif dari ${counts.all} akun` : 'Memuat…'}{api.mode === 'demo' ? ' · data demo' : ''}</span>
           <span className="h1">Member Management</span>
         </div>
-        {canRoles && <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setImporting(true)}>Import Excel</button>}
-        {canManage && <button className="btn btn-primary" style={{ marginLeft: canRoles ? 0 : 'auto' }} onClick={() => setDialog({})}>+ Daftarkan member</button>}
+        {canManage && <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setPasswords(true)}>Buat password</button>}
+        {canRoles && <button className="btn btn-ghost" onClick={() => setImporting(true)}>Import Excel</button>}
+        {canManage && <button className="btn btn-primary" onClick={() => setDialog({})}>+ Daftarkan member</button>}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${ROLES.length},1fr)`, gap: 10 }}>
@@ -146,6 +149,7 @@ export default function Members() {
           {toast[1]}
         </div>
       )}
+      {passwords && <PasswordBatchDialog onClose={() => setPasswords(false)} onDone={(msg) => { setPasswords(false); setToast(['ok', msg]); }} />}
       {importing && <RosterImportDialog onClose={() => setImporting(false)} onDone={(msg) => { setImporting(false); setToast(['ok', msg]); }} />}
       {dialog && <MemberDialog member={dialog.member} onClose={() => setDialog(null)} onSaved={(msg) => { setDialog(null); setToast(['ok', msg]); }} />}
     </div>
