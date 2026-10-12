@@ -4,7 +4,8 @@ import { PERMISSIONS, ROLES, DEFAULT_GRANTS } from '../src/lib/permissions.js';
 import { PLAYBOOK } from '../src/lib/playbook.js';
 import { PALETTE } from '../src/lib/roster.js';
 import { RIDDLES } from '../src/data.js';
-import { hashPassword } from './auth.js';
+import { createHmac } from 'node:crypto';
+import { hashPassword, sessionSecret } from './auth.js';
 
 const SCHEMA = `
 create table if not exists app_meta (key text primary key, value text not null);
@@ -203,14 +204,23 @@ async function seed(t) {
   await t.query(`insert into app_meta values ('seeded', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
 }
 
-// First Super Admins: only while none exists, from Vercel settings (never stored in the code).
-//   ADMIN_SETUP_PASSWORD (required, 8+ characters) · ADMIN_SETUP_USERS (default "angel,philips")
+// Super Admin accounts from Vercel settings (never stored in the code):
+//   ADMIN_SETUP_PASSWORD (8+ characters) · ADMIN_SETUP_USERS (default "angel,philips")
+// Applied on the first start and again whenever the setting changes (the database keeps only a fingerprint),
+// so editing it in Vercel and redeploying resets these accounts' passwords. Passwords changed in the app stay until then.
+export function setupPassword() {
+  // Forgive copy-paste: surrounding spaces and quotes are dropped.
+  return String(process.env.ADMIN_SETUP_PASSWORD || '').trim().replace(/^(["'])(.*)\1$/, '$2').trim();
+}
+export const setupUsers = () => (process.env.ADMIN_SETUP_USERS || 'angel,philips').split(',').map((u) => u.trim().toLowerCase()).filter(Boolean);
+
 async function bootstrapAdmins(db) {
-  const pw = process.env.ADMIN_SETUP_PASSWORD;
-  if (!pw || pw.length < 8) return;
-  const { rows } = await db.query(`select 1 from profiles where role_id = 'super_admin' and active limit 1`);
-  if (rows.length) return;
-  const users = (process.env.ADMIN_SETUP_USERS || 'angel,philips').split(',').map((u) => u.trim().toLowerCase()).filter(Boolean);
+  const pw = setupPassword();
+  if (pw.length < 8) return;
+  const users = setupUsers();
+  const mark = createHmac('sha256', await sessionSecret(db)).update(`${users.join(',')}\n${pw}`).digest('base64url');
+  const { rows } = await db.query(`select value from app_meta where key = 'admin_setup'`);
+  if (rows[0]?.value === mark) return;
   for (const u of users) {
     const name = u.charAt(0).toUpperCase() + u.slice(1);
     await db.query(
@@ -219,4 +229,5 @@ async function bootstrapAdmins(db) {
        on conflict (username) do update set role_id = 'super_admin', active = true, password_hash = excluded.password_hash, session_epoch = now()`,
       [u, name, await hashPassword(pw), `${u}@users.flourish.local`]);
   }
+  await db.query(`insert into app_meta values ('admin_setup', $1) on conflict (key) do update set value = excluded.value`, [mark]);
 }

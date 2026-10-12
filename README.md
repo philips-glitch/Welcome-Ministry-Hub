@@ -26,7 +26,7 @@ The app switches to server mode at build time when `DATABASE_URL` or `POSTGRES_U
 ## Setup on Vercel
 
 1. **Database:** a Postgres database connected to the project. Currently the one from Vercel's Supabase integration (`POSTGRES_URL`). To move to Neon later: Vercel → **Storage** → **Create Database** → **Neon** (Singapore) and connect it (this adds `DATABASE_URL`, which takes priority); disconnect the Supabase integration first, since its `POSTGRES_*` variables clash with Neon's.
-2. **First Super Admins:** Settings → Environment Variables → add `ADMIN_SETUP_PASSWORD` (8+ characters, Production + Preview). On first use the server creates **`angel`** and **`philips`** as Super Admins with that password (`ADMIN_SETUP_USERS` changes the names). It's only used while no Super Admin exists; afterwards passwords are changed in the app (Members → Edit → Reset password).
+2. **First Super Admins:** Settings → Environment Variables → add `ADMIN_SETUP_PASSWORD` (8+ characters, Production + Preview). On first use the server creates **`angel`** and **`philips`** as Super Admins with that password (`ADMIN_SETUP_USERS` changes the names). It's applied on first start and again whenever you change the setting and redeploy (that resets those two accounts' passwords — handy if you're locked out). Other passwords are changed in the app (Members → Edit → Reset password).
 3. **Redeploy** (push to `main`, or Deployments → Redeploy). Environment variables are read at build time.
 4. Log in as `angel` → **Members → Import Excel** (roster) → pick Group Leaders in **Groups** → **Members → Buat password** (new passwords, or "Pakai dari file Excel" for an existing login list).
 

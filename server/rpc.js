@@ -8,6 +8,7 @@ import { normalizeUsername, usernameError, authEmail } from '../src/lib/username
 import { isConnect, unitKey, groupPoints, withDefaults } from '../src/lib/game.js';
 import { isPlayer } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
+import { setupPassword, setupUsers } from './schema.js';
 
 export class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const deny = (msg = 'Tidak punya izin untuk ini.') => { throw new HttpError(403, msg); };
@@ -54,6 +55,13 @@ const needUser = (me) => { if (!me) throw new HttpError(401, 'Sesi berakhir. Sil
 // Each: async (ctx, args) → data. ctx = { db, me, req, setCookie }.
 const methods = {
   async session({ me }) { return me?.id ?? null; },
+  // For sorting out first logins: is the Vercel setting readable, and do the Super Admins exist? (No secrets.)
+  async setupStatus({ db }) {
+    const pw = setupPassword();
+    const users = setupUsers();
+    const { rows } = await db.query(`select username from profiles where role_id = 'super_admin' and active and password_hash is not null and username = any($1)`, [users]);
+    return { setup: !pw ? 'missing' : pw.length < 8 ? 'too_short' : 'ok', superAdmins: rows.map((r) => r.username).sort() };
+  },
 
   async signInPassword({ db, req, setCookie }, { username, password }) {
     const u = normalizeUsername(username);

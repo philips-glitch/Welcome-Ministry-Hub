@@ -6,7 +6,7 @@ import { setDb, getDb, fromPglite } from './db.js';
 import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
 
-process.env.ADMIN_SETUP_PASSWORD = 'setup-pass-123';
+process.env.ADMIN_SETUP_PASSWORD = ' "setup-pass-123"\n';   // pasted with quotes + spaces: forgiven
 const lite = new PGlite();
 // Same roles a Supabase-hosted database exposes through its web API; they must get nothing.
 await lite.exec('create role anon nologin; create role authenticated nologin; grant usage on schema public to anon, authenticated;');
@@ -118,6 +118,20 @@ assert.equal((await leader.media(s2.media_path)).statusCode, 200);
 const dodi = client(); await dodi.login('dodi', pw.dodi);
 assert.equal((await dodi.media(s2.media_path)).statusCode, 403);
 assert.equal((await kapten.media(s2.media_path)).statusCode, 200); ok('photo stored; visible to own group and validators, not other groups');
+
+// 7b · the Vercel setting resets the Super Admins only when it changes
+assert.deepEqual(await outsider.call('setupStatus'), { setup: 'ok', superAdmins: ['angel', 'philips'] });
+await admin.call('setPassword', { id: adminId, password: 'Changed-in-app1' });
+const restart = async () => { setDb(fromPglite(lite)); await getDb(); };
+await restart();
+await admin.login('angel', 'Changed-in-app1'); ok('setupStatus reports the setting + admins; a restart keeps passwords changed in the app');
+process.env.ADMIN_SETUP_PASSWORD = 'brand-new-pass9';
+await restart();
+await rejects(admin.call('session').then((id) => { if (!id) throw new Error('Sesi berakhir'); }), /Sesi berakhir/);
+await admin.login('angel', 'brand-new-pass9');
+await client().login('philips', 'brand-new-pass9'); ok('changing ADMIN_SETUP_PASSWORD resets angel + philips (and signs them out)');
+process.env.ADMIN_SETUP_PASSWORD = 'setup-pass-123';
+await restart(); await admin.login('angel', 'setup-pass-123');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });
