@@ -6,68 +6,60 @@ Admin dashboard + member Game Portal for Welcome Ministry's WM 2026 outing game 
 
 ```bash
 npm install
-npm run dev
+npm run dev          # demo mode: sample data in the browser, password demo1234 (e.g. angel, nadia.p)
+npm run dev:server   # real API + in-memory Postgres (PGlite) on http://localhost:3602 — angel / philips, password demo1234
+npm run test:server  # backend checks against PGlite
 ```
 
-Without Supabase keys the app runs in **demo mode**: data lives in your browser's localStorage and every sample account uses password `demo1234` (e.g. `angel`, `nadia.p`). In local development (`npm run dev`) the login page also shows one-click sample accounts; the deployed site hides them unless `VITE_DEMO_LOGIN=true` is set.
+In plain `npm run dev` the login page also shows one-click sample accounts; the deployed site hides them unless `VITE_DEMO_LOGIN=true` is set.
 
-## Supabase setup (real login)
+## How it runs on Vercel
 
-1. Create a Supabase project.
-2. In the SQL editor, run the migrations in order:
-   - [`0001_auth_roles.sql`](supabase/migrations/0001_auth_roles.sql): `profiles`, `roles`, `permissions`, `role_permissions`, the new-user trigger, RLS and default grants.
-   - [`0002_game.sql`](supabase/migrations/0002_game.sql): game data (see **Database** below), the `submission-media` storage bucket, and seed data (10 groups, R1–R6 + 3 side quests, R1's 10 riddles).
-   - [`0003_notifications.sql`](supabase/migrations/0003_notifications.sql): notifications + read receipts, their triggers, and a `pg_cron` job for deadline reminders. If it fails on `pg_cron`, enable the extension under **Database → Extensions** and run it again.
-   - [`0004_groups_crud.sql`](supabase/migrations/0004_groups_crud.sql): editable groups. It lifts the fixed 01–10 numbering, adds per-group min/max size, and points `profiles.group_no` at `groups` (renumber cascades; delete un-assigns members). A group with submissions can't be deleted.
-   - [`0005_usernames.sql`](supabase/migrations/0005_usernames.sql): `profiles.username` (unique; backfilled from existing emails) and optional `contact_email`. Usernames can only be changed through the Edge Function, so the hidden login email changes with them.
-   - [`0006_playbook_events.sql`](supabase/migrations/0006_playbook_events.sql): the Mini Events from the Welcome UR Outing 2026 playbook (see **Mini Events** below). Adds per-member "connect" challenges, rubric scoring with team participation, `challenges.form`, the staff-only `profile_gtkm` answer key, and replaces the seeded challenges with the playbook's. Written for a fresh database (it renumbers the 0002 seed).
-   - [`0007_roster_fields.sql`](supabase/migrations/0007_roster_fields.sql): `profiles.position` and `profiles.ministry_role` from the ministry roster (see **Roster import**).
-3. Deploy the Edge Function that creates accounts and resets passwords. It needs the service role key, which must never be in the browser:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-project-ref>
-   npx supabase functions deploy admin-users
-   ```
-   `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to the function automatically.
-4. **Authentication → Providers → Email:** keep Email enabled and turn **off** "Allow new users to sign up", since only admins create accounts. Admin-created accounts are confirmed automatically.
-5. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). On Vercel, add the same two under Settings → Environment Variables, or connect Vercel's Supabase integration: its `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` are read too. Redeploy after changing them (Vite bakes them in at build time).
-6. Create your own account in the Supabase dashboard (Authentication → Users → Add user, auto-confirm, with a password). Use the email **`<your-username>@users.flourish.local`**, e.g. `angel@users.flourish.local`. You'll log in as `angel`. Then make yourself Super Admin in the SQL editor:
-   ```sql
-   update public.profiles set role_id = 'super_admin' where username = 'angel';
-   ```
-7. Load the roster with **Members → Import Excel** (see **Roster import**), or register people one by one from **Groups → + Tambah member** / **Members → + Daftarkan member**. Give each person their **username** and starting password.
+- **Front end:** the Vite app (static files).
+- **API:** Vercel Functions in [`api/`](api/) → [`server/`](server/): `POST /api/rpc` (all data, one JSON method per call) and `GET /api/media?path=…` (submission photos). Every method checks the caller's permissions (role → `role_permissions`).
+- **Database:** Postgres (Neon via Vercel), connected through `DATABASE_URL`. Tables are created and seeded automatically on first use ([`server/schema.js`](server/schema.js)): roles and permissions, 10 groups, the playbook challenges and the R2 riddle bank.
+- **Login:** username + password. Passwords are hashed (scrypt); a signed, HttpOnly session cookie lasts 30 days. Changing a password signs that person out everywhere. 10 wrong passwords in 10 minutes block that username for a while.
+- **Photos:** stored in the database (shrunk to ~0.5 MB in the browser before upload), served only to the submitting group and validators.
+
+The app switches to server mode at build time when `DATABASE_URL` is present; without it the build runs on demo data.
+
+## Setup on Vercel
+
+1. **Database:** Vercel → project → **Storage** → **Create Database** → **Neon** (free; region Singapore) → connect it to this project for Production and Preview. This adds `DATABASE_URL`.
+   If another database integration (e.g. Supabase) is connected, remove it first: its `POSTGRES_*` variables clash with Neon's.
+2. **First Super Admins:** Settings → Environment Variables → add `ADMIN_SETUP_PASSWORD` (8+ characters, Production + Preview). On first use the server creates **`angel`** and **`philips`** as Super Admins with that password (`ADMIN_SETUP_USERS` changes the names). It's only used while no Super Admin exists; afterwards passwords are changed in the app (Members → Edit → Reset password).
+3. **Redeploy** (push to `main`, or Deployments → Redeploy). Environment variables are read at build time.
+4. Log in as `angel` → **Members → Import Excel** (roster) → pick Group Leaders in **Groups** → **Members → Buat password** (new passwords, or "Pakai dari file Excel" for an existing login list).
 
 ## Database
 
-| Table | What it holds | Who can read / write (RLS) |
+| Table | What it holds | Who can read / write (checked in `server/rpc.js`) |
 | --- | --- | --- |
-| `profiles` | Accounts: name, role, group, service team, TL, panitia, active | Own row, own group-mates, `members.view` · edits need `members.manage` |
+| `profiles` | Accounts: username, password hash, name, role, group, original team, position, ministry status, TL, panitia, active | Own row + own group-mates; everyone with `members.view` · membership fields need `members.manage` · Super Admin changes need `roles.manage` · no one changes their own role |
 | `roles`, `permissions`, `role_permissions` | Role → permission grants | Everyone reads · `roles.manage` edits (Super Admin locked) |
-| `groups` | The 10 groups + Lock & Publish state | Everyone reads · `groups.manage` locks |
-| `challenges` | Code, kind (main / side), round, PIC, status, schedule, content sections, scoring rules (JSON), riddles per group, draw seed / lock | Non-draft for everyone · `challenges.manage` for drafts and edits |
-| `riddles` | Riddle prompts per challenge | Staff see all · members only their group's drawn riddles, once the challenge is Live |
-| `riddle_answers` | Answer key, separate table | Only `challenges.manage` / `submissions.validate` (never sent to members) |
-| `riddle_draws` | Which riddles each group got (slot 1..N) | Staff · members see their own group's draw once Live |
-| `submissions` | Photo (storage path), link, tagged members, declaration, version; connect: `target_id` (the person) + `answers`; riddles: `answers.answer`; review: checks, `marks` (points per question / criterion), location, headcount, score, override note, reject reason | Own group + validators/scorers; in connect challenges members see only their own · insert needs `portal.submit` (connect: any player with `portal.view`) · review needs `submissions.validate` |
-| `profile_gtkm` | Get to Know Me answers from the Member Form (3 words, enjoys, hidden talent): the key for R1 Q1–Q3 | `submissions.validate` / `members.manage` read · `members.manage` writes · never members |
-| `group_scores()` | Function: validated points per group per challenge | Everyone (leaderboard) without exposing other groups' submissions |
+| `groups` | Groups, size limits, Lock & Publish state | Everyone reads · `groups.manage` writes |
+| `challenges` | Code, kind, round, PIC, status, schedule, content sections, scoring rules, submit form, riddles per group, draw seed / lock | Non-draft for everyone · `challenges.manage` for drafts and edits |
+| `riddles` | Prompts **and answers** per challenge | Staff see all · members only their group's drawn riddles once Live, never the answer |
+| `riddle_draws` | Which riddles each group got | Staff · members their own group's draw once Live |
+| `submissions` | Photo path, link, tags, declaration, version; connect: person + answers; review: checks, marks, headcount, score, notes | Own group (connect: only one's own entries) + validators/scorers · rules: Live and before the deadline, own group, connect = any player about a group-mate (once each, max N), others = `portal.submit` · review needs `submissions.validate` |
+| `media` | Submission photos (bytes) | The submitting group and validators |
+| `profile_gtkm` | Get to Know Me answers from the Member Form, the key for R1 Q1–Q3 | `submissions.validate` / `members.manage` read · `members.manage` writes · never members |
+| `notifications`, `notification_reads` | Automatic notifications + who read them | Each user: everyone's + their group's |
+| `login_attempts`, `app_meta` | Login rate limiting; seed marker and the session-signing secret | Server only |
 
-Database rules (triggers) enforce the game flow:
-- A submission is accepted only while its challenge is **Live**, before the deadline, and only for the submitter's own group. The version number counts up automatically.
-- Reviewers can only change the review fields.
-- Photos go to the private `submission-media/<group>/…` bucket, readable by group-mates and validators.
+Scores are computed on request from validated submissions with the same rules as demo mode (`groupPoints` in [`src/lib/game.js`](src/lib/game.js)).
 
 ## Notifications (portal)
 
-The bell in the portal header shows the unread count and opens **Notifikasi**. That page groups notifications by day, has an *Semua / Belum dibaca* filter and *Tandai semua dibaca*, and tapping a notification opens its challenge. The list refreshes every minute and when the tab regains focus. All notifications are created automatically by the database:
+The bell in the portal header shows the unread count and opens **Notifikasi** (grouped by day, *Semua / Belum dibaca*, *Tandai semua dibaca*; tapping one opens its challenge). The list refreshes every minute and when the tab regains focus. Notifications are created by the server:
 
-| Event | Who gets it | Source |
-| --- | --- | --- |
-| Submission approved (with points), rejected or asked to resubmit (with reason) | The submitting group | Trigger on `submissions` |
-| Challenge set to **Scheduled** (announced) or **Live** (opened) | Everyone | Trigger on `challenges` |
-| Deadline in 24 h, and again in 3 h | Each group that still has riddles (or the submission) unsent | `send_deadline_reminders()` via `pg_cron` every 10 min |
+| Event | Who gets it |
+| --- | --- |
+| Submission approved (with points), rejected or asked to resubmit (with reason) | The submitting group |
+| Challenge set to **Scheduled** (announced) or **Live** (opened) | Everyone |
+| Deadline in 24 h, and again in 3 h | Each group that still has work left (riddles unsent, or members who haven't sent their people) — created when someone opens their notifications |
 
-Tables: `notifications` (`group_no` null = everyone; `dedupe_key` stops repeats) and `notification_reads` (per user). Members can read only their own audience and mark their own reads. Clients can't create notifications. In demo mode the same rules run in the browser on the demo clock.
+`dedupe_key` stops repeats. In demo mode the same rules run in the browser on the demo clock.
 
 ## Roster import
 
@@ -75,11 +67,11 @@ Tables: `notifications` (`group_no` null = everyone; `dedupe_key` stops repeats)
 
 1. Pick the .xlsx (or .csv). The preview shows each group with its member, Team Leader and inactive counts.
 2. Paste the Team Captains, one per line in group order (line 1 → the first group), and the Challenge PICs. Challenges whose PIC has the same first name are linked to the new account.
-3. Confirm. Everything from the old roster is deleted first: every account except Super Admins, all groups not in the file, all submissions (with photos), scores, notifications, riddle draws and Get to Know Me answers. Challenges and riddle banks stay.
-4. Accounts are created with short usernames (first name, else first.last). With Supabase each gets a random starting password; **download the login list (CSV)** on the result screen, the only place the passwords are shown. In demo mode every account uses `demo1234` and the data stays in that browser.
+3. Confirm. Everything from the old roster is deleted first: every account except Super Admins, all groups not in the file, all submissions (with photos), notifications, riddle draws and Get to Know Me answers. Challenges and riddle banks stay.
+4. Accounts get short usernames (first name, else first.last) and random 8-character passwords; **download the login list (Excel)** on the result screen, the only place they're shown. In demo mode every account uses `demo1234`.
 5. Pick one Group Leader per group in **Groups**.
 
-With Supabase, step 3 runs in the `admin-users` Edge Function (`reset_roster`, Super Admin only), so redeploy it after pulling this change.
+**Members → Buat password** sets new 8-character passwords for every active Captain / Group Leader / Challenge PIC (and downloads the Excel list), or applies the Username/Password pairs from an existing login list ("Pakai dari file Excel").
 
 ## Mini Events (Playbook - Welcome UR Outing 2026)
 
@@ -91,7 +83,7 @@ With Supabase, step 3 runs in the `admin-users` Edge Function (`reset_roster`, S
 | R4 | Spice It Up | — | — | Unchanged draft (cancelled in the playbook) |
 | R5 | Ingatlah hari ini | opens 10 Nov, deadline 15 Nov 23:59 | Group Leader, scrapbook photo | Rules and scoring "to be announced" |
 
-The texts (purpose, how to play, rules, scoring) live in [`src/lib/playbook.js`](src/lib/playbook.js) for demo mode and in `0006_playbook_events.sql` for Supabase; both are editable afterwards in **Challenges**. The R2 riddle bank is still the sample set from the design: replace it with the real clues before the draw.
+The texts (purpose, how to play, rules, scoring) live in [`src/lib/playbook.js`](src/lib/playbook.js), which seeds both demo mode and the database; they're editable afterwards in **Challenges**. The R2 riddle bank is still the sample set from the design: replace it with the real clues before the draw.
 
 ## Challenges (admin)
 
@@ -114,7 +106,7 @@ The Validation Queue scores each submission with its challenge's own rules. The 
 
 ## Login & roles
 
-One login page (`#/login`) for admins and members: **username + password only**. Each account has a hidden Supabase Auth email `<username>@users.flourish.local` that nobody types or sees; a real email is optional contact info. There is no public sign-up, Google or magic link. Forgotten passwords are reset by an admin (edit the member → Reset password). After sign-in, people with **Buka Admin Dashboard** go to the admin; everyone else goes to the portal.
+One login page (`#/login`) for admins and members: **username + password only**. A real email is optional contact info. There is no public sign-up, Google or magic link. Forgotten passwords are reset by an admin (edit the member → Reset password). After sign-in, people with **Buka Admin Dashboard** go to the admin; everyone else goes to the portal.
 
 | Role | Default access |
 | --- | --- |
@@ -124,7 +116,7 @@ One login page (`#/login`) for admins and members: **username + password only**.
 | Group Leader | Portal, including Submit |
 | Member | Portal; submits only their own entries in per-member challenges (R1 Get to Know Me) |
 
-Edit the grants in **Roles & Access**; changes apply immediately. The database enforces them too (RLS + a trigger): only `members.manage` can change role/group/status, nobody can change their own role, and granting or revoking Super Admin needs `roles.manage`. The `admin-users` Edge Function checks `members.manage` before creating accounts or resetting passwords.
+Edit the grants in **Roles & Access**; changes apply immediately. The server enforces them on every request: only `members.manage` can change role/group/status or create accounts and reset passwords, nobody can change their own role, and granting or revoking Super Admin (or changing a Super Admin's account) needs `roles.manage`.
 
 ## Admin screens
 
@@ -152,7 +144,7 @@ Responsive web version of `design/Flourish Hub Portal.dc.html` (the design was a
 | --- | --- |
 | Home | Focus challenge countdown + "x dari N riddle terkirim", its schedule, other challenges, your group's rank |
 | Challenge Detail | Tabs for every non-draft challenge; your group's drawn riddles with live status (validated / submitted / rejected + reason), scoring rules, submit per riddle (Group Leader, while Live) |
-| Submit | Needs `portal.submit`. Pick riddle, photo upload (Supabase Storage), IG Story link, tag group-mates → participation tier, rules + No-AI declaration gate the button. Rejected riddles can be re-sent (new version) |
+| Submit | Needs `portal.submit`. Pick riddle, photo upload (stored in the database), IG Story link, tag group-mates → participation tier, rules + No-AI declaration gate the button. Rejected riddles can be re-sent (new version) |
 | Leaderboard | Same standings as admin; tabs per opened challenge, podium, your-group breakdown |
 | Me | Profile, link to admin (if allowed), sign out |
 | My Group | Placeholder (not in the design yet) |
@@ -160,7 +152,7 @@ Responsive web version of `design/Flourish Hub Portal.dc.html` (the design was a
 ## What's real vs sample
 
 - **In the database:** accounts, profiles, roles and permissions, groups and their lock, challenges, riddles and answers, draws, submissions and reviews, and scores.
-- **Demo mode** keeps the same tables in the browser's localStorage and the submission photos in IndexedDB, seeded with the WM 2026 sample, on a demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Seeded submissions have no photo. With Supabase configured, the app uses real time and photos go to the private `submission-media` bucket.
+- **Demo mode** keeps the same tables in the browser's localStorage and the submission photos in IndexedDB, seeded with the WM 2026 sample, on a demo clock (Jum, 16 Okt 2026 · 19:12 WIB). Seeded submissions have no photo. On Vercel with a database, the app uses real time and photos are stored in the database.
 - **Photos** are shrunk in the browser before upload (longest side 1,600 px, JPEG; a 5–6 MB phone photo becomes about 0.5 MB). They show in the admin Validation Queue (click to zoom) and as thumbnails on the group's riddle cards in the portal.
 - **Still static:** the Overview timeline, the overdue-SLA list and the scheduled-announcements card.
 - Admin is built for desktop (minimum width 1280 px); the Portal and login page are responsive.

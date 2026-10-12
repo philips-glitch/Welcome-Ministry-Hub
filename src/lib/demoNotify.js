@@ -1,4 +1,4 @@
-// Demo-mode notifications, mirroring supabase/migrations/0003_notifications.sql:
+// Demo-mode notifications, mirroring server/notify.js:
 // same three automatic kinds, same dedupe keys, same wording. Times follow the demo clock.
 import { DEMO_NOW } from '../data.js';
 import { isPlayer } from './groups.js';

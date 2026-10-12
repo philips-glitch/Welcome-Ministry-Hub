@@ -1,6 +1,5 @@
 // Usernames: 3–24 chars, lowercase letters, digits, "." and "_", starting with a letter or digit.
-// Supabase Auth still needs an email, so each account gets a hidden internal one derived from the
-// username. Members never see or type it. Keep the domain in sync with supabase/functions/admin-users.
+// Each account also gets a hidden email derived from the username (profiles.email). Members never see or type it.
 export const AUTH_EMAIL_DOMAIN = 'users.flourish.local';
 
 export const normalizeUsername = (u) => String(u || '').trim().toLowerCase().replace(/^@/, '');

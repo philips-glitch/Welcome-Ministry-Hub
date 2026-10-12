@@ -1,4 +1,4 @@
-// Demo-mode game data, mirroring supabase/migrations/0002_game.sql + 0006_playbook_events.sql (same tables, same seed).
+// Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
 import { isConnect, marksScore, unitKey, groupPoints, withDefaults } from './game.js';

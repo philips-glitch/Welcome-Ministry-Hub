@@ -1,5 +1,5 @@
 // Single source of truth for roles & permissions on the client.
-// Must stay in sync with the seed in supabase/migrations/0001_auth_roles.sql.
+// The server seeds its roles/permissions tables from these (server/schema.js).
 
 export const PERMISSIONS = [
   { id: 'dashboard.view', label: 'Buka Admin Dashboard', category: 'Admin' },

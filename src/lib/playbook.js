@@ -1,5 +1,5 @@
 // Mini Events #1, #2, #3 and #5 from "Playbook - Welcome UR Outing 2026" (rules, how to play, scoring,
-// schedule). Used by the demo seed; supabase/migrations/0006_playbook_events.sql carries the same content.
+// schedule). Seeds both the demo store and the database (server/schema.js).
 // Mini Event #4 (Spice It Up) is kept as it was, only renumbered to R4.
 // Times are WIB. Sections are shown on the portal challenge page: "- " lines are bullets, "1. " lines are steps.
 
