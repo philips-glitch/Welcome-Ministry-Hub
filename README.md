@@ -30,7 +30,7 @@ Without Supabase keys the app runs in **demo mode**: data lives in your browser'
    ```
    `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to the function automatically.
 4. **Authentication → Providers → Email:** keep Email enabled and turn **off** "Allow new users to sign up", since only admins create accounts. Admin-created accounts are confirmed automatically.
-5. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). On Vercel, add the same two under Settings → Environment Variables.
+5. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). On Vercel, add the same two under Settings → Environment Variables, or connect Vercel's Supabase integration: its `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` are read too. Redeploy after changing them (Vite bakes them in at build time).
 6. Create your own account in the Supabase dashboard (Authentication → Users → Add user, auto-confirm, with a password). Use the email **`<your-username>@users.flourish.local`**, e.g. `angel@users.flourish.local`. You'll log in as `angel`. Then make yourself Super Admin in the SQL editor:
    ```sql
    update public.profiles set role_id = 'super_admin' where username = 'angel';
