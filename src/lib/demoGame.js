@@ -1,7 +1,7 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults } from './game.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles } from './game.js';
 import { isGamePlayer, playGroupOf } from './groups.js';
 import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
@@ -86,9 +86,24 @@ export function gameMethods({ load, save, delay, fail }) {
   const sortBy = (k) => (a, b) => (a[k] ?? 0) - (b[k] ?? 0);
   // Older saved demo states predate notifications: backfill once.
   const notifs = (s) => { if (!s.notifications) seedNotifications(s); return s.notifications; };
+  // Same as openDue() on the server: scheduled events go Live at their open time (with a draw if none yet).
+  const openDue = (s) => {
+    let changed = false;
+    s.challenges.filter((c) => c.status === 'scheduled' && c.open_at && new Date(c.open_at).getTime() <= demoNow()).forEach((c) => {
+      c.status = 'live'; c.updated_at = new Date().toISOString(); changed = true;
+      const ids = s.riddles.filter((r) => r.challenge_id === c.id).sort(sortBy('no')).map((r) => r.id);
+      if (c.riddles_per_group > 0 && !s.draws.some((d) => d.challenge_id === c.id) && ids.length >= c.riddles_per_group) {
+        c.draw_seed = Math.floor(Math.random() * 9000) + 1000;
+        s.draws.push(...drawRiddles(ids, c.riddles_per_group, c.draw_seed, s.groups || GROUPS.map(([no]) => ({ no }))).map((d) => ({ ...d, challenge_id: c.id })));
+      }
+      notifs(s); notifyChallenge(s, c);
+    });
+    if (changed) save();
+  };
   return {
     async listNotifications() {
       const s = load();
+      openDue(s);
       notifs(s);
       syncReminders(s);
       save();
@@ -149,6 +164,7 @@ export function gameMethods({ load, save, delay, fail }) {
     // Until an event opens its text stays "Coming soon" for everyone but the challenge managers.
     async listChallenges() {
       const s = load();
+      openDue(s);
       const all = canDemo(s, 'challenges.manage');
       return delay(structuredClone(s.challenges).map((c) => (all || c.status !== 'scheduled' ? c : { ...c, sections: {} })).sort(sortBy('sort')));
     },

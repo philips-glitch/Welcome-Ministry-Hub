@@ -72,9 +72,10 @@ const anaSees = await ana.call('listProfiles');
 assert.deepEqual(anaSees.map((p) => p.username).sort(), ['ana', 'budi', 'cici', 'kapten']); ok('member sees only own group; cannot import or change roles');
 assert.ok(!JSON.stringify(anaSees).includes('scrypt')); ok('password hashes never leave the server');
 assert.equal((await ana.call('listChallenges')).some((c) => c.status === 'draft'), false); ok('members do not see drafts');
-const sched = ch.find((c) => c.status === 'scheduled' && Object.keys(c.sections || {}).length);
-assert.ok(sched, 'a scheduled event with text');
-assert.deepEqual((await ana.call('listChallenges')).find((c) => c.id === sched.id).sections, {}); ok('scheduled events reach members without their text ("Coming soon")');
+const DAY = 864e5;
+const sched = await admin.call('saveChallenge', { c: { code: 'SQ9', kind: 'side', name: 'Later', status: 'scheduled', open_at: new Date(Date.now() + DAY).toISOString(), sections: { game_idea: 'secret' } } });
+const later = (await ana.call('listChallenges')).find((c) => c.id === sched.id);
+assert.equal(later.status, 'scheduled'); assert.deepEqual(later.sections, {}); ok('scheduled events reach members without their text ("Coming soon") until they open');
 
 // 4 · Get to Know Me (connect) submission rules
 const r1 = ch.find((c) => c.code === 'R1');
@@ -126,6 +127,17 @@ await admin.call('saveChallenge', { c: { id: r2.id, status: 'live' } });
 assert.ok((await ana.call('listNotifications')).some((x) => /Guess, Find, Snap! sudah dibuka/.test(x.title)));
 const seen = await ana.call('listRiddles', { challengeId: r2.id });
 assert.equal(seen.length, 1); assert.equal(seen[0].answer, null); ok('live challenge notifies everyone; members see only their drawn riddle, never the answer');
+
+// 6b · auto-open: past its open time, a scheduled event goes Live by itself (with a riddle draw + notification)
+const auto = await admin.call('saveChallenge', { c: { code: 'SQ1', kind: 'side', name: 'Auto Open', status: 'draft', riddles_per_group: 1, sections: { game_idea: 'hello' } } });
+await admin.call('saveRiddle', { r: { challenge_id: auto.id, no: 1, prompt: 'p', answer: 'a' } });
+await admin.call('saveChallenge', { c: { id: auto.id, status: 'scheduled', open_at: new Date(Date.now() - 60e3).toISOString() } });
+const opened = (await ana.call('listChallenges')).find((c) => c.id === auto.id);
+assert.equal(opened.status, 'live'); assert.equal(opened.sections.game_idea, 'hello');
+assert.equal((await admin.call('getDraw', { challengeId: auto.id })).length, 2);
+assert.ok((await ana.call('listNotifications')).some((x) => x.title === 'Auto Open sudah dibuka!'));
+assert.equal((await ana.call('listChallenges')).find((c) => c.id === sched.id).status, 'scheduled');
+ok('scheduled events open by themselves at their open time: Live, riddles drawn, everyone notified');
 
 // 7 · photos
 await admin.call('updateProfile', { id: ids.ana, patch: { role_id: 'group_leader' } });

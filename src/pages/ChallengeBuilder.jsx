@@ -135,7 +135,9 @@ function Editor({ challenge, save, remove, say }) {
 
       <div className="row" style={{ gap: 8, padding: '10px 12px', borderRadius: 12, background: dirty ? '#F8E9C4' : '#F6F0E2', fontSize: 13, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, color: dirty ? '#7A5410' : '#56655C', flex: 1 }}>
-          {problems.length && dirty ? '⚠ ' + problems[0] : dirty ? 'Ada perubahan yang belum disimpan.' : f.status === 'draft' ? 'Draft: tidak terlihat oleh member.' : 'Tersimpan. Terlihat oleh member.'}
+          {problems.length && dirty ? '⚠ ' + problems[0] : dirty ? 'Ada perubahan yang belum disimpan.' : f.status === 'draft' ? 'Draft: tidak terlihat oleh member.'
+            : f.status === 'scheduled' ? (f.open_at ? `Scheduled: member lihat “Coming soon”, otomatis Live ${fmtWIB(f.open_at)}.` : 'Scheduled: member lihat “Coming soon”. Isi waktu Open supaya otomatis Live.')
+            : 'Tersimpan. Terlihat oleh member.'}
         </span>
         <button className="btn btn-ghost" style={{ height: 34 }} disabled={!dirty || busy} onClick={() => setF(structuredClone(challenge))}>Batalkan</button>
         <button className="btn btn-primary" style={{ height: 34 }} disabled={!dirty || busy} onClick={submit}>{busy ? 'Menyimpan…' : 'Simpan challenge'}</button>

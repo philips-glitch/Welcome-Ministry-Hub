@@ -81,7 +81,7 @@ export default function Login({ notice }) {
 
           {demoPanel && (
             <div className="login-demo">
-              <span className="login-demo-title">Mode demo · Supabase belum dikonfigurasi</span>
+              <span className="login-demo-title">Mode demo · database belum terhubung</span>
               <span className="muted" style={{ fontSize: 12 }}>Klik untuk masuk langsung, atau ketik username{cards.length < DEMO_ACCOUNTS.length ? ' (mis. dari daftar login hasil import)' : ' di kartu'} dengan password <b className="mono">{DEMO_PASSWORD}</b>.</span>
               <div className="login-demo-grid">
                 {cards.map((id) => {

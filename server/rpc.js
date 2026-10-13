@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles } from '../src/lib/game.js';
 import { isGamePlayer, playGroupOf, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -50,6 +50,30 @@ export async function loadCaller(db, req) {
 const can = (me, p) => !!me?.perms.has(p);
 const staff = (me) => can(me, 'submissions.validate') || can(me, 'scores.view');
 const needUser = (me) => { if (!me) throw new HttpError(401, 'Sesi berakhir. Silakan masuk lagi.'); };
+
+// Scheduled events open by themselves at their open time. Checked whenever someone loads the challenges or
+// notifications (no timer job): the switch to Live sends the usual "sudah dibuka" notification, and a riddle
+// event that nobody drew yet gets a random draw. The update claims each event once, even with parallel requests.
+async function openDue(db) {
+  const { rows } = await db.query(`update challenges set status = 'live', updated_at = now()
+    where status = 'scheduled' and open_at is not null and open_at <= now() returning *`);
+  for (const c of rows) {
+    if (c.riddles_per_group > 0 && !(await db.query('select 1 from riddle_draws where challenge_id = $1 limit 1', [c.id])).rows.length) {
+      const ids = (await db.query('select id from riddles where challenge_id = $1 order by no', [c.id])).rows.map((r) => r.id);
+      const groups = (await db.query('select no from groups order by sort, no')).rows;
+      if (ids.length >= c.riddles_per_group) {
+        const seed = Math.floor(Math.random() * 9000) + 1000;
+        await db.tx(async (t) => {
+          for (const d of drawRiddles(ids, c.riddles_per_group, seed, groups)) {
+            await t.query('insert into riddle_draws (challenge_id, group_no, slot, riddle_id) values ($1,$2,$3,$4) on conflict do nothing', [c.id, d.group_no, d.slot, d.riddle_id]);
+          }
+          await t.query('update challenges set draw_seed = $2 where id = $1', [c.id, seed]);
+        });
+      }
+    }
+    await notifyChallenge(db, c);
+  }
+}
 
 // ── Methods ──────────────────────────────────────────────────────────────────
 // Each: async (ctx, args) → data. ctx = { db, me, req, setCookie }.
@@ -220,6 +244,7 @@ const methods = {
   // ── Challenges & riddles ──
   async listChallenges({ db, me }) {
     needUser(me);
+    await openDue(db);
     const all = can(me, 'challenges.manage');
     const rows = (await db.query(`select * from challenges ${all ? '' : "where status <> 'draft'"} order by sort, code`)).rows;
     // Until an event opens its text stays "Coming soon" for everyone but the challenge managers.
@@ -387,6 +412,7 @@ const methods = {
   // ── Notifications ──
   async listNotifications({ db, me }) {
     needUser(me);
+    await openDue(db);
     await syncReminders(db);
     const { rows } = await db.query(`select n.*, (r.user_id is not null) as read from notifications n
       left join notification_reads r on r.notification_id = n.id and r.user_id = $1
