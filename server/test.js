@@ -72,6 +72,9 @@ const anaSees = await ana.call('listProfiles');
 assert.deepEqual(anaSees.map((p) => p.username).sort(), ['ana', 'budi', 'cici', 'kapten']); ok('member sees only own group; cannot import or change roles');
 assert.ok(!JSON.stringify(anaSees).includes('scrypt')); ok('password hashes never leave the server');
 assert.equal((await ana.call('listChallenges')).some((c) => c.status === 'draft'), false); ok('members do not see drafts');
+const sched = ch.find((c) => c.status === 'scheduled' && Object.keys(c.sections || {}).length);
+assert.ok(sched, 'a scheduled event with text');
+assert.deepEqual((await ana.call('listChallenges')).find((c) => c.id === sched.id).sections, {}); ok('scheduled events reach members without their text ("Coming soon")');
 
 // 4 · Get to Know Me (connect) submission rules
 const r1 = ch.find((c) => c.code === 'R1');

@@ -10,6 +10,7 @@ import { PhotoThumb } from '../components/Photo.jsx';
 const STATUS = { validated: 'Validated', submitted: 'Submitted', rejected: 'Rejected', resubmit: 'Rejected' };
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const EXTRA = [['connection', 'The Connection'], ['what_we_need', 'What We Need'], ['make_it_flourish', 'Make It Flourish'], ['flourish_hub', 'Flourish Hub'], ['duration', 'Durasi']];
+const SOON = 'Coming soon';
 const first = (name) => (name || '').split(' ')[0];
 
 export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle, justSent }) {
@@ -17,6 +18,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
   const { scores } = useGame();
   if (!c) return <div className="p-card muted">Challenge tidak ditemukan.</div>;
   const open = c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
+  // Until it opens, the event's details stay under wraps: every text section reads "Coming soon".
+  const soon = ['draft', 'scheduled'].includes(c.status);
   const scoring = withDefaults(c.scoring);
   const form = formOf(c);
   const connect = isConnect(c);
@@ -63,7 +66,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
         </div>
         <div className="col" style={{ gap: 6, position: 'relative' }}>
           <span style={{ font: "800 30px/1.08 'Bricolage Grotesque'", letterSpacing: '-0.01em' }}>{c.name}</span>
-          {c.sections?.game_idea && <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9, maxWidth: 680 }}>{c.sections.game_idea}</span>}
+          {soon ? <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9, fontWeight: 700, letterSpacing: '.02em' }}>{SOON}</span>
+            : c.sections?.game_idea && <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9, maxWidth: 680 }}>{c.sections.game_idea}</span>}
         </div>
 
         <div className="p-hero-stats" style={{ position: 'relative' }}>
@@ -184,14 +188,23 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
         {/* Side: the rules, collapsible */}
         <div className="p-sticky">
           <Fold title="Cara main" open>
-            {c.sections?.how_to_play ? <Prose text={c.sections.how_to_play} /> : <p style={{ ...para, color: '#56655C' }}>Detail menyusul dari panitia.</p>}
+            {soon ? <Soon /> : c.sections?.how_to_play ? <Prose text={c.sections.how_to_play} /> : <p style={{ ...para, color: '#56655C' }}>Detail menyusul dari panitia.</p>}
           </Fold>
-          {c.sections?.rules && <Fold title="Aturan" open><Prose text={c.sections.rules} /></Fold>}
-          <Fold title={scoring.tba ? 'Cara skor · menyusul' : `Cara skor · maks ${teamMax(c)}`} open={!scoring.tba}>
-            {!scoring.tba && <ScoringSummary c={c} scoring={scoring} />}
-            {c.sections?.points_rewards && <div style={{ marginTop: scoring.tba ? 0 : 10 }}><Prose text={c.sections.points_rewards} muted /></div>}
-          </Fold>
-          {scoring.type === 'riddle' && (
+          {soon ? <Fold title="Aturan" open><Soon /></Fold> : c.sections?.rules && <Fold title="Aturan" open><Prose text={c.sections.rules} /></Fold>}
+          {soon ? <Fold title="Poin & reward" open><Soon /></Fold> : (
+            <Fold title={scoring.tba ? 'Cara skor · menyusul' : `Cara skor · maks ${teamMax(c)}`} open={!scoring.tba}>
+              {!scoring.tba && <ScoringSummary c={c} scoring={scoring} />}
+              {c.sections?.points_rewards && <div style={{ marginTop: scoring.tba ? 0 : 10 }}><Prose text={c.sections.points_rewards} muted /></div>}
+            </Fold>
+          )}
+          {soon && (
+            <Fold title="Info lainnya" open>
+              <div className="col" style={{ gap: 10 }}>
+                {EXTRA.filter(([k]) => ['connection', 'flourish_hub'].includes(k)).map(([k, t]) => <div key={k} className="col" style={{ gap: 2 }}><b style={{ fontSize: 13 }}>{t}</b><Soon /></div>)}
+              </div>
+            </Fold>
+          )}
+          {!soon && scoring.type === 'riddle' && (
             <Fold title="Do's & Don'ts">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ background: '#E3EFE6', borderRadius: 12, padding: 10, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, lineHeight: 1.35 }}>
@@ -210,7 +223,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
               ])}
             </div>
           </Fold>
-          {EXTRA.some(([k]) => c.sections?.[k]) && (
+          {!soon && EXTRA.some(([k]) => c.sections?.[k]) && (
             <Fold title="Info lainnya">
               <div className="col" style={{ gap: 10 }}>
                 {EXTRA.filter(([k]) => c.sections?.[k]).map(([k, t]) => <div key={k} className="col" style={{ gap: 2 }}><b style={{ fontSize: 13 }}>{t}</b><Prose text={c.sections[k]} /></div>)}
@@ -224,6 +237,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
 }
 
 const para = { margin: 0, fontSize: 13.5, lineHeight: 1.55, color: '#3C4A42' };
+const Soon = () => <p style={{ ...para, color: '#56655C', fontStyle: 'italic' }}>{SOON}</p>;
 
 // Section text: "- " lines become a bullet list, other lines paragraphs.
 function Prose({ text, muted }) {

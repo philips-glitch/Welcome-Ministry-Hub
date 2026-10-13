@@ -221,7 +221,9 @@ const methods = {
   async listChallenges({ db, me }) {
     needUser(me);
     const all = can(me, 'challenges.manage');
-    return (await db.query(`select * from challenges ${all ? '' : "where status <> 'draft'"} order by sort, code`)).rows;
+    const rows = (await db.query(`select * from challenges ${all ? '' : "where status <> 'draft'"} order by sort, code`)).rows;
+    // Until an event opens its text stays "Coming soon" for everyone but the challenge managers.
+    return all ? rows : rows.map((c) => (c.status === 'scheduled' ? { ...c, sections: {} } : c));
   },
   async saveChallenge({ db, me }, { c }) {
     needUser(me);

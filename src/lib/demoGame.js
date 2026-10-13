@@ -146,7 +146,12 @@ export function gameMethods({ load, save, delay, fail }) {
       s.groups = s.groups.map((g) => ({ ...g, locked_at: locked ? new Date().toISOString() : null, locked_by: locked ? s.sessionId : null }));
       save(); return delay();
     },
-    async listChallenges() { return delay(structuredClone(load().challenges).sort(sortBy('sort'))); },
+    // Until an event opens its text stays "Coming soon" for everyone but the challenge managers.
+    async listChallenges() {
+      const s = load();
+      const all = canDemo(s, 'challenges.manage');
+      return delay(structuredClone(s.challenges).map((c) => (all || c.status !== 'scheduled' ? c : { ...c, sections: {} })).sort(sortBy('sort')));
+    },
     async saveChallenge(c) {
       const s = load();
       if (c.code && s.challenges.some((x) => x.code === c.code && x.id !== c.id)) return fail(`Kode ${c.code} sudah dipakai.`);
