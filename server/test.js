@@ -123,7 +123,13 @@ assert.ok((await ana.call('listNotifications')).every((x) => x.read)); ok('mark 
 // 6 · challenge status → notification; draw → riddles visible to the group
 const rows = [{ group_no: '01', slot: 1, riddle_id: (await admin.call('listRiddles', { challengeId: r2.id }))[0].id }];
 await admin.call('saveDraw', { challengeId: r2.id, rows, seed: 42 });
+for (const who of [kapten2, ana]) {
+  assert.deepEqual(await who.call('listRiddles', { challengeId: r2.id }), []);
+  assert.deepEqual(await who.call('getDraw', { challengeId: r2.id }), []);
+}
+ok('before it opens, captains and members get no riddles or draw ("Coming soon")');
 await admin.call('saveChallenge', { c: { id: r2.id, status: 'live' } });
+assert.equal((await kapten2.call('listRiddles', { challengeId: r2.id })).length, 10);
 assert.ok((await ana.call('listNotifications')).some((x) => /Guess, Find, Snap! sudah dibuka/.test(x.title)));
 const seen = await ana.call('listRiddles', { challengeId: r2.id });
 assert.equal(seen.length, 1); assert.equal(seen[0].answer, null); ok('live challenge notifies everyone; members see only their drawn riddle, never the answer');

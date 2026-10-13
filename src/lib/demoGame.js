@@ -187,7 +187,19 @@ export function gameMethods({ load, save, delay, fail }) {
       s.submissions = s.submissions.filter((x) => x.challenge_id !== id);
       save(); return delay();
     },
-    async listRiddles(challengeId) { return delay(structuredClone(load().riddles.filter((r) => r.challenge_id === challengeId)).sort(sortBy('no'))); },
+    // Same as the server: managers see the bank; validators once it's open; members only their group's draw, no answers.
+    async listRiddles(challengeId) {
+      const s = load();
+      const c = s.challenges.find((x) => x.id === challengeId);
+      const opened = ['live', 'closed', 'published'].includes(c?.status);
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      const mine = new Set(s.draws.filter((d) => d.challenge_id === challengeId && d.group_no === me?.group_no).map((d) => d.riddle_id));
+      const rows = s.riddles.filter((r) => r.challenge_id === challengeId).sort(sortBy('no'));
+      if (canDemo(s, 'challenges.manage')) return delay(structuredClone(rows));
+      if (!opened) return delay([]);
+      if (canDemo(s, 'submissions.validate')) return delay(structuredClone(rows));
+      return delay(rows.filter((r) => mine.has(r.id)).map((r) => ({ ...r, answer: null })));
+    },
     async saveRiddle(r) {
       const s = load();
       if (s.riddles.some((x) => x.challenge_id === r.challenge_id && x.no === r.no && x.id !== r.id)) return fail(`Riddle #${r.no} sudah ada.`);
@@ -202,7 +214,15 @@ export function gameMethods({ load, save, delay, fail }) {
       s.draws = s.draws.filter((d) => d.riddle_id !== id);
       save(); return delay();
     },
-    async getDraw(challengeId) { return delay(structuredClone(load().draws.filter((d) => d.challenge_id === challengeId))); },
+    async getDraw(challengeId) {
+      const s = load();
+      const c = s.challenges.find((x) => x.id === challengeId);
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      const rows = s.draws.filter((d) => d.challenge_id === challengeId);
+      if (canDemo(s, 'challenges.manage')) return delay(structuredClone(rows));
+      if (!['live', 'closed', 'published'].includes(c?.status)) return delay([]);
+      return delay(structuredClone(canDemo(s, 'submissions.validate') ? rows : rows.filter((d) => d.group_no === me?.group_no)));
+    },
     async saveDraw(challengeId, rows, seed) {
       const s = load();
       s.draws = [...s.draws.filter((d) => d.challenge_id !== challengeId), ...rows.map((r) => ({ ...r, challenge_id: challengeId }))];

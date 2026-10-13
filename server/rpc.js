@@ -276,8 +276,14 @@ const methods = {
   },
   async listRiddles({ db, me }, { challengeId }) {
     needUser(me);
-    if (can(me, 'challenges.manage') || can(me, 'submissions.validate')) {
+    if (can(me, 'challenges.manage')) {
       return (await db.query('select id, challenge_id, no, prompt, answer from riddles where challenge_id = $1 order by no', [challengeId])).rows;
+    }
+    // Validators (captains) get the bank with answers once the challenge is open — before that it's "Coming soon".
+    if (can(me, 'submissions.validate')) {
+      return (await db.query(`select r.id, r.challenge_id, r.no, r.prompt, r.answer from riddles r
+        join challenges c on c.id = r.challenge_id and c.status in ('live', 'closed', 'published')
+        where r.challenge_id = $1 order by r.no`, [challengeId])).rows;
     }
     // Members: only the riddles drawn for their group, once the challenge is open — never the answers.
     return (await db.query(`select r.id, r.challenge_id, r.no, r.prompt, null as answer from riddles r
@@ -302,8 +308,12 @@ const methods = {
   },
   async getDraw({ db, me }, { challengeId }) {
     needUser(me);
-    if (can(me, 'challenges.manage') || can(me, 'submissions.validate')) {
+    if (can(me, 'challenges.manage')) {
       return (await db.query('select group_no, slot, riddle_id from riddle_draws where challenge_id = $1', [challengeId])).rows;
+    }
+    if (can(me, 'submissions.validate')) {
+      return (await db.query(`select d.group_no, d.slot, d.riddle_id from riddle_draws d join challenges c on c.id = d.challenge_id
+        where d.challenge_id = $1 and c.status in ('live', 'closed', 'published')`, [challengeId])).rows;
     }
     return (await db.query(`select d.group_no, d.slot, d.riddle_id from riddle_draws d join challenges c on c.id = d.challenge_id
       where d.challenge_id = $1 and d.group_no = $2 and c.status in ('live', 'closed', 'published')`, [challengeId, me.group_no])).rows;

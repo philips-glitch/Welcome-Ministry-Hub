@@ -126,7 +126,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                   {Array.from({ length: Math.max(0, people - mine.length) }, (_, i) => (
                     <div key={'slot' + i} className="p-card" style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, borderStyle: 'dashed', borderColor: canAdd ? '#1F4D3A' : undefined }}>
                       <span className="muted" style={{ fontSize: 13, fontWeight: 700 }}>Teman baru #{mine.length + i + 1}</span>
-                      <span className="muted" style={{ fontSize: 12, lineHeight: 1.45, flex: 1 }}>{open ? 'Ajak ngobrol satu orang di grup kamu, lalu jawab Q1–Q4 tentang dia.' : c.status === 'scheduled' ? 'Bisa diisi saat challenge dibuka.' : 'Challenge sudah ditutup.'}</span>
+                      <span className="muted" style={{ fontSize: 12, lineHeight: 1.45, flex: 1 }}>{open ? 'Ajak ngobrol satu orang di grup kamu, lalu jawab Q1–Q4 tentang dia.' : soon ? SOON : 'Challenge sudah ditutup.'}</span>
                       {canAdd && <button onClick={() => pickRiddle(null)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>+ Pilih orang</button>}
                     </div>
                   ))}
@@ -136,14 +136,15 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
           ) : riddleMode ? (
             <section className="col" style={{ gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span className="p-h">Riddle grup kamu</span><span className="muted" style={{ fontSize: 12 }}>diundi acak oleh panitia</span>
+                <span className="p-h">Riddle grup kamu</span><span className="muted" style={{ fontSize: 12 }}>{soon ? SOON : 'diundi acak oleh panitia'}</span>
               </div>
-              {data.loading && <span className="muted" style={{ fontSize: 13 }}>Memuat riddle…</span>}
-              {!data.loading && !riddleRows.length && (
+              {soon && <div className="p-card muted" style={{ fontSize: 13, fontStyle: 'italic' }}>{SOON}</div>}
+              {!soon && data.loading && <span className="muted" style={{ fontSize: 13 }}>Memuat riddle…</span>}
+              {!soon && !data.loading && !riddleRows.length && (
                 <div className="p-card muted" style={{ fontSize: 13 }}>{!me.group ? 'Kamu belum masuk grup.' : c.status === 'scheduled' ? 'Riddle muncul saat challenge dibuka.' : 'Riddle belum diundi untuk grup kamu.'}</div>
               )}
               <div className="p-grid-2">
-                {riddleRows.map((r) => {
+                {!soon && riddleRows.map((r) => {
                   const [cbg, cfg] = SUB_CHIP[r.st];
                   const doneCard = r.st === 'Validated';
                   return (
@@ -169,17 +170,17 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
             <section className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <span className="p-h">Submission grup</span>
               <span className="muted" style={{ fontSize: 13 }}>
-                {!single ? 'Belum ada submission dari grup kamu.' : `Status: ${STATUS[single.status]}${single.score != null ? ` · ${single.score} pts` : ''}${single.reject_reason ? ` · “${single.reject_reason}”` : ''} · versi ${single.version}`}
+                {soon ? SOON : !single ? 'Belum ada submission dari grup kamu.' : `Status: ${STATUS[single.status]}${single.score != null ? ` · ${single.score} pts` : ''}${single.reject_reason ? ` · “${single.reject_reason}”` : ''} · versi ${single.version}`}
               </span>
               {single?.ig_url && form.photo === 'none' && <a href={single.ig_url.startsWith('http') ? single.ig_url : 'https://' + single.ig_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1F4D3A', overflowWrap: 'anywhere' }}>▶ {single.ig_url}</a>}
               {single && (single.media_path || single.media_name) && <PhotoThumb path={single.media_path} name={single.media_name} height={200} caption={`${c.name} · versi ${single.version}`} placeholder="Foto lama, tidak tersimpan" />}
               {canSingle
                 ? <button className="p-btn-lg" onClick={() => pickRiddle(null)} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{single ? 'Kirim ulang' : 'Submit challenge'}</button>
-                : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (c.status === 'scheduled' ? 'Belum dibuka' : 'Submit ditutup') : single ? 'Sudah dikirim' : 'Submit oleh Group Leader'}</button>}
+                : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (soon ? SOON : 'Submit ditutup') : single ? 'Sudah dikirim' : 'Submit oleh Group Leader'}</button>}
             </section>
           )}
           <span className="muted" style={{ fontSize: 12 }}>
-            {!open ? (c.status === 'scheduled' ? 'Challenge ini belum dibuka.' : 'Challenge ini sudah ditutup.')
+            {!open ? (soon ? SOON : 'Challenge ini sudah ditutup.')
               : connect ? (me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia.' : 'Challenge ini dikerjakan tiap peserta grup.')
               : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
           </span>
