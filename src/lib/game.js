@@ -104,14 +104,15 @@ export function connectBreakdown(scoring, subs, rosterSize) {
 }
 
 // One group's points for one challenge from that group's submissions. Mirrors group_scores() in SQL.
-export function groupPoints(c, subs, rosterSize) {
+// noPoints: ids of people who play without points (captains) — their entries and photo tags don't count.
+export function groupPoints(c, subs, rosterSize, noPoints = new Set()) {
   const s = withDefaults(c.scoring);
-  const valid = subs.filter((x) => x.status === 'validated');
+  const valid = subs.filter((x) => x.status === 'validated' && !noPoints.has(x.submitted_by));
   if (!valid.length) return 0;
   if (s.type === 'connect') return connectBreakdown(s, valid, rosterSize).points;
   const base = sum(valid.map((x) => x.score));
   if (s.type !== 'rubric') return round1(base);
-  return round1(base + tierPoints(s.participation?.tiers, new Set(valid.flatMap((x) => x.tagged_ids || [])).size));
+  return round1(base + tierPoints(s.participation?.tiers, new Set(valid.flatMap((x) => (x.tagged_ids || []).filter((id) => !noPoints.has(id)))).size));
 }
 
 // Points from a validator's marks: connect = answers + photo bonus, rubric = sum of criteria.

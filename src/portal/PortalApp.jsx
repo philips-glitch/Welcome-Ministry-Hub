@@ -6,7 +6,7 @@ import { roleName } from '../lib/permissions.js';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { buildStandings, isConnect } from '../lib/game.js';
-import { isGamePlayer } from '../lib/groups.js';
+import { isGamePlayer, playsWithoutPoints } from '../lib/groups.js';
 import Home from './Home.jsx';
 import ChallengeDetail from './ChallengeDetail.jsx';
 import ChallengeList from './ChallengeList.jsx';
@@ -58,6 +58,7 @@ export default function PortalApp({ route }) {
     roleName: roleName(profile.role_id),
     group: g && { no: g[0], name: g[1], color: g[2] },
     canSubmit: canSubmitFor(challenge),
+    noPoints: playsWithoutPoints(profile),
   };
   const data = useGroupChallenge(challenge, me.group?.no);
   const notif = useNotifications();

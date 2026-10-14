@@ -392,9 +392,11 @@ const methods = {
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
-    const { rows: [before] } = await db.query('select status, group_no from submissions where id = $1', [id]);
+    const { rows: [before] } = await db.query('select s.status, s.group_no, p.role_id as by_role from submissions s left join profiles p on p.id = s.submitted_by where s.id = $1', [id]);
     if (!before) bad('Submission tidak ditemukan.');
     if (before.group_no === playGroupOf(me)) deny('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
+    // A captain's own entries are validated like anyone's but always score 0.
+    if (before.by_role === 'captain') patch = { ...patch, score: 0 };
     const keys = REVIEW.filter((k) => k in patch);
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}
       where id = $1 returning *`, [id, ...keys.map((k) => val(k, patch[k])), me.id]);
@@ -405,15 +407,17 @@ const methods = {
     needUser(me);
     const challenges = (await db.query(`select * from challenges where status <> 'draft'`)).rows;
     const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score from submissions where status = 'validated'`)).rows.map(subRow);
+    // Captains play without points: not in the roster count, and their entries/tags are skipped.
     const roster = {};
-    (await db.query(`select group_no, count(*)::int as n from profiles where ${GAME_PLAYER_SQL()} group by group_no`)).rows
+    (await db.query(`select group_no, count(*)::int as n from profiles where ${GAME_PLAYER_SQL()} and role_id <> 'captain' group by group_no`)).rows
       .forEach((r) => { roster[r.group_no] = r.n; });
+    const noPoints = new Set((await db.query(`select id from profiles where role_id = 'captain'`)).rows.map((r) => r.id));
     const out = [];
     for (const c of challenges) {
       const mine = valid.filter((x) => x.challenge_id === c.id);
       for (const no of [...new Set(mine.map((x) => x.group_no))]) {
         const g = mine.filter((x) => x.group_no === no);
-        out.push({ group_no: no, challenge_id: c.id, points: groupPoints(c, g, roster[no] || 0), validated: g.length });
+        out.push({ group_no: no, challenge_id: c.id, points: groupPoints(c, g, roster[no] || 0, noPoints), validated: g.length });
       }
     }
     return out;

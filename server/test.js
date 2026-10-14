@@ -113,8 +113,13 @@ const rev = await kapten2.call('reviewSubmission', { id: s1.id, patch: { status:
 assert.equal(rev.score, 12);
 const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
-// 1 member took part with 12/24 → 12/24×70 = 35; 1 of 4 players (3 members + captain) → 0.25×30 = 7.5 → 42.5
-assert.equal(g1.points, 42.5); ok("captain can't validate own group; another captain's review → team score 42.5 (captain counts in the team)");
+// 1 member took part with 12/24 → 12/24×70 = 35; 1 of 3 players (captains play without points) → 0.333×30 = 10 → 45
+assert.equal(g1.points, 45); ok("captain can't validate own group; another captain's review → team score 45 (= playbook formula)");
+const kSub = (await kapten2.call('listSubmissions', { challengeId: r1.id })).find((x) => x.submitted_by === ids.kapten);
+const kRev = await kapten2.call('reviewSubmission', { id: kSub.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
+assert.equal(Number(kRev.score), 0);
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r1.id).points, 45);
+ok("a captain's entry is validated but scores 0 and doesn't change the team score");
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });

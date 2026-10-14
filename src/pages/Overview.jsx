@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, isStaffOf, isGamePlayer } from '../lib/groups.js';
+import { leaderName, isStaffOf, isPlayer } from '../lib/groups.js';
 import { fmtWIB, statusMeta, isConnect, latestPerUnit } from '../lib/game.js';
 import useCountdown from '../useCountdown.js';
 
@@ -58,14 +58,16 @@ export default function Overview({ onNavigate }) {
   // Connect challenges (every member submits): count people, not riddles.
   const connect = isConnect(focus);
   const people = focus?.scoring?.people || 2;
-  const players = members.filter(isGamePlayer);
+  // Point-earning players (captains play too, but without points, so they aren't counted here).
+  const players = members.filter(isPlayer);
+  const scorers = new Set(players.map((p) => p.id));
 
   const rows = GROUPS.map(({ no, name, color }) => {
     const mine = subs.filter((x) => x.group_no === no);
     if (connect) {
       const cur = latestPerUnit(mine);
       const roster = players.filter((p) => p.group_no === no).length;
-      const took = new Set(cur.filter((x) => ['submitted', 'validated'].includes(x.status)).map((x) => x.submitted_by)).size;
+      const took = new Set(cur.filter((x) => ['submitted', 'validated'].includes(x.status) && scorers.has(x.submitted_by)).map((x) => x.submitted_by)).size;
       const last = mine.map((x) => x.submitted_at).sort().pop();
       const captain = members.filter((p) => isStaffOf(p, no)).map((p) => p.full_name).join(', ') || '—';
       return { no, name, color, captain, leader: leaderName(members, no), dots: [], took, roster, rec: cur.length, pen: cur.filter((x) => x.status === 'submitted').length, val: cur.filter((x) => x.status === 'validated').length, last: last ? fmtWIB(last, { day: undefined, month: undefined }).replace(' WIB', '') : '—' };

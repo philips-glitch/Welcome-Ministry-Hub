@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, playGroupOf } from '../lib/groups.js';
+import { leaderName, playGroupOf, playsWithoutPoints } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
 import { Lightbox } from '../components/Photo.jsx';
@@ -23,6 +23,8 @@ export default function ValidationQueue() {
   // A captain plays in their own group, so other captains/PICs validate it.
   const own = playGroupOf(useAuth().profile);
   const nameOf = (id) => members.find((p) => p.id === id)?.full_name || '?';
+  // Captains play without points: their entries score 0 and they aren't counted as participants.
+  const noPoints = (id) => playsWithoutPoints(members.find((p) => p.id === id));
   const reviewable = (challenges || []).filter((c) => c.status !== 'draft');
   const [chId, setChId] = useState(null);
   const [fGroup, setFGroup] = useState('');
@@ -75,7 +77,7 @@ export default function ValidationQueue() {
     setSelId(s.id);
     setReview({
       checks: s.checks || checksList.map(() => true),
-      count: s.participant_count ?? s.tagged_ids.length,
+      count: s.participant_count ?? s.tagged_ids.filter((id) => !noPoints(id)).length,
       marks: { ...(s.marks || {}) },
       reason: s.reject_reason || null,
       override: false, overrideScore: '', overrideNote: '',
@@ -89,7 +91,8 @@ export default function ValidationQueue() {
   };
 
   const auto = cur && review ? computeScore(scoring, { location_correct: review.checks[1], participant_count: review.count, manual: review.manual, marks: review.marks }) : 0;
-  const score = review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
+  const byCaptain = !!cur && noPoints(cur.submitted_by);
+  const score = byCaptain ? 0 : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
   const missing = review ? marksMissing(scoring, review.marks) : [];
   const G = cur ? group(cur.group_no) : null;
@@ -98,7 +101,7 @@ export default function ValidationQueue() {
   // Rubric challenges: team participation = everyone tagged across the group's validated submissions.
   const teamTagged = cur && scoring.type === 'rubric'
     ? new Set((subs || []).filter((s) => s.group_no === cur.group_no && s.status === 'validated' && s.id !== cur.id).flatMap((s) => s.tagged_ids)) : null;
-  const teamWith = teamTagged ? new Set([...teamTagged, ...cur.tagged_ids]).size : 0;
+  const teamWith = teamTagged ? [...new Set([...teamTagged, ...cur.tagged_ids])].filter((id) => !noPoints(id)).length : 0;
 
   const decide = async (kind) => {
     if (!cur || !review) return;
@@ -317,7 +320,7 @@ export default function ValidationQueue() {
                 <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <span className="num" style={{ font: "800 36px/1 'Bricolage Grotesque'" }}>{score}</span>
-                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
+                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {byCaptain ? 'captain — ikut main tanpa poin' : review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
                   </div>
                   {parts && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
@@ -325,7 +328,8 @@ export default function ValidationQueue() {
                       <span>Partisipasi {review.count} org → {parts.tier} × {scoring.participation_weight}%</span><span className="num">{parts.part.toFixed(1)}</span>
                     </div>
                   )}
-                  {connect && (
+                  {byCaptain && <span style={{ fontSize: 12, opacity: 0.9 }}>Ini submission captain: tetap divalidasi, tapi skornya selalu 0 dan tidak dihitung ke poin tim.</span>}
+                  {connect && !byCaptain && (
                     <span style={{ fontSize: 12, opacity: 0.9 }}>Skor orang ini. Skor tim = rata-rata member ÷ {scoring.people * max} × {scoring.individual_weight} + partisipasi × {scoring.participation_weight}.</span>
                   )}
                   {scoring.type === 'flat' && <span style={{ fontSize: 12, opacity: 0.9 }}>Poin tetap untuk submission yang tervalidasi.</span>}

@@ -2,7 +2,7 @@
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
 import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles } from './game.js';
-import { isGamePlayer, playGroupOf } from './groups.js';
+import { isPlayer, isGamePlayer, playGroupOf, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
@@ -295,6 +295,8 @@ export function gameMethods({ load, save, delay, fail }) {
       if (i < 0) return fail('Submission tidak ditemukan.');
       if (s.submissions[i].group_no === playGroupOf(s.profiles.find((p) => p.id === s.sessionId))) return fail('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
       const prevStatus = s.submissions[i].status;
+      // A captain's own entries are validated like anyone's but always score 0.
+      if (playsWithoutPoints(s.profiles.find((p) => p.id === s.submissions[i].submitted_by))) patch = { ...patch, score: 0 };
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
       save(); return delay(structuredClone(s.submissions[i]));
@@ -303,14 +305,16 @@ export function gameMethods({ load, save, delay, fail }) {
     // Same rules as group_scores() in SQL (see groupPoints in game.js).
     async groupScores() {
       const s = load();
+      // Captains play without points: not in the roster count, and their entries/tags are skipped.
       const roster = {};
-      s.profiles.filter(isGamePlayer).forEach((p) => { roster[p.group_no] = (roster[p.group_no] || 0) + 1; });
+      s.profiles.filter((p) => isPlayer(p) && p.group_no).forEach((p) => { roster[p.group_no] = (roster[p.group_no] || 0) + 1; });
+      const noPoints = new Set(s.profiles.filter(playsWithoutPoints).map((p) => p.id));
       const out = [];
       s.challenges.filter((c) => c.status !== 'draft').forEach((c) => {
         const valid = s.submissions.filter((x) => x.challenge_id === c.id && x.status === 'validated');
         [...new Set(valid.map((x) => x.group_no))].forEach((no) => {
           const mine = valid.filter((x) => x.group_no === no);
-          out.push({ group_no: no, challenge_id: c.id, points: groupPoints(c, mine, roster[no] || 0), validated: mine.length });
+          out.push({ group_no: no, challenge_id: c.id, points: groupPoints(c, mine, roster[no] || 0, noPoints), validated: mine.length });
         });
       });
       return delay(out);

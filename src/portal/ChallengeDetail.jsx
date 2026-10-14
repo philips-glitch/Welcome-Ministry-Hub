@@ -181,7 +181,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
           )}
           <span className="muted" style={{ fontSize: 12 }}>
             {!open ? (soon ? SOON : 'Challenge ini sudah ditutup.')
-              : connect ? (me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia.' : 'Challenge ini dikerjakan tiap peserta grup.')
+              : connect ? (me.noPoints ? 'Kamu captain: ikut main seperti member, tapi tanpa poin — skor kamu selalu 0 dan tidak dihitung ke poin grup.' : me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia.' : 'Challenge ini dikerjakan tiap peserta grup.')
               : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
           </span>
         </div>
