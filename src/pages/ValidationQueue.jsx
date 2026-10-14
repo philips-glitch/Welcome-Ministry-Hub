@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, playGroupOf, playsWithoutPoints } from '../lib/groups.js';
+import { leaderName, validatesOnly, playsWithoutPoints } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
 import { Lightbox } from '../components/Photo.jsx';
@@ -20,8 +20,8 @@ export default function ValidationQueue() {
   // [no, name, color] for a group number (falls back for a group that was deleted).
   const group = (no) => { const g = (groupRows || []).find((x) => x.no === no); return g ? [g.no, g.name, g.color] : [no, 'Grup ' + no, '#999']; };
   const members = useMembers().rows || [];
-  // A captain plays in their own group, so other captains/PICs validate it.
-  const own = playGroupOf(useAuth().profile);
+  // Captains validate their own group only; PICs and admins see every group.
+  const only = validatesOnly(useAuth().profile);
   const nameOf = (id) => members.find((p) => p.id === id)?.full_name || '?';
   // Captains play without points: their entries score 0 and they aren't counted as participants.
   const noPoints = (id) => playsWithoutPoints(members.find((p) => p.id === id));
@@ -52,13 +52,13 @@ export default function ValidationQueue() {
     if (!chId) return;
     setSubs(null); setSelId(null); setGtkm({});
     Promise.all([api.listSubmissions({ challengeId: chId }), api.listRiddles(chId)]).then(([s, r]) => {
-      s = s.filter((x) => x.group_no !== own);
+      if (only !== null) s = s.filter((x) => x.group_no === only);
       setSubs(s); setRiddles(r);
       // Get to Know Me answers of everyone being described: the key for Q1–Q3.
       const ids = [...new Set(s.map((x) => x.target_id).filter(Boolean))];
       if (ids.length) api.getGtkm(ids).then(setGtkm).catch(() => {});
     });
-  }, [chId, own]);
+  }, [chId, only]);
 
   const list = useMemo(() => (subs || []).filter((s) => (!fGroup || s.group_no === fGroup) && (fStatus === 'all' || s.status === fStatus)), [subs, fGroup, fStatus]);
   const pendingHere = (subs || []).filter((s) => s.status === 'submitted').length;
@@ -165,12 +165,12 @@ export default function ValidationQueue() {
         </select>
         <select aria-label="Grup" value={fGroup} onChange={(e) => setFGroup(e.target.value)} style={selectStyle}>
           <option value="">Semua grup</option>
-          {(groupRows || []).filter(({ no }) => no !== own).map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
+          {(groupRows || []).filter(({ no }) => only === null || no === only).map(({ no, name }) => <option key={no} value={no}>{no} {name}</option>)}
         </select>
         <select aria-label="Status" value={fStatus} onChange={(e) => setFStatus(e.target.value)} style={selectStyle}>
           <option value="submitted">Pending</option><option value="validated">Valid</option><option value="rejected">Ditolak</option><option value="resubmit">Minta ulang</option><option value="all">Semua status</option>
         </select>
-        {own && <span className="muted" style={{ fontSize: 12 }}>Grup kamu ({own}) divalidasi captain/PIC lain.</span>}
+        {only !== null && <span className="muted" style={{ fontSize: 12 }}>{only ? `Captain: kamu memvalidasi grup kamu (${only}) saja.` : 'Kamu belum punya grup, jadi belum ada submission untuk divalidasi.'}</span>}
         <span className="muted" style={{ marginLeft: 'auto', fontSize: 13 }}>{pendingHere} tersisa{challenge?.validate_by ? ' · SLA ' + fmtWIB(challenge.validate_by, { hour: undefined, minute: undefined }).replace(' WIB', '') : ''}</span>
       </div>
 

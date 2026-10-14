@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, 
 import { notifyReview, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
 import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles } from '../src/lib/game.js';
-import { isGamePlayer, playGroupOf, GAME_PLAYER_SQL } from '../src/lib/groups.js';
+import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
 
@@ -179,9 +179,9 @@ const methods = {
     needUser(me);
     if (!can(me, 'submissions.validate') && !can(me, 'members.manage')) return {};
     if (!ids?.length) return {};
-    // A captain plays in their group, so its answer key stays hidden from them.
+    // Captains get the answer key of their own group only (the group they validate).
     const { rows } = await db.query(`select g.profile_id, g.words, g.enjoy, g.talent from profile_gtkm g join profiles p on p.id = g.profile_id
-      where g.profile_id = any($1::uuid[]) and ($2::text is null or p.group_no is distinct from $2::text)`, [ids, playGroupOf(me)]);
+      where g.profile_id = any($1::uuid[]) and ($2::text is null or p.group_no = $2::text)`, [ids, validatesOnly(me)]);
     return Object.fromEntries(rows.map(({ profile_id, ...g }) => [profile_id, g]));
   },
   async saveGtkm({ db, me }, { id, data }) {
@@ -338,10 +338,9 @@ const methods = {
       // Own group only; in connect challenges only one's own entries (so answers can't be copied).
       p.push(me.group_no); where.push(`s.group_no = $${p.length}`);
       p.push(me.id); where.push(`(coalesce(c.scoring->>'type', '') <> 'connect' or s.submitted_by = $${p.length})`);
-    } else if (playGroupOf(me)) {
-      // Staff who play (captains): other groups in full, their own group like a member.
-      p.push(playGroupOf(me)); const g = p.length;
-      p.push(me.id); where.push(`(s.group_no <> $${g} or coalesce(c.scoring->>'type', '') <> 'connect' or s.submitted_by = $${p.length})`);
+    } else if (validatesOnly(me) !== null) {
+      // Captains: all of their own group's submissions (they validate it), nothing from other groups.
+      p.push(validatesOnly(me)); where.push(`s.group_no = $${p.length}`);
     }
     const { rows } = await db.query(`select s.* from submissions s join challenges c on c.id = s.challenge_id
       ${where.length ? 'where ' + where.join(' and ') : ''} order by s.submitted_at`, p);
@@ -394,7 +393,7 @@ const methods = {
     if (!can(me, 'submissions.validate')) deny();
     const { rows: [before] } = await db.query('select s.status, s.group_no, p.role_id as by_role from submissions s left join profiles p on p.id = s.submitted_by where s.id = $1', [id]);
     if (!before) bad('Submission tidak ditemukan.');
-    if (before.group_no === playGroupOf(me)) deny('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
+    if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
     const keys = REVIEW.filter((k) => k in patch);
@@ -530,7 +529,7 @@ export async function handleMedia(req, res, db) {
     const path = new URL(req.url, 'http://x').searchParams.get('path');
     const { rows: [m] } = await db.query('select group_no, mime, bytes from media where path = $1', [path]);
     if (!m) { res.statusCode = 404; return res.end(); }
-    if (!(can(me, 'submissions.validate') || (me.group_no && me.group_no === m.group_no))) { res.statusCode = 403; return res.end(); }
+    if (!((can(me, 'submissions.validate') && validatesOnly(me) === null) || (me.group_no && me.group_no === m.group_no))) { res.statusCode = 403; return res.end(); }
     res.statusCode = 200;
     res.setHeader('Content-Type', m.mime);
     res.setHeader('Cache-Control', 'private, max-age=3600');

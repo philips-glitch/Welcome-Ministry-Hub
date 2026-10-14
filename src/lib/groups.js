@@ -19,8 +19,9 @@ export const GAME_PLAYER_SQL = (t = '') => `${t}active and ${t}group_no is not n
 // Captains play without points: their own entries score 0, and neither their entries, their photo tags nor their
 // seat count toward the team — a group never gains or loses points because of its captain.
 export const playsWithoutPoints = (p) => !!p && p.role_id === 'captain';
-// A validator who plays in a group doesn't validate it or see its answer key: the group they play in, if any.
-export const playGroupOf = (p) => (isGamePlayer(p) ? p.group_no : null);
+// Captains validate their own group only (PICs and admins validate every group). Returns the group a captain
+// may validate ('' for a captain without a group: none), or null for everyone else (all groups).
+export const validatesOnly = (p) => (p?.role_id === 'captain' ? p.group_no || '' : null);
 
 export function groupView(profiles, groupRows = []) {
   const players = profiles.filter(isPlayer);

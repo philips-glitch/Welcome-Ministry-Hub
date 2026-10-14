@@ -2,7 +2,7 @@
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
 import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles } from './game.js';
-import { isPlayer, isGamePlayer, playGroupOf, playsWithoutPoints } from './groups.js';
+import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
@@ -230,14 +230,14 @@ export function gameMethods({ load, save, delay, fail }) {
       return this.saveChallenge({ id: challengeId, draw_seed: seed });
     },
     // Members only see their own entries in connect challenges (so answers can't be copied); staff see all,
-    // except a captain's own group, which they see like a member.
+    // except captains, who see (and validate) their own group only.
     async listSubmissions({ challengeId, groupNo } = {}) {
       const s = load();
       const staff = canDemo(s, 'submissions.validate') || canDemo(s, 'scores.view');
-      const own = playGroupOf(s.profiles.find((p) => p.id === s.sessionId));
+      const only = validatesOnly(s.profiles.find((p) => p.id === s.sessionId));
       const connect = new Set(s.challenges.filter(isConnect).map((c) => c.id));
       return delay(structuredClone(s.submissions.filter((x) => (!challengeId || x.challenge_id === challengeId) && (!groupNo || x.group_no === groupNo)
-        && ((staff && x.group_no !== own) || !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
+        && (staff ? only === null || x.group_no === only : !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
         .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)));
     },
     // Same checks as prepare_submission() in SQL.
@@ -277,9 +277,9 @@ export function gameMethods({ load, save, delay, fail }) {
     async getGtkm(ids) {
       const s = load();
       if (!canDemo(s, 'submissions.validate') && !canDemo(s, 'members.manage')) return delay({});
-      // A captain plays in their group, so its answer key stays hidden from them.
-      const own = playGroupOf(s.profiles.find((p) => p.id === s.sessionId));
-      const hidden = (id) => own && s.profiles.find((p) => p.id === id)?.group_no === own;
+      // Captains get the answer key of their own group only (the group they validate).
+      const only = validatesOnly(s.profiles.find((p) => p.id === s.sessionId));
+      const hidden = (id) => only !== null && s.profiles.find((p) => p.id === id)?.group_no !== only;
       return delay(Object.fromEntries(ids.filter((id) => s.gtkm?.[id] && !hidden(id)).map((id) => [id, { ...s.gtkm[id] }])));
     },
     async saveGtkm(id, data) {
@@ -293,7 +293,8 @@ export function gameMethods({ load, save, delay, fail }) {
       const s = load();
       const i = s.submissions.findIndex((x) => x.id === id);
       if (i < 0) return fail('Submission tidak ditemukan.');
-      if (s.submissions[i].group_no === playGroupOf(s.profiles.find((p) => p.id === s.sessionId))) return fail('Kamu ikut main di grup ini — submission-nya divalidasi captain/PIC lain.');
+      const only = validatesOnly(s.profiles.find((p) => p.id === s.sessionId));
+      if (only !== null && s.submissions[i].group_no !== only) return fail('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
       const prevStatus = s.submissions[i].status;
       // A captain's own entries are validated like anyone's but always score 0.
       if (playsWithoutPoints(s.profiles.find((p) => p.id === s.submissions[i].submitted_by))) patch = { ...patch, score: 0 };

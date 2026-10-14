@@ -93,14 +93,14 @@ await kapten.call('createSubmission', sub(ids.budi));
 const cici = client(); await cici.login('cici', pw.cici);
 await cici.call('createSubmission', sub(ids.kapten)); ok('captains play Get to Know Me like members, both ways');
 const k1sees = await kapten.call('listSubmissions', { challengeId: r1.id });
-assert.deepEqual([...new Set(k1sees.map((x) => x.submitted_by))], [ids.kapten]);
-assert.equal((await kapten2.call('listSubmissions', { challengeId: r1.id })).length, 4);
+assert.equal(k1sees.length, 4); assert.ok(k1sees.every((x) => x.group_no === '01'));
+assert.equal((await kapten2.call('listSubmissions', { challengeId: r1.id })).length, 0);
 await admin.call('saveGtkm', { id: ids.budi, data: { words: 'w', enjoy: 'e', talent: 't' } });
 await admin.call('saveGtkm', { id: ids.pici, data: { words: 'w', enjoy: 'e', talent: 't' } });
-assert.deepEqual(await kapten.call('getGtkm', { ids: [ids.budi] }), {});
-assert.ok((await kapten2.call('getGtkm', { ids: [ids.budi] }))[ids.budi]);
+assert.ok((await kapten.call('getGtkm', { ids: [ids.budi] }))[ids.budi]);
+assert.deepEqual(await kapten2.call('getGtkm', { ids: [ids.budi] }), {});
 assert.ok((await admin.call('getGtkm', { ids: [ids.budi, ids.pici] }))[ids.pici]);
-ok("a captain sees their own group like a member: no group-mates' answers, no answer key");
+ok("a captain sees all of their own group's entries + answer key, nothing from other groups");
 const budi = client(); await budi.login('budi', pw.budi);
 assert.equal((await budi.call('listSubmissions', { challengeId: r1.id, groupNo: '01' })).length, 0); ok("members can't see group-mates' answers");
 const r2 = ch.find((c) => c.code === 'R2');
@@ -108,15 +108,15 @@ await rejects(ana.call('createSubmission', { sub: { challenge_id: r2.id, group_n
 
 // 5 · validation + scores + notifications
 await rejects(ana.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /izin/);
-await rejects(kapten.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /captain\/PIC lain/);
-const rev = await kapten2.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
+await rejects(kapten2.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /grupnya sendiri/);
+const rev = await kapten.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(rev.score, 12);
 const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
 // 1 member took part with 12/24 → 12/24×70 = 35; 1 of 3 players (captains play without points) → 0.333×30 = 10 → 45
-assert.equal(g1.points, 45); ok("captain can't validate own group; another captain's review → team score 45 (= playbook formula)");
-const kSub = (await kapten2.call('listSubmissions', { challengeId: r1.id })).find((x) => x.submitted_by === ids.kapten);
-const kRev = await kapten2.call('reviewSubmission', { id: kSub.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
+assert.equal(g1.points, 45); ok("captains validate their own group only; the review → team score 45 (= playbook formula)");
+const kSub = (await kapten.call('listSubmissions', { challengeId: r1.id })).find((x) => x.submitted_by === ids.kapten);
+const kRev = await kapten.call('reviewSubmission', { id: kSub.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(Number(kRev.score), 0);
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r1.id).points, 45);
 ok("a captain's entry is validated but scores 0 and doesn't change the team score");
@@ -158,7 +158,9 @@ const s2 = await leader.call('createSubmission', { sub: { challenge_id: r2.id, g
 assert.equal((await leader.media(s2.media_path)).statusCode, 200);
 const dodi = client(); await dodi.login('dodi', pw.dodi);
 assert.equal((await dodi.media(s2.media_path)).statusCode, 403);
-assert.equal((await kapten.media(s2.media_path)).statusCode, 200); ok('photo stored; visible to own group and validators, not other groups');
+assert.equal((await kapten.media(s2.media_path)).statusCode, 200);
+assert.equal((await kapten2.media(s2.media_path)).statusCode, 403);
+assert.equal((await admin.media(s2.media_path)).statusCode, 200); ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
 assert.deepEqual(await outsider.call('setupStatus'), { setup: 'ok', superAdmins: ['angel', 'philips'] });
