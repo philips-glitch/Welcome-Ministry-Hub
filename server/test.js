@@ -83,10 +83,12 @@ const ids = Object.fromEntries((await admin.call('listProfiles')).map((p) => [p.
 const sub = (t) => ({ sub: { challenge_id: r1.id, group_no: '01', target_id: t, answers: { q1: 'a', q2: 'b', q3: 'c', q4: 'd' }, declaration: true } });
 await rejects(ana.call('createSubmission', sub(ids.ana)), /bukan diri sendiri/);
 await rejects(ana.call('createSubmission', sub(ids.dodi)), /grup kamu sendiri/);
-const s1 = await ana.call('createSubmission', sub(ids.budi));
-await rejects(ana.call('createSubmission', sub(ids.budi)), /sudah kamu submit/);
+const s1first = await ana.call('createSubmission', sub(ids.budi));
+const s1 = await ana.call('createSubmission', sub(ids.budi));   // re-sent while pending → replaces it
 await ana.call('createSubmission', sub(ids.cici));
-assert.equal(s1.version, 1); ok('connect rules: not self, own group only, once per person');
+assert.equal(s1first.version, 1); assert.equal(s1.version, 2);
+assert.equal((await admin.call('listSubmissions', { challengeId: r1.id })).filter((x) => x.submitted_by === ids.ana && x.target_id === ids.budi).length, 1);
+ok('connect rules: not self, own group only; re-sending a pending entry replaces it');
 const kapten = client(); await kapten.login('kapten', pw.kapten);
 const kapten2 = client(); await kapten2.login('kaptendua', pw.kaptendua);
 await kapten.call('createSubmission', sub(ids.budi));
@@ -120,6 +122,13 @@ const kRev = await kapten.call('reviewSubmission', { id: kSub.id, patch: { statu
 assert.equal(Number(kRev.score), 0);
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r1.id).points, 45);
 ok("a captain's entry is validated but scores 0 and doesn't change the team score");
+await rejects(ana.call('createSubmission', sub(ids.budi)), /sudah divalidasi/);
+await rejects(ana.call('createSubmission', sub(ids.kapten)), /Maksimal 2/);
+const ciciEntry = (await ana.call('listSubmissions', { challengeId: r1.id, groupNo: '01' })).find((x) => x.target_id === ids.cici);
+await ana.call('createSubmission', { sub: { ...sub(ids.kapten).sub, replaces: ciciEntry.id } });
+const anaNow = await ana.call('listSubmissions', { challengeId: r1.id, groupNo: '01' });
+assert.deepEqual(anaNow.map((x) => x.target_id).sort(), [ids.budi, ids.kapten].sort());
+ok('validated entries are locked; a pending one can be switched to someone else (still max 2)');
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });
@@ -160,7 +169,12 @@ const dodi = client(); await dodi.login('dodi', pw.dodi);
 assert.equal((await dodi.media(s2.media_path)).statusCode, 403);
 assert.equal((await kapten.media(s2.media_path)).statusCode, 200);
 assert.equal((await kapten2.media(s2.media_path)).statusCode, 403);
-assert.equal((await admin.media(s2.media_path)).statusCode, 200); ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
+assert.equal((await admin.media(s2.media_path)).statusCode, 200);
+const s2b = await leader.call('createSubmission', { sub: { challenge_id: r2.id, group_no: '01', riddle_id: rows[0].riddle_id, ig_url: 'https://y', tagged_ids: [ids.budi], declaration: true, keep_media: true } });
+assert.equal(s2b.version, 2); assert.equal(s2b.media_path, s2.media_path);
+assert.equal((await leader.media(s2b.media_path)).statusCode, 200);
+assert.equal((await kapten.call('listSubmissions', { challengeId: r2.id })).length, 1);
+ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
 assert.deepEqual(await outsider.call('setupStatus'), { setup: 'ok', superAdmins: ['angel', 'philips'] });

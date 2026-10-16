@@ -241,35 +241,52 @@ export function gameMethods({ load, save, delay, fail }) {
         .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)));
     },
     // Same checks as prepare_submission() in SQL.
-    async createSubmission({ file, ...sub }) {
+    // Same rules as the server: an entry can be re-sent until the deadline unless it's validated; a pending
+    // previous version is replaced (and a pending Get to Know Me entry can be switched to someone else).
+    async createSubmission({ file, replaces, keep_media, ...sub }) {
       const s = load();
       const c = s.challenges.find((x) => x.id === sub.challenge_id);
       if (!c || c.status !== 'live' || (c.deadline_at && demoNow() > new Date(c.deadline_at).getTime())) return fail('Challenge ini sedang tidak menerima submission.');
       const me = s.profiles.find((p) => p.id === s.sessionId);
       if (!me?.active || me.group_no !== sub.group_no) return fail('Hanya bisa submit untuk grup sendiri.');
+      const row0 = { riddle_id: null, target_id: null, ...sub, submitted_by: s.sessionId };
+      const unit = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no);
+      const lastOf = (key) => unit.filter((x) => unitKey(x) === key).sort((a, b) => b.version - a.version)[0];
+      const last = lastOf(unitKey(row0));
+      const superseded = last ? [last] : [];
       if (isConnect(c)) {
         if (!isGamePlayer(me)) return fail('Challenge ini untuk peserta grup.');
         const t = s.profiles.find((p) => p.id === sub.target_id);
         if (!t || t.id === me.id || t.group_no !== me.group_no || !isGamePlayer(t)) return fail('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
-        const mine = s.submissions.filter((x) => x.challenge_id === c.id && x.submitted_by === me.id);
-        const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
-        const cur = latest(t.id);
-        if (cur && !['rejected', 'resubmit'].includes(cur.status)) return fail(`${t.full_name} sudah kamu submit.`);
-        const active = new Set(mine.filter((x) => x.target_id !== t.id && ['submitted', 'validated'].includes(latest(x.target_id).status)).map((x) => x.target_id));
+        if (last?.status === 'validated') return fail(`${t.full_name} sudah divalidasi — tidak bisa diganti lagi.`);
+        const mine = unit.filter((x) => x.submitted_by === me.id && x.target_id);
+        let swap = null;
+        if (replaces && replaces !== last?.id) {
+          swap = mine.find((x) => x.id === replaces);
+          if (!swap || lastOf(unitKey(swap)).id !== swap.id || swap.status === 'validated') return fail('Submission yang mau diganti sudah tidak bisa diubah.');
+          superseded.push(swap);
+        }
+        const active = new Set(mine.map((x) => x.target_id)
+          .filter((tid) => tid !== t.id && tid !== swap?.target_id && ['submitted', 'validated'].includes(lastOf(`${me.id}>${tid}`).status)));
         if (active.size >= withDefaults(c.scoring).people) return fail(`Maksimal ${withDefaults(c.scoring).people} orang per member.`);
-      } else if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
-      const row0 = { riddle_id: null, target_id: null, ...sub, submitted_by: s.sessionId };
-      const prev = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no && unitKey(x) === unitKey(row0));
-      // Same path layout as the Supabase bucket: <group>/<id>-<name>.
+      } else {
+        if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
+        if (last?.status === 'validated') return fail('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
+      }
+      // Same path layout as the server: <group>/<id>-<name>.
       let media_path = null;
+      let media_name = null;
       if (file) {
         media_path = `${sub.group_no}/${uid()}-${file.name.replace(/[^\w.-]+/g, '_')}`;
+        media_name = file.name;
         try { await putMedia(media_path, file); } catch { return fail('Foto gagal disimpan di browser ini.'); }
-      }
+      } else if (keep_media && last?.media_path) { media_path = last.media_path; media_name = last.media_name; }
       const row = {
-        id: uid(), ig_url: null, tagged_ids: [], declaration: false, answers: null, ...row0, media_path, media_name: file?.name ?? sub.media_name ?? null,
-        version: prev.length + 1, status: 'submitted', submitted_at: new Date(demoNow()).toISOString(), ...EMPTY_REVIEW,
+        id: uid(), ig_url: null, tagged_ids: [], declaration: false, answers: null, ...row0, media_path, media_name,
+        version: (last?.version || 0) + 1, status: 'submitted', submitted_at: new Date(demoNow()).toISOString(), ...EMPTY_REVIEW,
       };
+      const gone = new Set(superseded.filter((x) => x.status === 'submitted').map((x) => x.id));
+      s.submissions = s.submissions.filter((x) => !gone.has(x.id));
       s.submissions.push(row);
       save(); return delay(structuredClone(row));
     },
@@ -292,7 +309,7 @@ export function gameMethods({ load, save, delay, fail }) {
     async reviewSubmission(id, patch) {
       const s = load();
       const i = s.submissions.findIndex((x) => x.id === id);
-      if (i < 0) return fail('Submission tidak ditemukan.');
+      if (i < 0) return fail('Submission ini sudah diganti pengirimnya dengan versi baru. Muat ulang antrean.');
       const only = validatesOnly(s.profiles.find((p) => p.id === s.sessionId));
       if (only !== null && s.submissions[i].group_no !== only) return fail('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
       const prevStatus = s.submissions[i].status;

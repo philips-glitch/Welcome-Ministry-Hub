@@ -47,6 +47,8 @@ export default function PortalApp({ route }) {
   const challenge = visible.find((c) => c.id === chId) || game.focus || visible[0] || null;
   const openChallenge = (id) => { setChId(id); go('challenge'); };
   const [riddleId, setRiddleId] = useState(null);
+  // Get to Know Me: the pending entry being switched to someone else (null otherwise).
+  const [replaces, setReplaces] = useState(null);
 
   const gr = game.groupOf(profile.group_no);
   const g = gr && [gr.no, gr.name, gr.color];
@@ -81,8 +83,8 @@ export default function PortalApp({ route }) {
   if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
-  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id) => { setRiddleId(id); go('submit'); }} />;
-  else if (page === 'submit') content = me.canSubmit ? <Submit key={challenge?.id + ':' + riddleId} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
+  else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id, swap = null) => { setRiddleId(id); setReplaces(swap); go('submit'); }} />;
+  else if (page === 'submit') content = me.canSubmit ? <Submit key={challenge?.id + ':' + riddleId + ':' + replaces} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} replaces={replaces} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;

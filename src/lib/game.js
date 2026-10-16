@@ -107,7 +107,8 @@ export function connectBreakdown(scoring, subs, rosterSize) {
 // noPoints: ids of people who play without points (captains) — their entries and photo tags don't count.
 export function groupPoints(c, subs, rosterSize, noPoints = new Set()) {
   const s = withDefaults(c.scoring);
-  const valid = subs.filter((x) => x.status === 'validated' && !noPoints.has(x.submitted_by));
+  // Only the latest validated version of each entry counts.
+  const valid = latestPerUnit(subs.filter((x) => x.status === 'validated' && !noPoints.has(x.submitted_by)));
   if (!valid.length) return 0;
   if (s.type === 'connect') return connectBreakdown(s, valid, rosterSize).points;
   const base = sum(valid.map((x) => x.score));

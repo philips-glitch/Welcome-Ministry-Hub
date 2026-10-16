@@ -13,7 +13,7 @@ const textField = { borderRadius: 14, border: '1.5px solid #DCD2BC', background:
 
 // One form for every challenge type. What it asks for comes from the challenge's form settings
 // (formOf): photo, link, answer, tags, rules — or, for connect challenges, a person + Q&A.
-export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitted }) {
+export default function Submit({ go, me, challenge: c, data, riddleId, replaces, onSubmitted }) {
   const scoring = withDefaults(c?.scoring);
   const form = formOf(c);
   const connect = isConnect(c);
@@ -21,23 +21,33 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const open = c && c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
   const rules = form.confirm?.length ? form.confirm : submitRules(me);
 
-  // Riddles this group can (re)send: nothing yet, or rejected / asked to resubmit.
+  // Until the deadline anything not yet validated can be (re)sent. Riddles: not sent yet, pending, or rejected.
   const sendable = useMemo(() => (riddleMode ? data.draw : [])
     .map((d) => ({ ...d, r: data.riddles.find((x) => x.id === d.riddle_id), sub: data.latest(d.riddle_id) }))
-    .filter((d) => !d.sub || ['rejected', 'resubmit'].includes(d.sub.status)), [data, riddleMode]);
-  // Connect: group-mates I can still pick (not me, not someone already pending/validated from me).
-  const { pickable, taken, full } = useMemo(() => {
+    .filter((d) => d.sub?.status !== 'validated'), [data, riddleMode]);
+  // Connect: validated people are locked; pending ones can be edited; the entry being switched frees its seat.
+  const people = scoring.people || 2;
+  const { pickable, locked, active } = useMemo(() => {
     const mine = data.subs.filter((x) => x.submitted_by === me.id && x.target_id);
     const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
-    const active = new Set(mine.map((x) => x.target_id).filter((tid) => ['submitted', 'validated'].includes(latest(tid).status)));
-    return { pickable: data.roster.filter((p) => p.id !== me.id), taken: active, full: active.size >= (scoring.people || 2) };
-  }, [data, me.id, scoring.people]);
+    const swap = replaces ? mine.find((x) => x.id === replaces) : null;
+    const tids = [...new Set(mine.map((x) => x.target_id))];
+    return {
+      pickable: data.roster.filter((p) => p.id !== me.id),
+      locked: new Set(tids.filter((tid) => latest(tid).status === 'validated')),
+      active: new Set(tids.filter((tid) => tid !== swap?.target_id && ['submitted', 'validated'].includes(latest(tid).status))),
+    };
+  }, [data, me.id, replaces]);
+  const blocked = (id) => locked.has(id) || (!active.has(id) && active.size >= people);
+  const full = locked.size >= people;
 
   const [target, setTarget] = useState(riddleId);
   useEffect(() => { if (riddleMode && !sendable.some((d) => d.riddle_id === target)) setTarget(sendable[0]?.riddle_id ?? null); }, [sendable, riddleMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const cur = sendable.find((d) => d.riddle_id === target);
-  const person = connect && !taken.has(target) ? pickable.find((p) => p.id === target) : null;
+  const person = connect && !blocked(target) ? pickable.find((p) => p.id === target) : null;
   const prevForPerson = person && data.subs.filter((x) => x.submitted_by === me.id && x.target_id === person.id).sort((a, b) => b.version - a.version)[0];
+  // The version this one replaces (same person / riddle / challenge, not validated): prefill it, keep its photo.
+  const prior = connect ? (prevForPerson?.status !== 'validated' ? prevForPerson : null) : riddleMode ? cur?.sub || null : data.latest(null);
 
   const [file, setFile] = useState(null);
   const [origSize, setOrigSize] = useState(null);
@@ -53,6 +63,12 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const [done, setDone] = useState(null);
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(() => {
+    if (!prior) return;
+    if (connect) setAnswers({ ...(prior.answers || {}) });
+    else { setIg(prior.ig_url || ''); setAnswer(prior.answers?.answer || ''); setTagged(new Set(prior.tagged_ids || [])); }
+  }, [prior?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keepPhoto = !file && !!prior?.media_path;
 
   if (!c) return <div className="p-card muted">Tidak ada challenge.</div>;
   if (done) {
@@ -60,14 +76,14 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
       <div className="p-card p-pop" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24, maxWidth: 560, position: 'relative', overflow: 'hidden' }}>
         <Confetti />
         <span style={{ font: "800 22px 'Bricolage Grotesque'", color: '#2F7A55' }}>✓ Terkirim — menunggu validasi</span>
-        <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{done.label} · versi {done.version} · {fmtWIB(done.submitted_at)}. Captain akan memvalidasi{c.validate_by ? ' paling lambat ' + fmtWIB(c.validate_by) : ''}. Kalau ditolak, kamu bisa kirim ulang sebelum deadline.</span>
+        <span className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{done.label} · versi {done.version} · {fmtWIB(done.submitted_at)}. Captain akan memvalidasi{c.validate_by ? ' paling lambat ' + fmtWIB(c.validate_by) : ''}. Selama belum divalidasi, kamu masih bisa mengubahnya sampai deadline.</span>
         <button className="p-btn-lg" onClick={() => go('challenge')} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>Kembali ke challenge</button>
       </div>
     );
   }
   if (!open) return <div className="p-card muted">Challenge ini sedang tidak menerima submission.</div>;
-  if (riddleMode && !sendable.length) return <div className="p-card muted">Semua riddle grup kamu sudah dikirim. Tunggu hasil validasi ya.</div>;
-  if (connect && full) return <div className="p-card muted">Kamu sudah submit {scoring.people} orang. Tunggu hasil validasi ya.</div>;
+  if (riddleMode && !sendable.length) return <div className="p-card muted">Semua riddle grup kamu sudah divalidasi.</div>;
+  if (connect && full) return <div className="p-card muted">{people} orang kamu sudah divalidasi semua. Mantap!</div>;
 
   const n = tagged.size;
   const pts = scoring.type === 'riddle' ? tierPoints(scoring.tiers, n) : null;
@@ -82,10 +98,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const steps = connect ? [
     ['Orang', !!person, false, 'pilih orang'],
     ['Jawaban', answersDone, false, 'semua jawaban'],
-    ...(form.photo !== 'none' ? [['Foto', !!file, form.photo === 'optional', 'foto']] : []),
+    ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
     ['Cek aturan', allChecked, false, 'semua aturan'],
   ] : [
-    ...(form.photo !== 'none' ? [['Foto', !!file, form.photo === 'optional', 'foto']] : []),
+    ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
     ...(form.answer_label ? [['Jawaban', !!answer.trim(), false, 'jawaban']] : []),
     ...(form.link !== 'none' ? [['Link', !!ig.trim(), form.link === 'optional', form.link_label.toLowerCase()]] : []),
     ...(form.tags ? [['Tag anggota', n > 0, false, 'tag anggota']] : []),
@@ -119,6 +135,8 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
         tagged_ids: form.tags && !connect ? [...tagged] : [],
         riddle_id: riddleMode ? target : null,
         target_id: connect ? person.id : null,
+        replaces: connect ? replaces || null : null,
+        keep_media: form.photo !== 'none' && keepPhoto,
         answers: connect ? Object.fromEntries(scoring.questions.map((q) => [q.key, answers[q.key].trim()])) : form.answer_label ? { answer: answer.trim() } : null,
       });
       setDone({ ...row, label: connect ? `Kenalan dengan ${person.full_name}` : riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name });
@@ -131,13 +149,13 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
   const photoBlock = () => form.photo !== 'none' && (
     <section className="col" style={{ gap: 10 }}>
       <span style={h3}>{step(connect ? `Foto bareng (opsional · +${scoring.photo_bonus} poin)` : form.photo === 'optional' ? 'Foto (opsional)' : 'Foto')}</span>
-      <label className="p-card" style={{ position: 'relative', borderRadius: 18, padding: 12, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: file ? '1.5px solid #2F7A55' : '1.5px dashed #D5CAB0' }}>
+      <label className="p-card" style={{ position: 'relative', borderRadius: 18, padding: 12, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: file || keepPhoto ? '1.5px solid #2F7A55' : '1.5px dashed #D5CAB0' }}>
         <div className={preview ? '' : 'placeholder-stripes mono'} style={{ width: 64, height: 64, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#7B7260', flex: 'none', overflow: 'hidden' }}>
           {preview ? <img src={preview} alt="Pratinjau foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'foto'}
         </div>
         <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
-          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : connect ? 'Pilih foto kalian berdua' : 'Pilih foto grup'}</span>
-          <span className="muted" style={{ fontSize: 12 }}>{shrinking ? 'Memperkecil foto…' : file ? `${origSize && origSize > file.size ? formatBytes(origSize) + ' → ' : ''}${formatBytes(file.size)} · ketuk untuk ganti` : `JPG / PNG / HEIC, maks ${MAX_MB} MB · otomatis diperkecil`}</span>
+          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : keepPhoto ? 'Pakai foto sebelumnya' : connect ? 'Pilih foto kalian berdua' : 'Pilih foto grup'}</span>
+          <span className="muted" style={{ fontSize: 12 }}>{shrinking ? 'Memperkecil foto…' : file ? `${origSize && origSize > file.size ? formatBytes(origSize) + ' → ' : ''}${formatBytes(file.size)} · ketuk untuk ganti` : keepPhoto ? 'Ketuk untuk ganti foto' : `JPG / PNG / HEIC, maks ${MAX_MB} MB · otomatis diperkecil`}</span>
         </div>
         <input type="file" accept="image/*" onChange={(e) => pickFile(e.target.files?.[0])} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
       </label>
@@ -150,7 +168,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
       <div className="p-stack">
         <div className="row">
           <button onClick={() => go('challenge')} aria-label="Kembali" className="p-icon-btn" style={{ fontSize: 20 }}>‹</button>
-          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>{connect ? (person ? `Kenalan: ${person.full_name.split(' ')[0]}` : 'Kenalan baru') : `Submit ${riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name}`}</span><span className="muted" style={{ fontSize: 12 }}>{c.name} · {me.group.name}</span></div>
+          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>{connect ? (person ? `Kenalan: ${person.full_name.split(' ')[0]}` : replaces ? 'Ganti orang' : 'Kenalan baru') : `Submit ${riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name}`}</span><span className="muted" style={{ fontSize: 12 }}>{c.name} · {me.group.name}</span></div>
         </div>
         {riddleMode && sendable.length > 1 && (
           <label className="col" style={{ gap: 6, fontSize: 13, fontWeight: 700 }}>Riddle
@@ -171,14 +189,15 @@ export default function Submit({ go, me, challenge: c, data, riddleId, onSubmitt
         {connect && (
           <section className="col" style={{ gap: 10 }}>
             <span style={h3}>{step('Kenalan sama siapa?')}</span>
-            <span className="muted" style={{ fontSize: 12 }}>Pilih orang di grup kamu yang belum terlalu kamu kenal. Satu orang hanya bisa kamu submit sekali.</span>
+            <span className="muted" style={{ fontSize: 12 }}>Pilih orang di grup kamu yang belum terlalu kamu kenal. Selama belum divalidasi, jawabanmu bisa diubah sampai deadline.</span>
             {!pickable.length && <span className="muted" style={{ fontSize: 13 }}>Daftar anggota grup belum tersedia.</span>}
             <div className="p-roster" role="radiogroup" aria-label="Pilih orang">
               {pickable.map((p) => {
                 const sel = person?.id === p.id;
-                const done2 = taken.has(p.id);
+                const done2 = blocked(p.id);
+                const why = locked.has(p.id) ? 'sudah divalidasi' : `sudah ${people} orang`;
                 return (
-                  <button key={p.id} role="radio" aria-checked={sel} aria-label={p.full_name + (done2 ? ' (sudah kamu submit)' : '')} disabled={done2} onClick={() => setTarget(p.id)} title={done2 ? 'Sudah kamu submit' : undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minHeight: 64, opacity: done2 ? 0.35 : 1, cursor: done2 ? 'not-allowed' : 'pointer' }}>
+                  <button key={p.id} role="radio" aria-checked={sel} aria-label={p.full_name + (done2 ? ` (${why})` : active.has(p.id) ? ' (ubah jawaban)' : '')} disabled={done2} onClick={() => setTarget(p.id)} title={done2 ? why : active.has(p.id) ? 'Ubah jawaban' : undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minHeight: 64, opacity: done2 ? 0.35 : 1, cursor: done2 ? 'not-allowed' : 'pointer' }}>
                     <div style={{ position: 'relative', width: 52, height: 52, borderRadius: '50%', background: avatarColor(p.id), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, boxShadow: `0 0 0 3px ${sel ? '#1F4D3A' : 'transparent'}`, opacity: sel || !person ? 1 : 0.5 }}>
                       {initials(p.full_name)}
                       {(sel || done2) && <span style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: sel ? '#E3A92B' : '#2F7A55', color: sel ? '#1B2620' : '#fff', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #FBF6EA' }}>✓</span>}

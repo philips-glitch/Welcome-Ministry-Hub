@@ -35,11 +35,12 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
   const riddleRows = riddleMode ? data.draw.map((d) => {
     const r = data.riddles.find((x) => x.id === d.riddle_id);
     const sub = data.latest(d.riddle_id);
-    const canSend = open && me.canSubmit && (!sub || ['rejected', 'resubmit'].includes(sub.status));
+    // Until the deadline an entry can be sent again, as long as it isn't validated.
+    const canSend = open && me.canSubmit && sub?.status !== 'validated';
     return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st: sub ? STATUS[sub.status] : 'Not Started', meta: metaFor(sub), canSend, resend: !!sub, sub };
   }) : [];
   const single = !riddleMode && !connect ? data.latest(null) : null;
-  const canSingle = open && me.canSubmit && (!single || ['rejected', 'resubmit'].includes(single.status));
+  const canSingle = open && me.canSubmit && single?.status !== 'validated';
 
   // Connect: my people (latest entry per person), plus empty slots up to `people`.
   const people = scoring.people || 2;
@@ -103,7 +104,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                     const st = STATUS[s.status];
                     const [cbg, cfg] = SUB_CHIP[st];
                     const doneCard = s.status === 'validated';
-                    const resend = open && me.canSubmit && ['rejected', 'resubmit'].includes(s.status) && activeMine.length < people;
+                    const pending = s.status === 'submitted';
+                    const resend = open && me.canSubmit && (pending || (['rejected', 'resubmit'].includes(s.status) && activeMine.length < people));
                     return (
                       <div key={s.id} className={'p-card' + (justSent && justSent === s.target_id ? ' p-flash' : '')} style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: doneCard ? '#F3F8F4' : undefined }}>
                         <div className="row" style={{ gap: 8 }}>
@@ -116,8 +118,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         <span className="muted" style={{ fontSize: 12 }}>{metaFor(s)}</span>
                         {resend && (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <button onClick={() => pickRiddle(s.target_id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>Kirim ulang</button>
-                            <button onClick={() => pickRiddle(null)} style={{ height: 42, borderRadius: 12, border: '1px solid #DCD2BC', fontWeight: 700, fontSize: 13 }}>Orang lain</button>
+                            <button onClick={() => pickRiddle(s.target_id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{pending ? 'Ubah jawaban' : 'Kirim ulang'}</button>
+                            <button onClick={() => pickRiddle(null, pending ? s.id : null)} style={{ height: 42, borderRadius: 12, border: '1px solid #DCD2BC', fontWeight: 700, fontSize: 13 }}>{pending ? 'Ganti orang' : 'Orang lain'}</button>
                           </div>
                         )}
                       </div>
@@ -160,7 +162,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         <PhotoThumb path={r.sub.media_path} name={r.sub.media_name} height={150} caption={`Riddle ${r.no} · versi ${r.sub.version}`} placeholder="Foto lama, tidak tersimpan" />
                       )}
                       <span className="muted" style={{ fontSize: 12 }}>{r.meta}</span>
-                      {r.canSend && <button onClick={() => pickRiddle(r.id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{r.resend ? 'Kirim ulang' : `Submit Riddle ${r.no}`}</button>}
+                      {r.canSend && <button onClick={() => pickRiddle(r.id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{r.sub?.status === 'submitted' ? 'Ubah & kirim ulang' : r.resend ? 'Kirim ulang' : `Submit Riddle ${r.no}`}</button>}
                     </div>
                   );
                 })}
@@ -175,14 +177,14 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
               {single?.ig_url && form.photo === 'none' && <a href={single.ig_url.startsWith('http') ? single.ig_url : 'https://' + single.ig_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1F4D3A', overflowWrap: 'anywhere' }}>▶ {single.ig_url}</a>}
               {single && (single.media_path || single.media_name) && <PhotoThumb path={single.media_path} name={single.media_name} height={200} caption={`${c.name} · versi ${single.version}`} placeholder="Foto lama, tidak tersimpan" />}
               {canSingle
-                ? <button className="p-btn-lg" onClick={() => pickRiddle(null)} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{single ? 'Kirim ulang' : 'Submit challenge'}</button>
-                : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (soon ? SOON : 'Submit ditutup') : single ? 'Sudah dikirim' : 'Submit oleh Group Leader'}</button>}
+                ? <button className="p-btn-lg" onClick={() => pickRiddle(null)} style={{ background: '#1F4D3A', color: '#FBF6EA' }}>{single ? (single.status === 'submitted' ? 'Ubah & kirim ulang' : 'Kirim ulang') : 'Submit challenge'}</button>
+                : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (soon ? SOON : 'Submit ditutup') : single?.status === 'validated' ? 'Sudah divalidasi' : 'Submit oleh Group Leader'}</button>}
             </section>
           )}
           <span className="muted" style={{ fontSize: 12 }}>
             {!open ? (soon ? SOON : 'Challenge ini sudah ditutup.')
-              : connect ? (me.noPoints ? 'Kamu captain: ikut main seperti member, tapi tanpa poin — skor kamu selalu 0 dan tidak dihitung ke poin grup.' : me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia.' : 'Challenge ini dikerjakan tiap peserta grup.')
-              : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
+              : connect ? (me.noPoints ? 'Kamu captain: ikut main seperti member, tapi tanpa poin — skor kamu selalu 0 dan tidak dihitung ke poin grup.' : me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia. Selama belum divalidasi, kamu bisa ubah sampai deadline.' : 'Challenge ini dikerjakan tiap peserta grup.')
+              : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup. Selama belum divalidasi, bisa diubah sampai deadline.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
           </span>
         </div>
 

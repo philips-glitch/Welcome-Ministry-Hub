@@ -358,18 +358,34 @@ const methods = {
       ig_url: sub.ig_url || null, tagged_ids: Array.isArray(sub.tagged_ids) ? sub.tagged_ids : [],
       answers: sub.answers || null, declaration: !!sub.declaration,
     };
+    // Re-submitting: until the deadline an entry can be sent again as long as it isn't validated yet.
+    // The previous version, if still pending, is replaced (validators only ever see the latest one).
+    const unit = (await db.query('select id, challenge_id, group_no, riddle_id, target_id, submitted_by, status, version, media_path, media_name from submissions where challenge_id = $1 and group_no = $2', [c.id, me.group_no])).rows;
+    const lastOf = (key) => unit.filter((x) => unitKey(x) === key).sort((a, b) => b.version - a.version)[0];
+    const last = lastOf(unitKey(row));
+    const superseded = [];
     if (connect) {
       if (!isGamePlayer(me)) bad('Challenge ini untuk peserta grup.');
       const { rows: [t] } = await db.query(`select ${PCOLS} from profiles where id = $1`, [row.target_id]);
       if (!t || t.id === me.id || t.group_no !== me.group_no || !isGamePlayer(t)) bad('Pilih anggota grup kamu sendiri (bukan diri sendiri).');
-      const mine = (await db.query('select target_id, status, version from submissions where challenge_id = $1 and submitted_by = $2 and target_id is not null', [c.id, me.id])).rows;
-      const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
-      const cur = latest(t.id);
-      if (cur && !['rejected', 'resubmit'].includes(cur.status)) bad(`${t.full_name} sudah kamu submit.`);
-      const active = new Set(mine.map((x) => x.target_id).filter((tid) => tid !== t.id && ['submitted', 'validated'].includes(latest(tid).status)));
+      if (last?.status === 'validated') bad(`${t.full_name} sudah divalidasi — tidak bisa diganti lagi.`);
+      // Switching a pending (or rejected) entry to someone else.
+      const mine = unit.filter((x) => x.submitted_by === me.id && x.target_id);
+      let swap = null;
+      if (sub.replaces && sub.replaces !== last?.id) {
+        swap = mine.find((x) => x.id === sub.replaces);
+        if (!swap || lastOf(unitKey(swap)).id !== swap.id || swap.status === 'validated') bad('Submission yang mau diganti sudah tidak bisa diubah.');
+        superseded.push(swap);
+      }
+      const active = new Set(mine.map((x) => x.target_id)
+        .filter((tid) => tid !== t.id && tid !== swap?.target_id && ['submitted', 'validated'].includes(lastOf(`${me.id}>${tid}`).status)));
       const people = withDefaults(c.scoring).people;
       if (active.size >= people) bad(`Maksimal ${people} orang per member.`);
-    } else if (!can(me, 'portal.submit')) bad('Hanya Group Leader yang bisa submit challenge ini.');
+    } else {
+      if (!can(me, 'portal.submit')) bad('Hanya Group Leader yang bisa submit challenge ini.');
+      if (last?.status === 'validated') bad('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
+    }
+    if (last) superseded.push(last);
     if (row.riddle_id && !(await db.query('select 1 from riddle_draws where challenge_id = $1 and group_no = $2 and riddle_id = $3', [c.id, me.group_no, row.riddle_id])).rows.length) bad('Riddle ini bukan untuk grup kamu.');
 
     let media_path = null, media_name = null;
@@ -380,19 +396,30 @@ const methods = {
       media_name = String(media.name || 'foto.jpg').slice(0, 120);
       media_path = `${me.group_no}/${randomUUID()}-${media_name.replace(/[^\w.-]+/g, '_')}`;
       await db.query('insert into media (path, group_no, mime, bytes) values ($1,$2,$3,$4)', [media_path, me.group_no, media.type, bytes]);
+    } else if (sub.keep_media && last?.media_path) {
+      // No new photo: keep the one from the version being replaced.
+      media_path = last.media_path; media_name = last.media_name;
     }
-    const prev = (await db.query('select challenge_id, group_no, riddle_id, target_id, submitted_by from submissions where challenge_id = $1 and group_no = $2', [c.id, me.group_no])).rows;
-    const version = prev.filter((x) => unitKey(x) === unitKey(row)).length + 1;
+    const version = (last?.version || 0) + 1;
     const cols = ['challenge_id', 'group_no', 'submitted_by', 'riddle_id', 'target_id', 'ig_url', 'tagged_ids', 'answers', 'declaration', 'media_path', 'media_name', 'version'];
     const data = { ...row, media_path, media_name, version };
-    const { rows: [out] } = await db.query(`insert into submissions (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')}) returning *`, cols.map((k) => val(k, data[k])));
+    const out = await db.tx(async (q) => {
+      const { rows: [o] } = await q.query(`insert into submissions (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')}) returning *`, cols.map((k) => val(k, data[k])));
+      const gone = superseded.filter((x) => x.status === 'submitted').map((x) => x.id);
+      if (gone.length) {
+        const { rows } = await q.query(`delete from submissions where id = any($1::uuid[]) and status = 'submitted' returning media_path`, [gone]);
+        const paths = rows.map((r) => r.media_path).filter(Boolean);
+        if (paths.length) await q.query('delete from media m where m.path = any($1::text[]) and not exists (select 1 from submissions s where s.media_path = m.path)', [paths]);
+      }
+      return o;
+    });
     return subRow(out);
   },
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
     const { rows: [before] } = await db.query('select s.status, s.group_no, p.role_id as by_role from submissions s left join profiles p on p.id = s.submitted_by where s.id = $1', [id]);
-    if (!before) bad('Submission tidak ditemukan.');
+    if (!before) bad('Submission ini sudah diganti pengirimnya dengan versi baru. Muat ulang antrean.');
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
