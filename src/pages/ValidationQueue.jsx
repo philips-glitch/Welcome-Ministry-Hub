@@ -21,7 +21,10 @@ export default function ValidationQueue() {
   const group = (no) => { const g = (groupRows || []).find((x) => x.no === no); return g ? [g.no, g.name, g.color] : [no, 'Grup ' + no, '#999']; };
   const members = useMembers().rows || [];
   // Captains validate their own group only; PICs and admins see every group.
-  const only = validatesOnly(useAuth().profile);
+  const auth = useAuth();
+  const only = validatesOnly(auth.profile);
+  // Super Admin / PIC can reopen a validated submission so its sender can change it again.
+  const canReopen = auth.can('challenges.manage');
   const nameOf = (id) => members.find((p) => p.id === id)?.full_name || '?';
   // Captains play without points: their entries score 0 and they aren't counted as participants.
   const noPoints = (id) => playsWithoutPoints(members.find((p) => p.id === id));
@@ -102,6 +105,17 @@ export default function ValidationQueue() {
   const teamTagged = cur && scoring.type === 'rubric'
     ? new Set((subs || []).filter((s) => s.group_no === cur.group_no && s.status === 'validated' && s.id !== cur.id).flatMap((s) => s.tagged_ids)) : null;
   const teamWith = teamTagged ? [...new Set([...teamTagged, ...cur.tagged_ids])].filter((id) => !noPoints(id)).length : 0;
+
+  const reopen = async () => {
+    if (!cur || cur.status !== 'validated') return;
+    if (!window.confirm(`Buka lagi “${titleOf(cur)}”? Skornya dihapus dan pengirim bisa mengubahnya lagi (walau deadline sudah lewat) sampai divalidasi ulang.`)) return;
+    try {
+      const row = await api.reopenSubmission(cur.id);
+      setSubs((xs) => xs.map((s) => (s.id === row.id ? row : s)));
+      reloadScores();
+      setToast(['ok', `Dibuka lagi · ${titleOf(cur)} — pengirim bisa mengubahnya`]);
+    } catch (e) { setToast(['bad', e.message]); }
+  };
 
   const decide = async (kind) => {
     if (!cur || !review) return;
@@ -252,6 +266,8 @@ export default function ValidationQueue() {
                     <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
                     {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
                     {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}</span>}
+                    {cur.status === 'validated' && canReopen && <button className="link" style={{ textAlign: 'left', color: '#7A5410', fontSize: 12 }} onClick={reopen}>↺ Buka lagi — skor dihapus, pengirim bisa mengubahnya</button>}
+                    {cur.status === 'submitted' && cur.reopened_at && <span style={{ color: '#7A5410' }}><b>Dibuka lagi</b> oleh panitia {fmtWIB(cur.reopened_at)} — pengirim bisa mengubahnya sampai divalidasi ulang.</span>}
                   </div>
                 </div>
               </div>

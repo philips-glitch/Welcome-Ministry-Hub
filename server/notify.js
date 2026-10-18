@@ -11,18 +11,37 @@ async function push(q, n) {
   [n.kind, n.title, n.body ?? null, n.challenge_id ?? null, n.group_no ?? null, n.tone || 'info', n.dedupe_key]);
 }
 
+// "R1 · Get to Know Me · Ana → Budi" / "R2 · Guess, Find, Snap! · Riddle 3"
+async function labelOf(q, sub) {
+  const c = (await q('select id, code, name from challenges where id = $1', [sub.challenge_id])).rows[0];
+  if (!c) return null;
+  const r = sub.riddle_id ? (await q('select no from riddles where id = $1', [sub.riddle_id])).rows[0] : null;
+  const first = async (id) => ((await q('select full_name from profiles where id = $1', [id])).rows[0]?.full_name || '?').split(' ')[0];
+  return { c, label: `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${await first(sub.submitted_by)} → ${await first(sub.target_id)}` : ''}` };
+}
+
 export async function notifyReview(db, sub) {
   if (!['validated', 'rejected', 'resubmit'].includes(sub.status)) return;
   const q = (t, p) => db.query(t, p);
-  const c = (await q('select id, code, name from challenges where id = $1', [sub.challenge_id])).rows[0];
-  if (!c) return;
-  const r = sub.riddle_id ? (await q('select no from riddles where id = $1', [sub.riddle_id])).rows[0] : null;
-  const first = async (id) => ((await q('select full_name from profiles where id = $1', [id])).rows[0]?.full_name || '?').split(' ')[0];
-  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${await first(sub.submitted_by)} → ${await first(sub.target_id)}` : ''}`;
+  const l = await labelOf(q, sub);
+  if (!l) return;
+  const { c, label } = l;
   const base = { kind: 'review', challenge_id: c.id, group_no: sub.group_no };
-  if (sub.status === 'validated') await push(q, { ...base, title: 'Submission disetujui 🎉', body: `${label} tervalidasi: +${Number(sub.score ?? 0)} poin.`, tone: 'good', dedupe_key: `review:${sub.id}:validated` });
+  // A reopened submission can be validated again: that's a new notification.
+  const again = sub.reopened_at ? `:${new Date(sub.reopened_at).getTime()}` : '';
+  if (sub.status === 'validated') await push(q, { ...base, title: 'Submission disetujui 🎉', body: `${label} tervalidasi: +${Number(sub.score ?? 0)} poin.`, tone: 'good', dedupe_key: `review:${sub.id}:validated${again}` });
   else if (sub.status === 'rejected') await push(q, { ...base, title: 'Submission ditolak', body: `${label}: ${sub.reject_reason || 'lihat detail'}. Kirim ulang sebelum deadline.`, tone: 'bad', dedupe_key: `review:${sub.id}:rejected` });
   else await push(q, { ...base, title: 'Diminta kirim ulang', body: `${label}: ${sub.reject_reason || 'lihat detail'}.`, tone: 'warn', dedupe_key: `review:${sub.id}:resubmit` });
+}
+
+// A Super Admin / PIC reopened a validated submission: the group can change it again.
+export async function notifyReopen(db, sub) {
+  const q = (t, p) => db.query(t, p);
+  const l = await labelOf(q, sub);
+  if (!l) return;
+  await push(q, { kind: 'review', challenge_id: l.c.id, group_no: sub.group_no, title: 'Submission dibuka lagi',
+    body: `${l.label}: panitia membuka lagi submission ini. Bisa diubah sampai divalidasi ulang.`, tone: 'warn',
+    dedupe_key: `reopen:${sub.id}:${new Date(sub.reopened_at).getTime()}` });
 }
 
 export async function notifyChallenge(db, c) {

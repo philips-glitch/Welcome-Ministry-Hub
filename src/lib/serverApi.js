@@ -66,6 +66,7 @@ export const serverApi = {
     return call('createSubmission', { sub, media });
   },
   reviewSubmission: (id, patch) => call('reviewSubmission', { id, patch }),
+  reopenSubmission: (id) => call('reopenSubmission', { id }),
   async mediaUrl(path) { return path ? `/api/media?path=${encodeURIComponent(path)}` : null; },
   groupScores: () => call('groupScores'),
 

@@ -3,7 +3,7 @@
 // Every method checks the caller's permissions here (role → permissions in role_permissions).
 import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
-import { notifyReview, notifyChallenge, syncReminders } from './notify.js';
+import { notifyReview, notifyReopen, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
 import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
@@ -349,8 +349,9 @@ const methods = {
   async createSubmission({ db, me }, { sub, media }) {
     needUser(me);
     const { rows: [c] } = await db.query('select * from challenges where id = $1', [sub.challenge_id]);
-    if (!c || c.status !== 'live' || (c.deadline_at && Date.now() > new Date(c.deadline_at).getTime())) bad('Challenge ini sedang tidak menerima submission.');
+    if (!c) bad('Challenge ini sedang tidak menerima submission.');
     if (!me.active || !me.group_no || me.group_no !== sub.group_no) bad('Hanya bisa submit untuk grup sendiri.');
+    const onTime = c.status === 'live' && !(c.deadline_at && Date.now() > new Date(c.deadline_at).getTime());
     const connect = isConnect(c);
     const row = {
       challenge_id: c.id, group_no: me.group_no, submitted_by: me.id,
@@ -360,9 +361,13 @@ const methods = {
     };
     // Re-submitting: until the deadline an entry can be sent again as long as it isn't validated yet.
     // The previous version, if still pending, is replaced (validators only ever see the latest one).
-    const unit = (await db.query('select id, challenge_id, group_no, riddle_id, target_id, submitted_by, status, version, media_path, media_name from submissions where challenge_id = $1 and group_no = $2', [c.id, me.group_no])).rows;
+    const unit = (await db.query('select id, challenge_id, group_no, riddle_id, target_id, submitted_by, status, version, media_path, media_name, reopened_at from submissions where challenge_id = $1 and group_no = $2', [c.id, me.group_no])).rows;
     const lastOf = (key) => unit.filter((x) => unitKey(x) === key).sort((a, b) => b.version - a.version)[0];
     const last = lastOf(unitKey(row));
+    // Live and before the deadline: open. Otherwise only a submission an admin reopened can still be changed.
+    const reopened = !!last?.reopened_at && last.status !== 'validated' && ['live', 'closed'].includes(c.status);
+    if (!onTime && !reopened) bad('Challenge ini sedang tidak menerima submission.');
+    if (!onTime && sub.replaces && sub.replaces !== last?.id) bad('Setelah deadline, hanya submission yang dibuka lagi yang bisa diubah (orang yang sama).');
     const superseded = [];
     if (connect) {
       if (!isGamePlayer(me)) bad('Challenge ini untuk peserta grup.');
@@ -401,8 +406,9 @@ const methods = {
       media_path = last.media_path; media_name = last.media_name;
     }
     const version = (last?.version || 0) + 1;
-    const cols = ['challenge_id', 'group_no', 'submitted_by', 'riddle_id', 'target_id', 'ig_url', 'tagged_ids', 'answers', 'declaration', 'media_path', 'media_name', 'version'];
-    const data = { ...row, media_path, media_name, version };
+    const cols = ['challenge_id', 'group_no', 'submitted_by', 'riddle_id', 'target_id', 'ig_url', 'tagged_ids', 'answers', 'declaration', 'media_path', 'media_name', 'version', 'reopened_at'];
+    // A reopened submission stays reopened through its edits, until it's validated again.
+    const data = { ...row, media_path, media_name, version, reopened_at: reopened ? last.reopened_at : null };
     const out = await db.tx(async (q) => {
       const { rows: [o] } = await q.query(`insert into submissions (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')}) returning *`, cols.map((k) => val(k, data[k])));
       const gone = superseded.filter((x) => x.status === 'submitted').map((x) => x.id);
@@ -427,6 +433,17 @@ const methods = {
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}
       where id = $1 returning *`, [id, ...keys.map((k) => val(k, patch[k])), me.id]);
     if (row.status !== before.status) await notifyReview(db, row);
+    return subRow(row);
+  },
+  // Super Admin / Challenge PIC: a validated submission goes back to pending (score removed) so its sender can
+  // change it again — even after the deadline — until it's validated again.
+  async reopenSubmission({ db, me }, { id }) {
+    needUser(me);
+    if (!can(me, 'challenges.manage')) deny('Hanya Super Admin dan Challenge PIC yang bisa membuka lagi submission.');
+    const { rows: [row] } = await db.query(`update submissions set status = 'submitted', score = null, reviewed_by = null, reviewed_at = null,
+      override_note = null, reject_reason = null, reopened_at = now() where id = $1 and status = 'validated' returning *`, [id]);
+    if (!row) bad('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
+    await notifyReopen(db, row);
     return subRow(row);
   },
   async groupScores({ db, me }) {

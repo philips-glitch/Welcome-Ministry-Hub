@@ -19,15 +19,17 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const connect = isConnect(c);
   const riddleMode = !connect && (c?.riddles_per_group || 0) > 0;
   const open = c && c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
+  // After the deadline only what an admin reopened can still be changed (until it's validated again).
+  const reopenedOk = (x) => !!x?.reopened_at && x.status !== 'validated' && ['live', 'closed'].includes(c?.status);
   const rules = form.confirm?.length ? form.confirm : submitRules(me);
 
   // Until the deadline anything not yet validated can be (re)sent. Riddles: not sent yet, pending, or rejected.
   const sendable = useMemo(() => (riddleMode ? data.draw : [])
     .map((d) => ({ ...d, r: data.riddles.find((x) => x.id === d.riddle_id), sub: data.latest(d.riddle_id) }))
-    .filter((d) => d.sub?.status !== 'validated'), [data, riddleMode]);
+    .filter((d) => (open ? d.sub?.status !== 'validated' : reopenedOk(d.sub))), [data, riddleMode, open]); // eslint-disable-line react-hooks/exhaustive-deps
   // Connect: validated people are locked; pending ones can be edited; the entry being switched frees its seat.
   const people = scoring.people || 2;
-  const { pickable, locked, active } = useMemo(() => {
+  const { pickable, locked, active, reopened } = useMemo(() => {
     const mine = data.subs.filter((x) => x.submitted_by === me.id && x.target_id);
     const latest = (tid) => mine.filter((x) => x.target_id === tid).sort((a, b) => b.version - a.version)[0];
     const swap = replaces ? mine.find((x) => x.id === replaces) : null;
@@ -36,9 +38,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
       pickable: data.roster.filter((p) => p.id !== me.id),
       locked: new Set(tids.filter((tid) => latest(tid).status === 'validated')),
       active: new Set(tids.filter((tid) => tid !== swap?.target_id && ['submitted', 'validated'].includes(latest(tid).status))),
+      reopened: new Set(tids.filter((tid) => reopenedOk(latest(tid)))),
     };
   }, [data, me.id, replaces]);
-  const blocked = (id) => locked.has(id) || (!active.has(id) && active.size >= people);
+  const blocked = (id) => (!open && !reopened.has(id)) || locked.has(id) || (!active.has(id) && active.size >= people);
   const full = locked.size >= people;
 
   const [target, setTarget] = useState(riddleId);
@@ -81,7 +84,8 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
       </div>
     );
   }
-  if (!open) return <div className="p-card muted">Challenge ini sedang tidak menerima submission.</div>;
+  const lateEditable = riddleMode ? sendable.length > 0 : connect ? reopened.size > 0 : reopenedOk(data.latest(null));
+  if (!open && !lateEditable) return <div className="p-card muted">Challenge ini sedang tidak menerima submission.</div>;
   if (riddleMode && !sendable.length) return <div className="p-card muted">Semua riddle grup kamu sudah divalidasi.</div>;
   if (connect && full) return <div className="p-card muted">{people} orang kamu sudah divalidasi semua. Mantap!</div>;
 

@@ -22,9 +22,23 @@ export function notifyReview(s, sub, at) {
   const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
   const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
   const base = { kind: 'review', challenge_id: c.id, group_no: sub.group_no };
-  if (sub.status === 'validated') push(s, { ...base, title: 'Submission disetujui 🎉', body: `${label} tervalidasi: +${sub.score ?? 0} poin.`, tone: 'good', dedupe_key: `review:${sub.id}:validated` }, at);
+  // A reopened submission can be validated again: that's a new notification.
+  const again = sub.reopened_at ? `:${new Date(sub.reopened_at).getTime()}` : '';
+  if (sub.status === 'validated') push(s, { ...base, title: 'Submission disetujui 🎉', body: `${label} tervalidasi: +${sub.score ?? 0} poin.`, tone: 'good', dedupe_key: `review:${sub.id}:validated${again}` }, at);
   else if (sub.status === 'rejected') push(s, { ...base, title: 'Submission ditolak', body: `${label}: ${sub.reject_reason || 'lihat detail'}. Kirim ulang sebelum deadline.`, tone: 'bad', dedupe_key: `review:${sub.id}:rejected` }, at);
   else if (sub.status === 'resubmit') push(s, { ...base, title: 'Diminta kirim ulang', body: `${label}: ${sub.reject_reason || 'lihat detail'}.`, tone: 'warn', dedupe_key: `review:${sub.id}:resubmit` }, at);
+}
+
+// Same as notifyReopen() on the server: the group can change a reopened submission again.
+export function notifyReopen(s, sub, at) {
+  const c = s.challenges.find((x) => x.id === sub.challenge_id);
+  if (!c) return;
+  const r = s.riddles.find((x) => x.id === sub.riddle_id);
+  const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
+  push(s, { kind: 'review', challenge_id: c.id, group_no: sub.group_no, title: 'Submission dibuka lagi',
+    body: `${label}: panitia membuka lagi submission ini. Bisa diubah sampai divalidasi ulang.`, tone: 'warn',
+    dedupe_key: `reopen:${sub.id}:${new Date(sub.reopened_at).getTime()}` }, at);
 }
 
 export function notifyChallenge(s, c, at) {

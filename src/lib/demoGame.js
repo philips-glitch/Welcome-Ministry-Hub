@@ -3,7 +3,7 @@ import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
 import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
-import { notifyReview, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
+import { notifyReview, notifyReopen, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
@@ -246,13 +246,18 @@ export function gameMethods({ load, save, delay, fail }) {
     async createSubmission({ file, replaces, keep_media, ...sub }) {
       const s = load();
       const c = s.challenges.find((x) => x.id === sub.challenge_id);
-      if (!c || c.status !== 'live' || (c.deadline_at && demoNow() > new Date(c.deadline_at).getTime())) return fail('Challenge ini sedang tidak menerima submission.');
+      if (!c) return fail('Challenge ini sedang tidak menerima submission.');
       const me = s.profiles.find((p) => p.id === s.sessionId);
       if (!me?.active || me.group_no !== sub.group_no) return fail('Hanya bisa submit untuk grup sendiri.');
       const row0 = { riddle_id: null, target_id: null, ...sub, submitted_by: s.sessionId };
       const unit = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no);
       const lastOf = (key) => unit.filter((x) => unitKey(x) === key).sort((a, b) => b.version - a.version)[0];
       const last = lastOf(unitKey(row0));
+      // Live and before the deadline: open. Otherwise only a submission an admin reopened can still be changed.
+      const onTime = c.status === 'live' && !(c.deadline_at && demoNow() > new Date(c.deadline_at).getTime());
+      const reopened = !!last?.reopened_at && last.status !== 'validated' && ['live', 'closed'].includes(c.status);
+      if (!onTime && !reopened) return fail('Challenge ini sedang tidak menerima submission.');
+      if (!onTime && replaces && replaces !== last?.id) return fail('Setelah deadline, hanya submission yang dibuka lagi yang bisa diubah (orang yang sama).');
       const superseded = last ? [last] : [];
       if (isConnect(c)) {
         if (!isGamePlayer(me)) return fail('Challenge ini untuk peserta grup.');
@@ -284,6 +289,7 @@ export function gameMethods({ load, save, delay, fail }) {
       const row = {
         id: uid(), ig_url: null, tagged_ids: [], declaration: false, answers: null, ...row0, media_path, media_name,
         version: (last?.version || 0) + 1, status: 'submitted', submitted_at: new Date(demoNow()).toISOString(), ...EMPTY_REVIEW,
+        reopened_at: reopened ? last.reopened_at : null,
       };
       const gone = new Set(superseded.filter((x) => x.status === 'submitted').map((x) => x.id));
       s.submissions = s.submissions.filter((x) => !gone.has(x.id));
@@ -317,6 +323,16 @@ export function gameMethods({ load, save, delay, fail }) {
       if (playsWithoutPoints(s.profiles.find((p) => p.id === s.submissions[i].submitted_by))) patch = { ...patch, score: 0 };
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
+      save(); return delay(structuredClone(s.submissions[i]));
+    },
+    // Super Admin / PIC: a validated submission goes back to pending (score removed) so its sender can change it.
+    async reopenSubmission(id) {
+      const s = load();
+      if (!canDemo(s, 'challenges.manage')) return fail('Hanya Super Admin dan Challenge PIC yang bisa membuka lagi submission.');
+      const i = s.submissions.findIndex((x) => x.id === id && x.status === 'validated');
+      if (i < 0) return fail('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
+      s.submissions[i] = { ...s.submissions[i], status: 'submitted', score: null, reviewed_by: null, reviewed_at: null, override_note: null, reject_reason: null, reopened_at: new Date(demoNow()).toISOString() };
+      notifs(s); notifyReopen(s, s.submissions[i]);
       save(); return delay(structuredClone(s.submissions[i]));
     },
     async mediaUrl(path) { return mediaObjectUrl(path); },

@@ -123,6 +123,8 @@ create table if not exists submissions (
   score numeric(6,2),
   override_note text, reject_reason text
 );
+-- Set when a Super Admin / PIC reopens a validated submission: editable again (even past the deadline) until re-validated.
+alter table submissions add column if not exists reopened_at timestamptz;
 create index if not exists submissions_challenge_idx on submissions (challenge_id, status);
 create index if not exists submissions_group_idx on submissions (group_no);
 

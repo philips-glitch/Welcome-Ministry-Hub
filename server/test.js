@@ -129,6 +129,24 @@ await ana.call('createSubmission', { sub: { ...sub(ids.kapten).sub, replaces: ci
 const anaNow = await ana.call('listSubmissions', { challengeId: r1.id, groupNo: '01' });
 assert.deepEqual(anaNow.map((x) => x.target_id).sort(), [ids.budi, ids.kapten].sort());
 ok('validated entries are locked; a pending one can be switched to someone else (still max 2)');
+
+// 5b · reopen: Super Admin / PIC turns a validated entry back to pending; editable even after the deadline
+const pts01 = async () => (await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r1.id)?.points ?? 0;
+await rejects(kapten.call('reopenSubmission', { id: s1.id }), /Super Admin dan Challenge PIC/);
+const reo = await admin.call('reopenSubmission', { id: s1.id });
+assert.equal(reo.status, 'submitted'); assert.equal(reo.score, null); assert.ok(reo.reopened_at);
+assert.equal(await pts01(), 0);
+assert.ok((await ana.call('listNotifications')).some((x) => x.title === 'Submission dibuka lagi' && /Ana → Budi/.test(x.body)));
+const r1deadline = (await admin.call('listChallenges')).find((x) => x.id === r1.id).deadline_at;
+await admin.call('saveChallenge', { c: { id: r1.id, deadline_at: new Date(Date.now() - 60e3).toISOString() } });
+const edited = await ana.call('createSubmission', sub(ids.budi));   // past the deadline, but reopened
+assert.equal(edited.version, 3); assert.ok(edited.reopened_at);
+await rejects(ana.call('createSubmission', sub(ids.kapten)), /tidak menerima/);   // not reopened → closed
+await kapten.call('reviewSubmission', { id: edited.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
+assert.equal(await pts01(), 45);
+await rejects(ana.call('createSubmission', sub(ids.budi)), /tidak menerima/);   // validated again → locked
+await admin.call('saveChallenge', { c: { id: r1.id, deadline_at: r1deadline } });
+ok('Super Admin/PIC can reopen a validated entry: score off, group notified, editable past the deadline until re-validated');
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });

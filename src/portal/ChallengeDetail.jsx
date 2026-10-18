@@ -18,6 +18,9 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
   const { scores } = useGame();
   if (!c) return <div className="p-card muted">Challenge tidak ditemukan.</div>;
   const open = c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
+  // After the deadline, only an entry an admin reopened can still be changed (until it's validated again).
+  const lateOk = (x) => !open && !!x?.reopened_at && x.status !== 'validated' && ['live', 'closed'].includes(c.status);
+  const reopenNote = (x) => !!x?.reopened_at && x.status !== 'validated';
   // Until it opens, the event's details stay under wraps: every text section reads "Coming soon".
   const soon = ['draft', 'scheduled'].includes(c.status);
   const scoring = withDefaults(c.scoring);
@@ -36,11 +39,11 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
     const r = data.riddles.find((x) => x.id === d.riddle_id);
     const sub = data.latest(d.riddle_id);
     // Until the deadline an entry can be sent again, as long as it isn't validated.
-    const canSend = open && me.canSubmit && sub?.status !== 'validated';
+    const canSend = me.canSubmit && ((open && sub?.status !== 'validated') || lateOk(sub));
     return { slot: d.slot, id: d.riddle_id, no: r?.no ?? d.slot, text: r?.prompt ?? '(riddle belum tersedia)', st: sub ? STATUS[sub.status] : 'Not Started', meta: metaFor(sub), canSend, resend: !!sub, sub };
   }) : [];
   const single = !riddleMode && !connect ? data.latest(null) : null;
-  const canSingle = open && me.canSubmit && single?.status !== 'validated';
+  const canSingle = me.canSubmit && ((open && single?.status !== 'validated') || lateOk(single));
 
   // Connect: my people (latest entry per person), plus empty slots up to `people`.
   const people = scoring.people || 2;
@@ -105,7 +108,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                     const [cbg, cfg] = SUB_CHIP[st];
                     const doneCard = s.status === 'validated';
                     const pending = s.status === 'submitted';
-                    const resend = open && me.canSubmit && (pending || (['rejected', 'resubmit'].includes(s.status) && activeMine.length < people));
+                    const resend = me.canSubmit && ((open && (pending || (['rejected', 'resubmit'].includes(s.status) && activeMine.length < people))) || lateOk(s));
                     return (
                       <div key={s.id} className={'p-card' + (justSent && justSent === s.target_id ? ' p-flash' : '')} style={{ borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, background: doneCard ? '#F3F8F4' : undefined }}>
                         <div className="row" style={{ gap: 8 }}>
@@ -116,10 +119,11 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         {s.answers?.q4 && <span style={{ fontSize: 13.5, lineHeight: 1.45, fontStyle: 'italic' }}>“{s.answers.q4}”</span>}
                         {(s.media_path || s.media_name) && <PhotoThumb path={s.media_path} name={s.media_name} height={140} caption={`Foto bareng · versi ${s.version}`} placeholder="Foto lama, tidak tersimpan" />}
                         <span className="muted" style={{ fontSize: 12 }}>{metaFor(s)}</span>
+                        {reopenNote(s) && <span style={{ fontSize: 12, color: '#7A5410', fontWeight: 600 }}>Dibuka lagi oleh panitia — bisa diubah sampai divalidasi ulang.</span>}
                         {resend && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: open ? '1fr 1fr' : '1fr', gap: 6 }}>
                             <button onClick={() => pickRiddle(s.target_id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{pending ? 'Ubah jawaban' : 'Kirim ulang'}</button>
-                            <button onClick={() => pickRiddle(null, pending ? s.id : null)} style={{ height: 42, borderRadius: 12, border: '1px solid #DCD2BC', fontWeight: 700, fontSize: 13 }}>{pending ? 'Ganti orang' : 'Orang lain'}</button>
+                            {open && <button onClick={() => pickRiddle(null, pending ? s.id : null)} style={{ height: 42, borderRadius: 12, border: '1px solid #DCD2BC', fontWeight: 700, fontSize: 13 }}>{pending ? 'Ganti orang' : 'Orang lain'}</button>}
                           </div>
                         )}
                       </div>
@@ -162,6 +166,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                         <PhotoThumb path={r.sub.media_path} name={r.sub.media_name} height={150} caption={`Riddle ${r.no} · versi ${r.sub.version}`} placeholder="Foto lama, tidak tersimpan" />
                       )}
                       <span className="muted" style={{ fontSize: 12 }}>{r.meta}</span>
+                      {reopenNote(r.sub) && <span style={{ fontSize: 12, color: '#7A5410', fontWeight: 600 }}>Dibuka lagi oleh panitia — bisa diubah sampai divalidasi ulang.</span>}
                       {r.canSend && <button onClick={() => pickRiddle(r.id)} style={{ height: 42, borderRadius: 12, background: '#1F4D3A', color: '#FBF6EA', fontWeight: 700, fontSize: 13 }}>{r.sub?.status === 'submitted' ? 'Ubah & kirim ulang' : r.resend ? 'Kirim ulang' : `Submit Riddle ${r.no}`}</button>}
                     </div>
                   );
