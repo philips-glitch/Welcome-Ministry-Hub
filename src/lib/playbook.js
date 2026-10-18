@@ -41,7 +41,7 @@ export const PLAYBOOK = [
         '- Q4 (discovery), 4 pts: 4 = specific, genuine and learned in the conversation · 2 = relevant but too generic · 0 = blank, irrelevant or copied from their profile.',
         '- Photo together: +2 per person (optional, no penalty). One clear photo of the two of you, taken during/around the conversation.',
         '- Max 12 per person, 24 per member (2 people).',
-        '- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = members who submitted ÷ team size.',
+        '- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = (members who submitted + members who were interviewed) ÷ team size × ½.',
       ].join('\n'),
       flourish_hub: 'Every member submits for themselves: pick the person, answer Q1–Q4, and add an optional photo together. One submission per person, 2 people per member.',
       make_it_flourish: "Let's meet. Let's connect. Let's flourish together.",

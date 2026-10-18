@@ -354,7 +354,7 @@ export default function ValidationQueue() {
                   )}
                   {byCaptain && <span style={{ fontSize: 12, opacity: 0.9 }}>Ini submission captain: tetap divalidasi, tapi skornya selalu 0 dan tidak dihitung ke poin tim.</span>}
                   {connect && !byCaptain && (
-                    <span style={{ fontSize: 12, opacity: 0.9 }}>Skor orang ini. Skor tim = rata-rata member ÷ {scoring.people * max} × {scoring.individual_weight} + partisipasi × {scoring.participation_weight}.</span>
+                    <span style={{ fontSize: 12, opacity: 0.9 }}>Skor orang ini. Skor tim = rata-rata member ÷ {scoring.people * max} × {scoring.individual_weight} + partisipasi × {scoring.participation_weight} (partisipasi = (yang submit + yang diajak kenalan) ÷ anggota grup × ½).</span>
                   )}
                   {scoring.type === 'flat' && <span style={{ fontSize: 12, opacity: 0.9 }}>Poin tetap untuk submission yang tervalidasi.</span>}
                 </div>

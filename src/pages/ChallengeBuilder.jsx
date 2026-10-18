@@ -284,7 +284,7 @@ function ScoringEditor({ challenge, scoring, setScoring, replace }) {
           ))}
           <button className="link" style={{ textAlign: 'left' }} onClick={() => setScoring({ questions: [...s.questions, { key: 'q' + Date.now().toString(36), text: '', max: 2 }] })}>+ Pertanyaan</button>
           <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>
-            Skor tim = rata-rata member ÷ {s.people * itemMax(s)} × {s.individual_weight} + (member yang submit ÷ anggota grup) × {s.participation_weight}
+            Skor tim = rata-rata member ÷ {s.people * itemMax(s)} × {s.individual_weight} + ((yang submit + yang diajak kenalan) ÷ anggota grup × ½) × {s.participation_weight}
           </span>
         </>
       )}

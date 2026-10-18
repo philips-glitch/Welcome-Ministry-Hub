@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { setDb, getDb, fromPglite } from './db.js';
 import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
+import { connectBreakdown } from '../src/lib/game.js';
 
 process.env.ADMIN_SETUP_PASSWORD = ' "setup-pass-123"\n';   // pasted with quotes + spaces: forgiven
 const lite = new PGlite();
@@ -34,6 +35,20 @@ function client() {
 }
 const rejects = async (p, re) => assert.rejects(p, (e) => { assert.match(e.message, re); return true; });
 let n = 0; const ok = (msg) => console.log(`✓ ${++n}. ${msg}`);
+
+// 0 · participation = (unique people who submitted + unique people interviewed) ÷ team size × ½
+{
+  const v = (by, to, score) => ({ status: 'validated', submitted_by: by, target_id: to, score });
+  const sc = { type: 'connect', people: 2, photo_bonus: 2, individual_weight: 70, participation_weight: 30 };
+  // A and C both talk to B (12 pts each); team of 4 → (2 submitted + 1 interviewed) ÷ 4 × ½ = 0.375 → 11.25 → 11.3; 12/24×70 = 35
+  const b = connectBreakdown(sc, [v('A', 'B', 12), v('C', 'B', 12)], 4);
+  assert.deepEqual([b.participants, b.interviewed, b.rate, b.part, b.points], [2, 1, 0.375, 11.3, 46.3]);
+  // A captain who was interviewed doesn't count
+  assert.equal(connectBreakdown(sc, [v('A', 'B', 12), v('A', 'CAP', 12)], 4, new Set(['CAP'])).interviewed, 1);
+  // Everyone submitted and everyone was interviewed → full 30
+  assert.equal(connectBreakdown(sc, [v('A', 'B', 12), v('B', 'A', 12)], 2).part, 30);
+}
+ok('participation formula: (unique people who submitted + unique people interviewed) ÷ team size × ½');
 
 // 1 · bootstrap + login
 const admin = client();
@@ -115,7 +130,7 @@ const rev = await kapten.call('reviewSubmission', { id: s1.id, patch: { status: 
 assert.equal(rev.score, 12);
 const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
-// 1 member took part with 12/24 → 12/24×70 = 35; 1 of 3 players (captains play without points) → 0.333×30 = 10 → 45
+// 1 member took part with 12/24 → 12/24×70 = 35; participation (1 submitted + 1 interviewed) ÷ 3 players × ½ → 0.333×30 = 10 → 45
 assert.equal(g1.points, 45); ok("captains validate their own group only; the review → team score 45 (= playbook formula)");
 const kSub = (await kapten.call('listSubmissions', { challengeId: r1.id })).find((x) => x.submitted_by === ids.kapten);
 const kRev = await kapten.call('reviewSubmission', { id: kSub.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
@@ -221,6 +236,14 @@ await admin.login('angel', 'brand-new-pass9');
 await client().login('philips', 'brand-new-pass9'); ok('changing ADMIN_SETUP_PASSWORD resets angel + philips (and signs them out)');
 process.env.ADMIN_SETUP_PASSWORD = 'setup-pass-123';
 await restart(); await admin.login('angel', 'setup-pass-123');
+// The live R1 text written before the participation change is updated on start — unless an admin edited that line.
+const OLD_P = '- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = members who submitted ÷ team size.';
+const r1now = (await admin.call('listChallenges')).find((x) => x.code === 'R1');
+await admin.call('saveChallenge', { c: { id: r1now.id, sections: { ...r1now.sections, points_rewards: 'Intro\n' + OLD_P } } });
+await restart(); await admin.login('angel', 'setup-pass-123');
+const pr = (await admin.call('listChallenges')).find((x) => x.code === 'R1').sections.points_rewards;
+assert.ok(pr.startsWith('Intro\n') && pr.includes('(members who submitted + members who were interviewed) ÷ team size × ½') && !pr.includes(OLD_P));
+ok('R1 points text in the database follows the new participation formula');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });

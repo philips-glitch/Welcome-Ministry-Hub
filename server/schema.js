@@ -170,6 +170,7 @@ export async function migrate(db) {
   await db.exec(LOCKDOWN);
   const { rows } = await db.query(`select value from app_meta where key = 'seeded'`);
   if (!rows.length) await db.tx((t) => seed(t));
+  await updateTexts(db);
   await bootstrapAdmins(db);
 }
 
@@ -206,6 +207,19 @@ async function seed(t) {
     }
   }
   await t.query(`insert into app_meta values ('seeded', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
+}
+
+// Wording changes to seeded challenge text. Each replaces one exact line, so a line an admin edited stays theirs.
+const TEXT_UPDATES = [
+  // Oct 2026: participation now counts people interviewed too.
+  ['R1', 'points_rewards', "- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = members who submitted ÷ team size.",
+    "- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = (members who submitted + members who were interviewed) ÷ team size × ½."],
+];
+async function updateTexts(db) {
+  for (const [code, key, from, to] of TEXT_UPDATES) {
+    await db.query(`update challenges set sections = jsonb_set(sections, $2::text[], to_jsonb(replace(sections->>$3, $4, $5)))
+      where code = $1 and position($4 in coalesce(sections->>$3, '')) > 0`, [code, [key], key, from, to]);
+  }
 }
 
 // Super Admin accounts from Vercel settings (never stored in the code):

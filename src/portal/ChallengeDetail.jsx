@@ -286,7 +286,7 @@ function ScoringSummary({ c, scoring: s }) {
         {bar([[s.individual_weight, '#1F4D3A'], [s.participation_weight, '#E3A92B']])}
         <div style={grid}>
           <div className="col"><span style={{ fontWeight: 700 }}>{s.individual_weight}% Rata-rata skor</span><span className="muted">Maks {itemMax(s)} per orang × {s.people} orang</span></div>
-          <div className="col"><span style={{ fontWeight: 700 }}>{s.participation_weight}% Partisipasi</span><span className="muted">Anggota yang submit ÷ anggota grup</span></div>
+          <div className="col"><span style={{ fontWeight: 700 }}>{s.participation_weight}% Partisipasi</span><span className="muted">(yang submit + yang diajak kenalan) ÷ anggota grup × ½</span></div>
         </div>
       </div>
     );

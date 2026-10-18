@@ -36,7 +36,8 @@ export const DEFAULT_RUBRIC = {
   participation: { tiers: [{ min: 10, pts: 10 }, { min: 7, pts: 6 }, { min: 0, pts: 2 }] },
 };
 // Every member submits for themselves about `people` group-mates. Team score =
-// average member score (of those who took part) × individual_weight + participation rate × participation_weight.
+// average member score (of those who took part) × individual_weight + participation rate × participation_weight,
+// participation rate = (members who submitted + members who were interviewed) ÷ team size × ½.
 export const DEFAULT_CONNECT = {
   type: 'connect', people: 2, photo_bonus: 2, individual_weight: 70, participation_weight: 30,
   questions: [
@@ -87,20 +88,23 @@ export function latestPerUnit(subs) {
   return [...m.values()];
 }
 
-// Connect challenges: per-member totals (best `people` validated entries), average over the members
-// who took part, and the share of the roster that took part.
-export function connectBreakdown(scoring, subs, rosterSize) {
+// Connect challenges: per-member totals (best `people` validated entries), average over the members who took
+// part, and participation = (unique people who submitted + unique people interviewed) ÷ team size × ½.
+// noPoints: people who play without points (captains) — they don't count as interviewed either.
+export function connectBreakdown(scoring, subs, rosterSize, noPoints = new Set()) {
   const s = withDefaults(scoring);
   const byMember = {};
-  subs.filter((x) => x.status === 'validated').forEach((x) => { (byMember[x.submitted_by] ||= []).push(Number(x.score) || 0); });
+  const valid = subs.filter((x) => x.status === 'validated');
+  valid.forEach((x) => { (byMember[x.submitted_by] ||= []).push(Number(x.score) || 0); });
   const totals = Object.values(byMember).map((xs) => sum(xs.sort((a, b) => b - a).slice(0, s.people)));
+  const interviewed = new Set(valid.map((x) => x.target_id).filter((id) => id && !noPoints.has(id))).size;
   const memberMax = s.people * itemMax(s);
   const avg = totals.length ? sum(totals) / totals.length : 0;
-  const rate = rosterSize ? Math.min(1, totals.length / rosterSize) : 0;
+  const rate = rosterSize ? Math.min(1, (totals.length + interviewed) / rosterSize / 2) : 0;
   // Each part rounded to 0.1 before adding, like the playbook's worked examples (64.2 + 18.5 = 82.7).
   const indiv = round1(memberMax ? (avg / memberMax) * s.individual_weight : 0);
   const part = round1(rate * s.participation_weight);
-  return { participants: totals.length, memberMax, avg: round1(avg), rate, indiv, part, points: totals.length ? round1(indiv + part) : 0 };
+  return { participants: totals.length, interviewed, memberMax, avg: round1(avg), rate, indiv, part, points: totals.length ? round1(indiv + part) : 0 };
 }
 
 // One group's points for one challenge from that group's submissions. Mirrors group_scores() in SQL.
@@ -110,7 +114,7 @@ export function groupPoints(c, subs, rosterSize, noPoints = new Set()) {
   // Only the latest validated version of each entry counts.
   const valid = latestPerUnit(subs.filter((x) => x.status === 'validated' && !noPoints.has(x.submitted_by)));
   if (!valid.length) return 0;
-  if (s.type === 'connect') return connectBreakdown(s, valid, rosterSize).points;
+  if (s.type === 'connect') return connectBreakdown(s, valid, rosterSize, noPoints).points;
   const base = sum(valid.map((x) => x.score));
   if (s.type !== 'rubric') return round1(base);
   return round1(base + tierPoints(s.participation?.tiers, new Set(valid.flatMap((x) => (x.tagged_ids || []).filter((id) => !noPoints.has(id)))).size));
