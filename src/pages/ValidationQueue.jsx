@@ -266,6 +266,14 @@ export default function ValidationQueue() {
                     <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
                     {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
                     {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}</span>}
+                    {(cur.adjustments || []).map((a, i) => (
+                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name || 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
+                    ))}
+                    {cur.status === 'validated' && canReopen && !noPoints(cur.submitted_by) && (
+                      <AdjustScore key={cur.id} sub={cur} max={max}
+                        onSaved={(row) => { setSubs((xs) => xs.map((s) => (s.id === row.id ? row : s))); reloadScores(); setToast(['ok', `Poin diubah · ${titleOf(cur)} · ${row.score} pts`]); }}
+                        onError={(m) => setToast(['bad', m])} />
+                    )}
                     {cur.status === 'validated' && canReopen && <button className="link" style={{ textAlign: 'left', color: '#7A5410', fontSize: 12 }} onClick={reopen}>↺ Buka lagi — skor dihapus, pengirim bisa mengubahnya</button>}
                     {cur.status === 'submitted' && cur.reopened_at && <span style={{ color: '#7A5410' }}><b>Dibuka lagi</b> oleh panitia {fmtWIB(cur.reopened_at)} — pengirim bisa mengubahnya sampai divalidasi ulang.</span>}
                   </div>
@@ -420,4 +428,34 @@ const actBtn = { height: 42, borderRadius: 12, display: 'flex', alignItems: 'cen
 
 function StepBtn({ onClick, children }) {
   return <button onClick={onClick} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #DCD2BC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>{children}</button>;
+}
+
+// Super Admin / PIC: change the points of a validated submission — a reason is required and kept.
+function AdjustScore({ sub, max, onSaved, onError }) {
+  const [open, setOpen] = useState(false);
+  const [score, setScore] = useState(String(sub.score ?? ''));
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { onSaved(await api.adjustScore(sub.id, score === '' ? '' : Number(score), note.trim())); setOpen(false); setNote(''); }
+    catch (e) { onError(e.message); }
+    finally { setBusy(false); }
+  };
+  if (!open) return <button className="link" style={{ textAlign: 'left', fontSize: 12 }} onClick={() => setOpen(true)}>✎ Ubah poin (wajib dengan alasan)</button>;
+  return (
+    <div className="col" style={{ gap: 6, padding: 10, borderRadius: 10, background: '#FBF3E0', border: '1px solid #E3C987', marginTop: 4 }}>
+      <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <input type="number" min="0" max={max} step="0.5" aria-label="Poin baru" value={score} onChange={(e) => setScore(e.target.value)}
+          style={{ width: 80, height: 34, borderRadius: 8, background: '#FFFDF8', border: '1px solid #E3C987', padding: '0 8px', font: 'inherit' }} />
+        <span className="muted" style={{ fontSize: 12 }}>/ {max} · sekarang {sub.score ?? 0} pts</span>
+      </div>
+      <textarea rows={2} aria-label="Alasan perubahan poin" placeholder="Alasan (wajib), mis. “foto ternyata bukan di lokasi”" value={note} onChange={(e) => setNote(e.target.value)}
+        style={{ font: 'inherit', fontSize: 12.5, borderRadius: 8, border: '1px solid #E3C987', background: '#FFFDF8', padding: '6px 8px', resize: 'vertical' }} />
+      <div className="row" style={{ gap: 6 }}>
+        <button className="btn btn-primary" style={{ height: 32 }} disabled={busy || note.trim().length < 3 || score === ''} onClick={save}>{busy ? 'Menyimpan…' : 'Simpan poin'}</button>
+        <button className="btn btn-ghost" style={{ height: 32 }} onClick={() => setOpen(false)}>Batal</button>
+      </div>
+    </div>
+  );
 }

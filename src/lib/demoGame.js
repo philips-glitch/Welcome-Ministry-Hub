@@ -1,9 +1,9 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles } from './game.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
-import { notifyReview, notifyReopen, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
+import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
@@ -333,6 +333,25 @@ export function gameMethods({ load, save, delay, fail }) {
       if (i < 0) return fail('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
       s.submissions[i] = { ...s.submissions[i], status: 'submitted', score: null, reviewed_by: null, reviewed_at: null, override_note: null, reject_reason: null, reopened_at: new Date(demoNow()).toISOString() };
       notifs(s); notifyReopen(s, s.submissions[i]);
+      save(); return delay(structuredClone(s.submissions[i]));
+    },
+    // Same as adjustScore() on the server.
+    async adjustScore(id, score, note) {
+      const s = load();
+      if (!canDemo(s, 'challenges.manage')) return fail('Hanya Super Admin dan Challenge PIC yang bisa mengubah poin.');
+      const why = String(note || '').trim();
+      if (why.length < 3) return fail('Tulis alasan perubahan poin.');
+      const i = s.submissions.findIndex((x) => x.id === id && x.status === 'validated');
+      if (i < 0) return fail('Poin hanya bisa diubah untuk submission yang sudah tervalidasi.');
+      const sub = s.submissions[i];
+      if (playsWithoutPoints(s.profiles.find((p) => p.id === sub.submitted_by))) return fail('Submission captain selalu 0 poin (captain main tanpa poin).');
+      const max = itemMax(withDefaults(s.challenges.find((c) => c.id === sub.challenge_id)?.scoring));
+      const n = Math.round(Number(score) * 100) / 100;
+      if (score === '' || score == null || !Number.isFinite(n) || n < 0 || n > max) return fail(`Poin harus antara 0 dan ${max}.`);
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      const e = { from: sub.score ?? null, to: n, note: why.slice(0, 500), by: me?.id, by_name: me?.full_name || me?.username, at: new Date().toISOString() };
+      s.submissions[i] = { ...sub, score: n, adjustments: [...(sub.adjustments || []), e] };
+      notifs(s); notifyAdjust(s, s.submissions[i], e);
       save(); return delay(structuredClone(s.submissions[i]));
     },
     async mediaUrl(path) { return mediaObjectUrl(path); },

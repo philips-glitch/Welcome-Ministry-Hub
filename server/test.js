@@ -145,8 +145,22 @@ await rejects(ana.call('createSubmission', sub(ids.kapten)), /tidak menerima/); 
 await kapten.call('reviewSubmission', { id: edited.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(await pts01(), 45);
 await rejects(ana.call('createSubmission', sub(ids.budi)), /tidak menerima/);   // validated again → locked
-await admin.call('saveChallenge', { c: { id: r1.id, deadline_at: r1deadline } });
 ok('Super Admin/PIC can reopen a validated entry: score off, group notified, editable past the deadline until re-validated');
+
+// 5c · point change after validation (here: past the deadline) — admin/PIC only, reason required, kept as history
+await rejects(kapten.call('adjustScore', { id: edited.id, score: 6, note: 'alasan' }), /Super Admin dan Challenge PIC/);
+await rejects(admin.call('adjustScore', { id: edited.id, score: 6, note: '' }), /alasan/);
+await rejects(admin.call('adjustScore', { id: edited.id, score: 99, note: 'terlalu tinggi' }), /antara 0 dan 12/);
+await rejects(admin.call('adjustScore', { id: kSub.id, score: 5, note: 'coba captain' }), /captain/);
+const adj = await admin.call('adjustScore', { id: edited.id, score: 6, note: 'Foto ternyata bukan berdua' });
+assert.equal(adj.score, 6);
+assert.equal(adj.adjustments.length, 1);
+assert.deepEqual([adj.adjustments[0].from, adj.adjustments[0].to, adj.adjustments[0].note], [12, 6, 'Foto ternyata bukan berdua']);
+// 1 member with 6/24 → 6/24×70 = 17.5; 1 of 3 players → 10 → 27.5
+assert.equal(await pts01(), 27.5);
+assert.ok((await ana.call('listNotifications')).some((x) => x.title === 'Poin diubah panitia' && /12 → 6 poin\. Alasan: Foto ternyata bukan berdua/.test(x.body)));
+await admin.call('saveChallenge', { c: { id: r1.id, deadline_at: r1deadline } });
+ok('after validation (even past the deadline) admin/PIC can change points with a reason: history kept, group notified, team score updated');
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });

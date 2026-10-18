@@ -29,6 +29,18 @@ export function notifyReview(s, sub, at) {
   else if (sub.status === 'resubmit') push(s, { ...base, title: 'Diminta kirim ulang', body: `${label}: ${sub.reject_reason || 'lihat detail'}.`, tone: 'warn', dedupe_key: `review:${sub.id}:resubmit` }, at);
 }
 
+// Same as notifyAdjust() on the server: points of a validated submission changed (with a reason).
+export function notifyAdjust(s, sub, e, at) {
+  const c = s.challenges.find((x) => x.id === sub.challenge_id);
+  if (!c) return;
+  const r = s.riddles.find((x) => x.id === sub.riddle_id);
+  const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
+  push(s, { kind: 'review', challenge_id: c.id, group_no: sub.group_no, title: 'Poin diubah panitia',
+    body: `${label}: ${e.from ?? 0} → ${e.to} poin. Alasan: ${e.note}`, tone: 'info',
+    dedupe_key: `adjust:${sub.id}:${new Date(e.at).getTime()}` }, at);
+}
+
 // Same as notifyReopen() on the server: the group can change a reopened submission again.
 export function notifyReopen(s, sub, at) {
   const c = s.challenges.find((x) => x.id === sub.challenge_id);

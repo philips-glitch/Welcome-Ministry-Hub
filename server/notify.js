@@ -34,6 +34,16 @@ export async function notifyReview(db, sub) {
   else await push(q, { ...base, title: 'Diminta kirim ulang', body: `${label}: ${sub.reject_reason || 'lihat detail'}.`, tone: 'warn', dedupe_key: `review:${sub.id}:resubmit` });
 }
 
+// A Super Admin / PIC changed the points of a validated submission (with a reason).
+export async function notifyAdjust(db, sub, e) {
+  const q = (t, p) => db.query(t, p);
+  const l = await labelOf(q, sub);
+  if (!l) return;
+  await push(q, { kind: 'review', challenge_id: l.c.id, group_no: sub.group_no, title: 'Poin diubah panitia',
+    body: `${l.label}: ${e.from ?? 0} → ${e.to} poin. Alasan: ${e.note}`, tone: 'info',
+    dedupe_key: `adjust:${sub.id}:${new Date(e.at).getTime()}` });
+}
+
 // A Super Admin / PIC reopened a validated submission: the group can change it again.
 export async function notifyReopen(db, sub) {
   const q = (t, p) => db.query(t, p);

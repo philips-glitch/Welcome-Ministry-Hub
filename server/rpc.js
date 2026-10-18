@@ -3,9 +3,9 @@
 // Every method checks the caller's permissions here (role → permissions in role_permissions).
 import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
-import { notifyReview, notifyReopen, notifyChallenge, syncReminders } from './notify.js';
+import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -18,7 +18,7 @@ const PCOLS = 'id, username, email, contact_email, full_name, role_id, group_no,
 const MEMBERSHIP = ['role_id', 'group_no', 'service_team', 'position', 'ministry_role', 'is_ministry_tl', 'is_committee', 'active'];
 const OWN = ['full_name', 'ig_handle', 'contact_email'];
 const CHALLENGE_COLS = ['code', 'kind', 'round', 'name', 'pic_id', 'status', 'announce_at', 'open_at', 'deadline_at', 'validate_by', 'sections', 'scoring', 'form', 'riddles_per_group', 'draw_seed', 'draw_locked', 'sort'];
-const JSONB = new Set(['sections', 'scoring', 'form', 'tagged_ids', 'answers', 'checks', 'marks']);
+const JSONB = new Set(['sections', 'scoring', 'form', 'tagged_ids', 'answers', 'checks', 'marks', 'adjustments']);
 const REVIEW = ['status', 'checks', 'marks', 'location_correct', 'participant_count', 'score', 'override_note', 'reject_reason'];
 const MAX_PHOTO = 4 * 1024 * 1024;
 
@@ -444,6 +444,27 @@ const methods = {
       override_note = null, reject_reason = null, reopened_at = now() where id = $1 and status = 'validated' returning *`, [id]);
     if (!row) bad('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
     await notifyReopen(db, row);
+    return subRow(row);
+  },
+  // Super Admin / Challenge PIC: change the points of a validated submission, while the event is open or after
+  // it closed. A reason is required; every change is kept on the submission and the group is told.
+  async adjustScore({ db, me }, { id, score, note }) {
+    needUser(me);
+    if (!can(me, 'challenges.manage')) deny('Hanya Super Admin dan Challenge PIC yang bisa mengubah poin.');
+    const why = String(note || '').trim();
+    if (why.length < 3) bad('Tulis alasan perubahan poin.');
+    const { rows: [s] } = await db.query(`select s.status, s.score, c.scoring, p.role_id as by_role from submissions s
+      join challenges c on c.id = s.challenge_id left join profiles p on p.id = s.submitted_by where s.id = $1`, [id]);
+    if (!s || s.status !== 'validated') bad('Poin hanya bisa diubah untuk submission yang sudah tervalidasi.');
+    if (s.by_role === 'captain') bad('Submission captain selalu 0 poin (captain main tanpa poin).');
+    const max = itemMax(withDefaults(s.scoring));
+    const n = Math.round(Number(score) * 100) / 100;
+    if (score === '' || score == null || !Number.isFinite(n) || n < 0 || n > max) bad(`Poin harus antara 0 dan ${max}.`);
+    const e = { from: s.score == null ? null : Number(s.score), to: n, note: why.slice(0, 500), by: me.id, by_name: me.full_name || me.username, at: new Date().toISOString() };
+    const { rows: [row] } = await db.query(`update submissions set score = $2, adjustments = coalesce(adjustments, '[]'::jsonb) || $3::jsonb
+      where id = $1 and status = 'validated' returning *`, [id, n, JSON.stringify([e])]);
+    if (!row) bad('Submission ini baru saja berubah. Muat ulang antrean.');
+    await notifyAdjust(db, row, e);
     return subRow(row);
   },
   async groupScores({ db, me }) {

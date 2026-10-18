@@ -125,6 +125,8 @@ create table if not exists submissions (
 );
 -- Set when a Super Admin / PIC reopens a validated submission: editable again (even past the deadline) until re-validated.
 alter table submissions add column if not exists reopened_at timestamptz;
+-- Point changes by a Super Admin / PIC after validation: [{from, to, note, by, by_name, at}].
+alter table submissions add column if not exists adjustments jsonb not null default '[]';
 create index if not exists submissions_challenge_idx on submissions (challenge_id, status);
 create index if not exists submissions_group_idx on submissions (group_no);
 
