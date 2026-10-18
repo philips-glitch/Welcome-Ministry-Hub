@@ -5,6 +5,8 @@ import { useMembers } from '../lib/members.jsx';
 import { isStaffOf } from '../lib/groups.js';
 import { buildStandings } from '../lib/game.js';
 
+const round1 = (x) => Math.round(x * 10) / 10;
+
 export default function Scoring() {
   const { challenges, scores, pending, groups } = useGame();
   const members = useMembers().rows || [];
@@ -12,17 +14,19 @@ export default function Scoring() {
     const captains = {};
     members.forEach((p) => { if (p.group_no && isStaffOf(p, p.group_no)) (captains[p.group_no] ||= []).push(p.full_name); });
     Object.keys(captains).forEach((k) => { captains[k] = captains[k].join(', '); });
-    return buildStandings(scores, challenges || [], captains, groups || []);
+    return buildStandings(scores || [], challenges || [], captains, groups || []);
   }, [scores, challenges, members, groups]);
-  const FILTERS = [['total', 'Total', 'Semua challenge'], ...SCORE_COLS.map((c) => [c.key, c.short === 'SQ' ? 'Side Quest' : `${c.short} · ${c.label.split(' ')[0]}`, c.label])];
+  const FILTERS = [['total', 'Total', 'Semua challenge'], ...SCORE_COLS.map((c) => [c.key, c.short === 'SQ' ? 'Side Quest' : `${c.short} · ${c.label.split(' ')[0].replace(/[,.:;!?]+$/, '')}`, c.label])];
   const COLS = `48px minmax(150px,1.3fr) 110px repeat(${SCORE_COLS.length}, 58px) 72px minmax(120px,1fr)`;
   const [by, setBy] = useState('total');
+  // Groups and challenges arrive after the first render.
+  if (!groups || !challenges) return <div className="page"><span className="muted">Memuat skor…</span></div>;
   if (!FILTERS.some((f) => f[0] === by)) setBy('total');
   const ranked = rank(rows, by);
   const max = Math.max(1, ...ranked.map((r) => r[by]));
   const leader = rank(rows, 'total')[0];
   const second = rank(rows, 'total')[1];
-  const totalPts = rows.reduce((a, r) => a + r.total, 0);
+  const totalPts = round1(rows.reduce((a, r) => a + r.total, 0));
   const validated = rows.reduce((a, r) => a + r.validated, 0);
   const label = FILTERS.find((f) => f[0] === by)[2];
 
@@ -38,8 +42,17 @@ export default function Scoring() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
         <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 16, padding: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 13, opacity: 0.85 }}>Peringkat 1</span>
-          <span className="row" style={{ gap: 8, font: "800 26px 'Bricolage Grotesque'" }}><span style={{ width: 12, height: 12, borderRadius: 4, background: leader.color }} />{leader.name}</span>
-          <span style={{ fontSize: 12, opacity: 0.85 }}>{leader.total} pts · unggul {leader.total - second.total} dari {second.name}</span>
+          {leader && leader.total > 0 ? (
+            <>
+              <span className="row" style={{ gap: 8, font: "800 26px 'Bricolage Grotesque'" }}><span style={{ width: 12, height: 12, borderRadius: 4, background: leader.color }} />{leader.name}</span>
+              <span style={{ fontSize: 12, opacity: 0.85 }}>{leader.total} pts{second ? (leader.total > second.total ? ` · unggul ${round1(leader.total - second.total)} dari ${second.name}` : ` · seri dengan ${second.name}`) : ''}</span>
+            </>
+          ) : (
+            <>
+              <span style={{ font: "800 26px 'Bricolage Grotesque'" }}>—</span>
+              <span style={{ fontSize: 12, opacity: 0.85 }}>{rows.length ? 'Belum ada skor tervalidasi.' : 'Belum ada grup.'}</span>
+            </>
+          )}
         </div>
         <Stat label="Total poin dibagikan" value={totalPts} sub={`${rows.length} grup · ${SCORE_COLS.length} kolom skor`} />
         <Stat label="Submission tervalidasi" value={validated} sub="semua challenge" color="#1F4D3A" />
