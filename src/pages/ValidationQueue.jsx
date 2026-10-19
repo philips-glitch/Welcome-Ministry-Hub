@@ -4,7 +4,7 @@ import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { leaderName, validatesOnly, playsWithoutPoints } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
-import { nameWithRole } from '../lib/permissions.js';
+import PersonRole from '../components/PersonRole.jsx';
 import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
 import { Lightbox } from '../components/Photo.jsx';
 
@@ -12,7 +12,8 @@ import { Lightbox } from '../components/Photo.jsx';
 const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 'Jumlah peserta sesuai tag', 'Aturan diikuti · tanpa nama gereja', 'Tidak ada wajah jemaat tanpa izin'];
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
 const DECIDED = { validated: 'Disetujui', rejected: 'Ditolak', resubmit: 'Diminta ulang' };
-const decidedBy = (s) => (DECIDED[s.status] && s.reviewed_by_name ? `${DECIDED[s.status]} oleh ${nameWithRole(s.reviewed_by_name, s.reviewed_by_role)}` : null);
+// "Disetujui oleh **Yohan** (Captain)".
+const decidedBy = (s) => (DECIDED[s.status] && s.reviewed_by_name ? <>{DECIDED[s.status]} oleh <PersonRole name={s.reviewed_by_name} role={s.reviewed_by_role} /></> : null);
 const STATUS_CHIP = { submitted: ['PENDING', '#E3ECF8', '#244F8F'], validated: ['VALID', '#E3EFE6', '#1F4D3A'], rejected: ['DITOLAK', '#FBE4E0', '#9A2A1E'], resubmit: ['ULANG', '#F8E9C4', '#7A5410'] };
 const TOAST = { ok: ['#E3EFE6', '#1F4D3A'], warn: ['#F8E9C4', '#7A5410'], bad: ['#FBE4E0', '#9A2A1E'] };
 const selectStyle = { height: 36, padding: '0 10px', borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', font: 'inherit', fontSize: 13, fontWeight: 700 };
@@ -205,7 +206,7 @@ export default function ValidationQueue() {
                   <div className="col" style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titleOf(s)}{s.version > 1 ? ` · v${s.version}` : ''}</span>
                     <span className="muted" style={{ fontSize: 11 }}>{fmtWIB(s.submitted_at, { day: undefined, month: undefined })} · {s.target_id ? g[1] : `${s.tagged_ids.length} org ditag`}</span>
-                    {decidedBy(s) && <span style={{ fontSize: 11, fontWeight: 600, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{decidedBy(s)}</span>}
+                    {decidedBy(s) && <span style={{ fontSize: 11, fontWeight: 500, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{decidedBy(s)}</span>}
                   </div>
                   <span className="chip" style={{ background: bg, color: fg }}>{label}</span>
                 </button>
@@ -269,9 +270,9 @@ export default function ValidationQueue() {
                     {form.link !== 'none' && <span><b>{form.link_label}:</b> {link ? <a href={link} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>}
                     <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
                     {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
-                    {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}{cur.reviewed_by_name ? ` · oleh ${nameWithRole(cur.reviewed_by_name, cur.reviewed_by_role)}` : ''}{cur.reviewed_at ? ` · ${fmtWIB(cur.reviewed_at)}` : ''}</span>}
+                    {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}{cur.reviewed_by_name && <> · oleh <PersonRole name={cur.reviewed_by_name} role={cur.reviewed_by_role} /></>}{cur.reviewed_at ? ` · ${fmtWIB(cur.reviewed_at)}` : ''}</span>}
                     {(cur.adjustments || []).map((a, i) => (
-                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {nameWithRole(a.by_name, a.by_role) || 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
+                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name ? <PersonRole name={a.by_name} role={a.by_role} /> : 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
                     ))}
                     {cur.status === 'validated' && canReopen && !noPoints(cur.submitted_by) && (
                       <AdjustScore key={cur.id} sub={cur} max={max}
@@ -287,7 +288,7 @@ export default function ValidationQueue() {
               <div className="col" style={{ borderLeft: '1px solid #E9E0CC', background: '#FFFDF8', padding: 20, gap: 12 }}>
                 {DECIDED[cur.status] && (
                   <div style={{ borderRadius: 12, padding: '10px 12px', background: STATUS_CHIP[cur.status][1], color: STATUS_CHIP[cur.status][2], display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800 }}>{decidedBy(cur) || `${DECIDED[cur.status]} (validator tidak tercatat)`}</span>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{decidedBy(cur) || `${DECIDED[cur.status]} (validator tidak tercatat)`}</span>
                     <span style={{ fontSize: 12, opacity: 0.85 }}>{cur.reviewed_at ? fmtWIB(cur.reviewed_at) : '—'}{cur.status === 'validated' && cur.score != null ? ` · ${cur.score} pts` : ''}</span>
                   </div>
                 )}

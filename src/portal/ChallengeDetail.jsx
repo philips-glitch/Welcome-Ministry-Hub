@@ -6,7 +6,7 @@ import { SUB_CHIP } from './portalData.js';
 import { fmtWIB, statusMeta, withDefaults, formOf, isConnect, itemMax, teamMax, latestPerUnit } from '../lib/game.js';
 import { CountUp, urgency } from './motion.jsx';
 import { PhotoThumb } from '../components/Photo.jsx';
-import { nameWithRole } from '../lib/permissions.js';
+import PersonRole from '../components/PersonRole.jsx';
 
 const STATUS = { validated: 'Validated', submitted: 'Submitted', rejected: 'Rejected', resubmit: 'Rejected' };
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
@@ -31,12 +31,12 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
   const nameOf = (id) => first(data.roster.find((p) => p.id === id)?.full_name) || 'leader';
   const [, statusLabel] = statusMeta(c.status);
   const perItem = itemMax(scoring);
-  // Who reviewed it: "Yohan (Captain)".
-  const by = (sub) => (sub.reviewed_by_name ? ` oleh ${nameWithRole(sub.reviewed_by_name, sub.reviewed_by_role)}` : '');
+  // Who reviewed it: "oleh **Yohan** (Captain)".
+  const by = (sub) => (sub.reviewed_by_name ? <> oleh <PersonRole name={sub.reviewed_by_name} role={sub.reviewed_by_role} /></> : null);
   const metaFor = (sub) => (!sub ? 'Belum ada submission'
-    : sub.status === 'validated' ? `${sub.score}/${perItem} pts${form.tags && !connect ? ` · ${sub.participant_count ?? sub.tagged_ids.length} orang` : ''} · disetujui${by(sub)}`
+    : sub.status === 'validated' ? <>{`${sub.score}/${perItem} pts${form.tags && !connect ? ` · ${sub.participant_count ?? sub.tagged_ids.length} orang` : ''}`}{sub.reviewed_by_name && <> · disetujui{by(sub)}</>}</>
     : sub.status === 'submitted' ? `Dikirim ${fmtWIB(sub.submitted_at)}${connect ? '' : ` oleh ${nameOf(sub.submitted_by)}`}`
-    : `${sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}${by(sub)}: ${sub.reject_reason || '—'}`);
+    : <>{sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}{by(sub)}: {sub.reject_reason || '—'}</>);
 
   const riddleRows = riddleMode ? data.draw.map((d) => {
     const r = data.riddles.find((x) => x.id === d.riddle_id);
