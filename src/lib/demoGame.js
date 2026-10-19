@@ -6,6 +6,11 @@ import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './gro
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
 
+// A submission plus who reviewed it (name + role), like the server returns it.
+const withReviewer = (s, x) => {
+  const r = x.reviewed_by && s.profiles.find((p) => p.id === x.reviewed_by);
+  return { ...x, reviewed_by_name: r ? r.full_name || r.username : null, reviewed_by_role: r?.role_id ?? null };
+};
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
 // has_permission() for the signed-in demo user.
@@ -238,6 +243,7 @@ export function gameMethods({ load, save, delay, fail }) {
       const connect = new Set(s.challenges.filter(isConnect).map((c) => c.id));
       return delay(structuredClone(s.submissions.filter((x) => (!challengeId || x.challenge_id === challengeId) && (!groupNo || x.group_no === groupNo)
         && (staff ? only === null || x.group_no === only : !connect.has(x.challenge_id) || x.submitted_by === s.sessionId)))
+        .map((x) => withReviewer(s, x))
         .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at)));
     },
     // Same checks as prepare_submission() in SQL.
@@ -323,7 +329,7 @@ export function gameMethods({ load, save, delay, fail }) {
       if (playsWithoutPoints(s.profiles.find((p) => p.id === s.submissions[i].submitted_by))) patch = { ...patch, score: 0 };
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
-      save(); return delay(structuredClone(s.submissions[i]));
+      save(); return delay(structuredClone(withReviewer(s, s.submissions[i])));
     },
     // Super Admin / PIC: a validated submission goes back to pending (score removed) so its sender can change it.
     async reopenSubmission(id) {
@@ -349,10 +355,10 @@ export function gameMethods({ load, save, delay, fail }) {
       const n = Math.round(Number(score) * 100) / 100;
       if (score === '' || score == null || !Number.isFinite(n) || n < 0 || n > max) return fail(`Poin harus antara 0 dan ${max}.`);
       const me = s.profiles.find((p) => p.id === s.sessionId);
-      const e = { from: sub.score ?? null, to: n, note: why.slice(0, 500), by: me?.id, by_name: me?.full_name || me?.username, at: new Date().toISOString() };
+      const e = { from: sub.score ?? null, to: n, note: why.slice(0, 500), by: me?.id, by_name: me?.full_name || me?.username, by_role: me?.role_id, at: new Date().toISOString() };
       s.submissions[i] = { ...sub, score: n, adjustments: [...(sub.adjustments || []), e] };
       notifs(s); notifyAdjust(s, s.submissions[i], e);
-      save(); return delay(structuredClone(s.submissions[i]));
+      save(); return delay(structuredClone(withReviewer(s, s.submissions[i])));
     },
     async mediaUrl(path) { return mediaObjectUrl(path); },
     // Same rules as group_scores() in SQL (see groupPoints in game.js).

@@ -4,6 +4,7 @@ import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import { leaderName, validatesOnly, playsWithoutPoints } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { nameWithRole } from '../lib/permissions.js';
 import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
 import { Lightbox } from '../components/Photo.jsx';
 
@@ -265,9 +266,9 @@ export default function ValidationQueue() {
                     {form.link !== 'none' && <span><b>{form.link_label}:</b> {link ? <a href={link} target="_blank" rel="noreferrer">{cur.ig_url}</a> : '—'}</span>}
                     <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
                     {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
-                    {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}</span>}
+                    {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}{cur.reviewed_by_name ? ` · oleh ${nameWithRole(cur.reviewed_by_name, cur.reviewed_by_role)}` : ''}{cur.reviewed_at ? ` · ${fmtWIB(cur.reviewed_at)}` : ''}</span>}
                     {(cur.adjustments || []).map((a, i) => (
-                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name || 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
+                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {nameWithRole(a.by_name, a.by_role) || 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
                     ))}
                     {cur.status === 'validated' && canReopen && !noPoints(cur.submitted_by) && (
                       <AdjustScore key={cur.id} sub={cur} max={max}

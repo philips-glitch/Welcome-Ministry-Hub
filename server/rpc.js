@@ -24,6 +24,12 @@ const MAX_PHOTO = 4 * 1024 * 1024;
 
 const val = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v);
 const subRow = (r) => r && ({ ...r, score: r.score == null ? null : Number(r.score) });
+// A submission row plus who reviewed it (name + role), for the screens.
+async function withReviewer(db, row) {
+  if (!row?.reviewed_by) return subRow(row);
+  const { rows: [r] } = await db.query('select full_name, username, role_id from profiles where id = $1', [row.reviewed_by]);
+  return subRow({ ...row, reviewed_by_name: r ? r.full_name || r.username : null, reviewed_by_role: r?.role_id ?? null });
+}
 
 // UPDATE helper: only whitelisted keys that are present in patch.
 async function update(db, table, keyCol, key, patch, allowed, returning = '*') {
@@ -342,7 +348,8 @@ const methods = {
       // Captains: all of their own group's submissions (they validate it), nothing from other groups.
       p.push(validatesOnly(me)); where.push(`s.group_no = $${p.length}`);
     }
-    const { rows } = await db.query(`select s.* from submissions s join challenges c on c.id = s.challenge_id
+    const { rows } = await db.query(`select s.*, r.full_name as reviewed_by_name, r.role_id as reviewed_by_role
+      from submissions s join challenges c on c.id = s.challenge_id left join profiles r on r.id = s.reviewed_by
       ${where.length ? 'where ' + where.join(' and ') : ''} order by s.submitted_at`, p);
     return rows.map(subRow);
   },
@@ -433,7 +440,7 @@ const methods = {
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}
       where id = $1 returning *`, [id, ...keys.map((k) => val(k, patch[k])), me.id]);
     if (row.status !== before.status) await notifyReview(db, row);
-    return subRow(row);
+    return subRow({ ...row, reviewed_by_name: me.full_name || me.username, reviewed_by_role: me.role_id });
   },
   // Super Admin / Challenge PIC: a validated submission goes back to pending (score removed) so its sender can
   // change it again — even after the deadline — until it's validated again.
@@ -460,12 +467,12 @@ const methods = {
     const max = itemMax(withDefaults(s.scoring));
     const n = Math.round(Number(score) * 100) / 100;
     if (score === '' || score == null || !Number.isFinite(n) || n < 0 || n > max) bad(`Poin harus antara 0 dan ${max}.`);
-    const e = { from: s.score == null ? null : Number(s.score), to: n, note: why.slice(0, 500), by: me.id, by_name: me.full_name || me.username, at: new Date().toISOString() };
+    const e = { from: s.score == null ? null : Number(s.score), to: n, note: why.slice(0, 500), by: me.id, by_name: me.full_name || me.username, by_role: me.role_id, at: new Date().toISOString() };
     const { rows: [row] } = await db.query(`update submissions set score = $2, adjustments = coalesce(adjustments, '[]'::jsonb) || $3::jsonb
       where id = $1 and status = 'validated' returning *`, [id, n, JSON.stringify([e])]);
     if (!row) bad('Submission ini baru saja berubah. Muat ulang antrean.');
     await notifyAdjust(db, row, e);
-    return subRow(row);
+    return withReviewer(db, row);
   },
   async groupScores({ db, me }) {
     needUser(me);

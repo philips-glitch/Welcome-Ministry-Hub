@@ -35,3 +35,5 @@ export const DEFAULT_GRANTS = {
 export const LOCKED_ROLE = 'super_admin';
 
 export const roleName = (id) => ROLES.find((r) => r.id === id)?.name || id;
+// "Yohan (Captain)" — e.g. who validated a submission.
+export const nameWithRole = (name, role) => (name ? `${name}${role ? ` (${roleName(role)})` : ''}` : null);

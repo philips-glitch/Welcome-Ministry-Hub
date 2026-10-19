@@ -94,6 +94,8 @@ assert.equal(later.status, 'scheduled'); assert.deepEqual(later.sections, {}); o
 
 // 4 · Get to Know Me (connect) submission rules
 const r1 = ch.find((c) => c.code === 'R1');
+// Keep R1 open whatever today's date is (its real deadline is in the playbook).
+await admin.call('saveChallenge', { c: { id: r1.id, status: 'live', deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
 const ids = Object.fromEntries((await admin.call('listProfiles')).map((p) => [p.username, p.id]));
 const sub = (t) => ({ sub: { challenge_id: r1.id, group_no: '01', target_id: t, answers: { q1: 'a', q2: 'b', q3: 'c', q4: 'd' }, declaration: true } });
 await rejects(ana.call('createSubmission', sub(ids.ana)), /bukan diri sendiri/);
@@ -128,6 +130,10 @@ await rejects(ana.call('reviewSubmission', { id: s1.id, patch: { status: 'valida
 await rejects(kapten2.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', score: 12 } }), /grupnya sendiri/);
 const rev = await kapten.call('reviewSubmission', { id: s1.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(rev.score, 12);
+// Who validated it travels with the submission: name + role (for the queue and the member's view).
+assert.deepEqual([rev.reviewed_by_name, rev.reviewed_by_role], ['Kapten', 'captain']);
+const anaView = (await ana.call('listSubmissions', { challengeId: r1.id, groupNo: '01' })).find((x) => x.id === s1.id);
+assert.deepEqual([anaView.reviewed_by_name, anaView.reviewed_by_role], ['Kapten', 'captain']);
 const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
 // 1 member took part with 12/24 → 12/24×70 = 35; participation (1 submitted + 1 interviewed) ÷ 3 players × ½ → 0.333×30 = 10 → 45
@@ -171,6 +177,8 @@ const adj = await admin.call('adjustScore', { id: edited.id, score: 6, note: 'Fo
 assert.equal(adj.score, 6);
 assert.equal(adj.adjustments.length, 1);
 assert.deepEqual([adj.adjustments[0].from, adj.adjustments[0].to, adj.adjustments[0].note], [12, 6, 'Foto ternyata bukan berdua']);
+assert.deepEqual([adj.adjustments[0].by_name, adj.adjustments[0].by_role], ['Angel', 'super_admin']);
+assert.deepEqual([adj.reviewed_by_name, adj.reviewed_by_role], ['Kapten', 'captain']);
 // 1 member with 6/24 → 6/24×70 = 17.5; 1 of 3 players → 10 → 27.5
 assert.equal(await pts01(), 27.5);
 assert.ok((await ana.call('listNotifications')).some((x) => x.title === 'Poin diubah panitia' && /12 → 6 poin\. Alasan: Foto ternyata bukan berdua/.test(x.body)));
