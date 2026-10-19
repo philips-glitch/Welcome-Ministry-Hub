@@ -34,7 +34,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
   // Who reviewed it: "Yohan (Captain)".
   const by = (sub) => (sub.reviewed_by_name ? ` oleh ${nameWithRole(sub.reviewed_by_name, sub.reviewed_by_role)}` : '');
   const metaFor = (sub) => (!sub ? 'Belum ada submission'
-    : sub.status === 'validated' ? `${sub.score}/${perItem} pts${form.tags && !connect ? ` · ${sub.participant_count ?? sub.tagged_ids.length} orang` : ''} · divalidasi${by(sub)}`
+    : sub.status === 'validated' ? `${sub.score}/${perItem} pts${form.tags && !connect ? ` · ${sub.participant_count ?? sub.tagged_ids.length} orang` : ''} · disetujui${by(sub)}`
     : sub.status === 'submitted' ? `Dikirim ${fmtWIB(sub.submitted_at)}${connect ? '' : ` oleh ${nameOf(sub.submitted_by)}`}`
     : `${sub.status === 'resubmit' ? 'Diminta ulang' : 'Ditolak'}${by(sub)}: ${sub.reject_reason || '—'}`);
 

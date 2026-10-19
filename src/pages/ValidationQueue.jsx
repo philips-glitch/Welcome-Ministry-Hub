@@ -11,6 +11,8 @@ import { Lightbox } from '../components/Photo.jsx';
 // Defaults for riddle-photo challenges; other challenges set their own in challenges.form.
 const CHECKS = ['Akun event di-tag di IG Story', 'Lokasi sesuai kunci jawaban', 'Jumlah peserta sesuai tag', 'Aturan diikuti · tanpa nama gereja', 'Tidak ada wajah jemaat tanpa izin'];
 const REASONS = ['IG tag tidak ada', 'Lokasi salah', 'Foto tidak jelas', 'Indikasi AI / edit', 'Wajah jemaat tanpa izin'];
+const DECIDED = { validated: 'Disetujui', rejected: 'Ditolak', resubmit: 'Diminta ulang' };
+const decidedBy = (s) => (DECIDED[s.status] && s.reviewed_by_name ? `${DECIDED[s.status]} oleh ${nameWithRole(s.reviewed_by_name, s.reviewed_by_role)}` : null);
 const STATUS_CHIP = { submitted: ['PENDING', '#E3ECF8', '#244F8F'], validated: ['VALID', '#E3EFE6', '#1F4D3A'], rejected: ['DITOLAK', '#FBE4E0', '#9A2A1E'], resubmit: ['ULANG', '#F8E9C4', '#7A5410'] };
 const TOAST = { ok: ['#E3EFE6', '#1F4D3A'], warn: ['#F8E9C4', '#7A5410'], bad: ['#FBE4E0', '#9A2A1E'] };
 const selectStyle = { height: 36, padding: '0 10px', borderRadius: 10, border: '1px solid #DCD2BC', background: '#FFFDF8', font: 'inherit', fontSize: 13, fontWeight: 700 };
@@ -203,6 +205,7 @@ export default function ValidationQueue() {
                   <div className="col" style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titleOf(s)}{s.version > 1 ? ` · v${s.version}` : ''}</span>
                     <span className="muted" style={{ fontSize: 11 }}>{fmtWIB(s.submitted_at, { day: undefined, month: undefined })} · {s.target_id ? g[1] : `${s.tagged_ids.length} org ditag`}</span>
+                    {decidedBy(s) && <span style={{ fontSize: 11, fontWeight: 600, color: fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{decidedBy(s)}</span>}
                   </div>
                   <span className="chip" style={{ background: bg, color: fg }}>{label}</span>
                 </button>
@@ -282,6 +285,12 @@ export default function ValidationQueue() {
               </div>
 
               <div className="col" style={{ borderLeft: '1px solid #E9E0CC', background: '#FFFDF8', padding: 20, gap: 12 }}>
+                {DECIDED[cur.status] && (
+                  <div style={{ borderRadius: 12, padding: '10px 12px', background: STATUS_CHIP[cur.status][1], color: STATUS_CHIP[cur.status][2], display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 800 }}>{decidedBy(cur) || `${DECIDED[cur.status]} (validator tidak tercatat)`}</span>
+                    <span style={{ fontSize: 12, opacity: 0.85 }}>{cur.reviewed_at ? fmtWIB(cur.reviewed_at) : '—'}{cur.status === 'validated' && cur.score != null ? ` · ${cur.score} pts` : ''}</span>
+                  </div>
+                )}
                 <span style={{ font: "700 16px 'Bricolage Grotesque'" }}>Checklist</span>
                 {checksList.map((label, i) => {
                   const on = review.checks[i] ?? true;
