@@ -12,6 +12,7 @@ import ChallengeDetail from './ChallengeDetail.jsx';
 import ChallengeList from './ChallengeList.jsx';
 import Submit from './Submit.jsx';
 import Leaderboard from './Leaderboard.jsx';
+import MiniGames from './MiniGames.jsx';
 import Notifications from './Notifications.jsx';
 import useNotifications from './useNotifications.js';
 
@@ -21,6 +22,7 @@ const ICONS = {
   users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M16 3.5a4 4 0 0 1 0 7.5M18 15c2.5.6 4 2.6 4 6',
   trophy: 'M8 4h8v6a4 4 0 0 1-8 0zM8 6H4c0 3 2 5 4 5M16 6h4c0 3-2 5-4 5M12 14v4M8 21h8',
   me: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.5-6 8-6s8 2 8 6',
+  game: 'M7 8h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5.4 1.8L14 14h-4l-1.6 1.8A3 3 0 0 1 3 14v-2a4 4 0 0 1 4-4zM8 11v2M7 12h2M15.5 11.5h.01M17.5 12.5h.01',
 };
 export const Icon = ({ name, size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[name]} /></svg>
@@ -30,8 +32,8 @@ export const Leaf = ({ size = 24 }) => (
 );
 
 // route → tab it belongs to
-const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['me', 'Me', 'me']];
-const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', me: 'me', notifications: null };
+const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['games', 'Mini Games', 'game'], ['me', 'Me', 'me']];
+const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', games: 'games', me: 'me', notifications: null };
 
 export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
@@ -86,6 +88,7 @@ export default function PortalApp({ route }) {
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id, swap = null) => { setRiddleId(id); setReplaces(swap); go('submit'); }} />;
   else if (page === 'submit') content = me.canSubmit ? <Submit key={challenge?.id + ':' + riddleId + ':' + replaces} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} replaces={replaces} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
+  else if (page === 'games') content = <MiniGames />;
   else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;
   else if (page === 'me') content = <Me profile={profile} me={me} signOut={signOut} admin={can('dashboard.view')} />;
   else content = <Soon title="My Group" go={go} />;
@@ -120,7 +123,7 @@ export default function PortalApp({ route }) {
         <main className="p-main">{content}</main>
       </div>
 
-      <nav className="p-tabbar">
+      <nav className="p-tabbar" style={{ gridTemplateColumns: `repeat(${TABS.length}, 1fr)` }}>
         {TABS.map(([r, label, icon]) => (
           <button key={r} className={'p-tab' + (activeTab === r ? ' active' : '')} onClick={() => go(r)}>
             <span className="pill"><Icon name={icon} /></span>{label}
