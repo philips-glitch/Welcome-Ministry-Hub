@@ -107,6 +107,16 @@ export function connectBreakdown(scoring, subs, rosterSize, noPoints = new Set()
   return { participants: totals.length, interviewed, memberMax, avg: round1(avg), rate, indiv, part, points: totals.length ? round1(indiv + part) : 0 };
 }
 
+// Super Admin / PIC can re-validate (reopen) and change points of a mini event's submissions until the next mini
+// event opens (R1 until R2 starts). Draft events don't count; the last one has no limit.
+export function revalidateWindow(c, challenges, now = Date.now()) {
+  if (!c || c.kind !== 'main' || c.round == null) return { next: null, at: null, closed: false };
+  const next = (challenges || []).filter((x) => x.kind === 'main' && x.round > c.round && x.status !== 'draft').sort((a, b) => a.round - b.round)[0] || null;
+  if (!next) return { next: null, at: null, closed: false };
+  const closed = ['live', 'closed', 'published'].includes(next.status) || (!!next.open_at && now >= new Date(next.open_at).getTime());
+  return { next, at: next.open_at || null, closed };
+}
+
 // One group's points for one challenge from that group's submissions. Mirrors group_scores() in SQL.
 // noPoints: ids of people who play without points (captains) — their entries and photo tags don't count.
 export function groupPoints(c, subs, rosterSize, noPoints = new Set()) {

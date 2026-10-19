@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -24,6 +24,14 @@ const MAX_PHOTO = 4 * 1024 * 1024;
 
 const val = (k, v) => (JSONB.has(k) && v != null ? JSON.stringify(v) : v);
 const subRow = (r) => r && ({ ...r, score: r.score == null ? null : Number(r.score) });
+// Re-validating / changing points closes when the next mini event opens.
+async function assertRevalidateOpen(db, submissionId) {
+  const all = (await db.query('select id, code, kind, round, status, open_at from challenges')).rows;
+  const { rows: [s] } = await db.query('select challenge_id from submissions where id = $1', [submissionId]);
+  const c = s && all.find((x) => x.id === s.challenge_id);
+  const w = revalidateWindow(c, all);
+  if (w.closed) bad(`Re-validasi ${c.code} sudah ditutup sejak ${w.next.code} dibuka.`);
+}
 // A submission row plus who reviewed it (name + role), for the screens.
 async function withReviewer(db, row) {
   if (!row?.reviewed_by) return subRow(row);
@@ -447,6 +455,7 @@ const methods = {
   async reopenSubmission({ db, me }, { id }) {
     needUser(me);
     if (!can(me, 'challenges.manage')) deny('Hanya Super Admin dan Challenge PIC yang bisa membuka lagi submission.');
+    await assertRevalidateOpen(db, id);
     const { rows: [row] } = await db.query(`update submissions set status = 'submitted', score = null, reviewed_by = null, reviewed_at = null,
       override_note = null, reject_reason = null, reopened_at = now() where id = $1 and status = 'validated' returning *`, [id]);
     if (!row) bad('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
@@ -460,6 +469,7 @@ const methods = {
     if (!can(me, 'challenges.manage')) deny('Hanya Super Admin dan Challenge PIC yang bisa mengubah poin.');
     const why = String(note || '').trim();
     if (why.length < 3) bad('Tulis alasan perubahan poin.');
+    await assertRevalidateOpen(db, id);
     const { rows: [s] } = await db.query(`select s.status, s.score, c.scoring, p.role_id as by_role from submissions s
       join challenges c on c.id = s.challenge_id left join profiles p on p.id = s.submitted_by where s.id = $1`, [id]);
     if (!s || s.status !== 'validated') bad('Poin hanya bisa diubah untuk submission yang sudah tervalidasi.');
@@ -477,7 +487,8 @@ const methods = {
   async groupScores({ db, me }) {
     needUser(me);
     const challenges = (await db.query(`select * from challenges where status <> 'draft'`)).rows;
-    const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score from submissions where status = 'validated'`)).rows.map(subRow);
+    // version: only the latest validated version of each entry counts.
+    const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score, version from submissions where status = 'validated'`)).rows.map(subRow);
     // Captains play without points: not in the roster count, and their entries/tags are skipped.
     const roster = {};
     (await db.query(`select group_no, count(*)::int as n from profiles where ${GAME_PLAYER_SQL()} and role_id <> 'captain' group by group_no`)).rows

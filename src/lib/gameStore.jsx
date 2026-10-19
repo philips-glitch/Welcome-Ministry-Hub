@@ -25,6 +25,15 @@ export function GameProvider({ children }) {
     Promise.all([reloadChallenges(), reloadGroups(), reloadScores()]).catch((e) => setError(e.message));
   }, [reloadChallenges, reloadGroups, reloadScores]);
 
+  // Points change on other devices (validations, re-validations, point changes): keep leaderboards fresh.
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') Promise.all([reloadScores(), reloadChallenges()]).catch(() => {}); };
+    const iv = setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh); };
+  }, [reloadScores, reloadChallenges]);
+
   const value = useMemo(() => ({
     challenges, groups, scores, pending, error, reloadChallenges, reloadGroups, reloadScores,
     saveChallenge: async (c) => {

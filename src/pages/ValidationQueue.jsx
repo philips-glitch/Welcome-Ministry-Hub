@@ -5,7 +5,8 @@ import { useMembers } from '../lib/members.jsx';
 import { leaderName, validatesOnly, playsWithoutPoints } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import PersonRole from '../components/PersonRole.jsx';
-import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB } from '../lib/game.js';
+import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
+import { DEMO_NOW } from '../data.js';
 import { Lightbox } from '../components/Photo.jsx';
 
 // Defaults for riddle-photo challenges; other challenges set their own in challenges.form.
@@ -48,6 +49,9 @@ export default function ValidationQueue() {
 
   useEffect(() => { if (!chId && challenges) setChId((focus || reviewable[0])?.id ?? null); }, [challenges]); // eslint-disable-line react-hooks/exhaustive-deps
   const challenge = reviewable.find((c) => c.id === chId);
+  // Super Admin / PIC can re-validate and change points until the next mini event opens.
+  const win = revalidateWindow(challenge, challenges, api.mode === 'demo' ? DEMO_NOW : Date.now());
+  const canRevalidate = canReopen && !win.closed;
   const scoring = withDefaults(challenge?.scoring);
   const form = formOf(challenge);
   const connect = isConnect(challenge);
@@ -274,12 +278,17 @@ export default function ValidationQueue() {
                     {(cur.adjustments || []).map((a, i) => (
                       <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name ? <PersonRole name={a.by_name} role={a.by_role} /> : 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
                     ))}
-                    {cur.status === 'validated' && canReopen && !noPoints(cur.submitted_by) && (
+                    {cur.status === 'validated' && canReopen && win.next && (
+                      <span style={{ color: win.closed ? '#9A2A1E' : '#56655C' }}>{win.closed
+                        ? `Re-validasi & ubah poin ${challenge.code} sudah ditutup — ${win.next.code} sudah dibuka.`
+                        : `Re-validasi & ubah poin bisa sampai ${win.next.code} dibuka${win.at ? ` (${fmtWIB(win.at)})` : ''}.`}</span>
+                    )}
+                    {cur.status === 'validated' && canRevalidate && !noPoints(cur.submitted_by) && (
                       <AdjustScore key={cur.id} sub={cur} max={max}
                         onSaved={(row) => { setSubs((xs) => xs.map((s) => (s.id === row.id ? row : s))); reloadScores(); setToast(['ok', `Poin diubah · ${titleOf(cur)} · ${row.score} pts`]); }}
                         onError={(m) => setToast(['bad', m])} />
                     )}
-                    {cur.status === 'validated' && canReopen && <button className="link" style={{ textAlign: 'left', color: '#7A5410', fontSize: 12 }} onClick={reopen}>↺ Buka lagi — skor dihapus, pengirim bisa mengubahnya</button>}
+                    {cur.status === 'validated' && canRevalidate && <button className="link" style={{ textAlign: 'left', color: '#7A5410', fontSize: 12 }} onClick={reopen}>↺ Buka lagi — skor dihapus, pengirim bisa mengubahnya</button>}
                     {cur.status === 'submitted' && cur.reopened_at && <span style={{ color: '#7A5410' }}><b>Dibuka lagi</b> oleh panitia {fmtWIB(cur.reopened_at)} — pengirim bisa mengubahnya sampai divalidasi ulang.</span>}
                   </div>
                 </div>

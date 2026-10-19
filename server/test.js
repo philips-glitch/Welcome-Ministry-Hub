@@ -96,6 +96,9 @@ assert.equal(later.status, 'scheduled'); assert.deepEqual(later.sections, {}); o
 const r1 = ch.find((c) => c.code === 'R1');
 // Keep R1 open whatever today's date is (its real deadline is in the playbook).
 await admin.call('saveChallenge', { c: { id: r1.id, status: 'live', deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
+// …and R2 not open yet (re-validating R1 is allowed until R2 opens).
+const r2open = new Date(Date.now() + 7 * 864e5).toISOString();
+await admin.call('saveChallenge', { c: { id: ch.find((c) => c.code === 'R2').id, open_at: r2open } });
 const ids = Object.fromEntries((await admin.call('listProfiles')).map((p) => [p.username, p.id]));
 const sub = (t) => ({ sub: { challenge_id: r1.id, group_no: '01', target_id: t, answers: { q1: 'a', q2: 'b', q3: 'c', q4: 'd' }, declaration: true } });
 await rejects(ana.call('createSubmission', sub(ids.ana)), /bukan diri sendiri/);
@@ -138,6 +141,12 @@ const scores = await ana.call('groupScores');
 const g1 = scores.find((s) => s.group_no === '01' && s.challenge_id === r1.id);
 // 1 member took part with 12/24 → 12/24×70 = 35; participation (1 submitted + 1 interviewed) ÷ 3 players × ½ → 0.333×30 = 10 → 45
 assert.equal(g1.points, 45); ok("captains validate their own group only; the review → team score 45 (= playbook formula)");
+// If an entry ever has two validated versions, only the latest one counts.
+await db.query(`insert into submissions (challenge_id, group_no, submitted_by, target_id, version, status, score) values ($1, '01', $2, $3, 99, 'validated', 4)`, [r1.id, ids.ana, ids.budi]);
+// 4/24×70 = 11.7; (1 submitted + 1 interviewed) ÷ 3 × ½ × 30 = 10 → 21.7
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r1.id).points, 21.7);
+await db.query('delete from submissions where version = 99');
+ok('team score counts only the latest validated version of an entry');
 const kSub = (await kapten.call('listSubmissions', { challengeId: r1.id })).find((x) => x.submitted_by === ids.kapten);
 const kRev = await kapten.call('reviewSubmission', { id: kSub.id, patch: { status: 'validated', marks: { q1: 2, q2: 2, q3: 2, q4: 4, photo: true }, score: 12, checks: [true, true, true] } });
 assert.equal(Number(kRev.score), 0);
@@ -179,11 +188,17 @@ assert.equal(adj.adjustments.length, 1);
 assert.deepEqual([adj.adjustments[0].from, adj.adjustments[0].to, adj.adjustments[0].note], [12, 6, 'Foto ternyata bukan berdua']);
 assert.deepEqual([adj.adjustments[0].by_name, adj.adjustments[0].by_role], ['Angel', 'super_admin']);
 assert.deepEqual([adj.reviewed_by_name, adj.reviewed_by_role], ['Kapten', 'captain']);
+// Once R2 opens, R1 can't be re-validated or re-scored any more.
+const r2id = ch.find((c) => c.code === 'R2').id;
+await admin.call('saveChallenge', { c: { id: r2id, open_at: new Date(Date.now() - 60e3).toISOString() } });
+await rejects(admin.call('adjustScore', { id: edited.id, score: 7, note: 'terlambat' }), /sudah ditutup sejak R2 dibuka/);
+await rejects(admin.call('reopenSubmission', { id: edited.id }), /sudah ditutup sejak R2 dibuka/);
+await admin.call('saveChallenge', { c: { id: r2id, open_at: r2open } });
 // 1 member with 6/24 → 6/24×70 = 17.5; 1 of 3 players → 10 → 27.5
 assert.equal(await pts01(), 27.5);
 assert.ok((await ana.call('listNotifications')).some((x) => x.title === 'Poin diubah panitia' && /12 → 6 poin\. Alasan: Foto ternyata bukan berdua/.test(x.body)));
 await admin.call('saveChallenge', { c: { id: r1.id, deadline_at: r1deadline } });
-ok('after validation (even past the deadline) admin/PIC can change points with a reason: history kept, group notified, team score updated');
+ok('after validation (even past the deadline) admin/PIC can change points with a reason — until the next mini event opens; history kept, group notified, team score updated');
 const notes = await ana.call('listNotifications');
 assert.ok(notes.some((x) => /disetujui/.test(x.title) && /Ana → Budi/.test(x.body))); ok('group notified of the review');
 await ana.call('markNotificationsRead', { ids: notes.map((x) => x.id) });

@@ -1,7 +1,7 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax } from './game.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
@@ -10,6 +10,12 @@ import { putMedia, mediaObjectUrl } from './demoMedia.js';
 const withReviewer = (s, x) => {
   const r = x.reviewed_by && s.profiles.find((p) => p.id === x.reviewed_by);
   return { ...x, reviewed_by_name: r ? r.full_name || r.username : null, reviewed_by_role: r?.role_id ?? null };
+};
+// Same as assertRevalidateOpen() on the server: a message once the next mini event has opened, else null.
+const revalidateClosed = (s, id) => {
+  const c = s.challenges.find((x) => x.id === s.submissions.find((y) => y.id === id)?.challenge_id);
+  const w = revalidateWindow(c, s.challenges, demoNow());
+  return w.closed ? `Re-validasi ${c.code} sudah ditutup sejak ${w.next.code} dibuka.` : null;
 };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
 const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
@@ -335,6 +341,8 @@ export function gameMethods({ load, save, delay, fail }) {
     async reopenSubmission(id) {
       const s = load();
       if (!canDemo(s, 'challenges.manage')) return fail('Hanya Super Admin dan Challenge PIC yang bisa membuka lagi submission.');
+      const closedMsg = revalidateClosed(s, id);
+      if (closedMsg) return fail(closedMsg);
       const i = s.submissions.findIndex((x) => x.id === id && x.status === 'validated');
       if (i < 0) return fail('Hanya submission yang sudah tervalidasi yang bisa dibuka lagi.');
       s.submissions[i] = { ...s.submissions[i], status: 'submitted', score: null, reviewed_by: null, reviewed_at: null, override_note: null, reject_reason: null, reopened_at: new Date(demoNow()).toISOString() };
@@ -347,6 +355,8 @@ export function gameMethods({ load, save, delay, fail }) {
       if (!canDemo(s, 'challenges.manage')) return fail('Hanya Super Admin dan Challenge PIC yang bisa mengubah poin.');
       const why = String(note || '').trim();
       if (why.length < 3) return fail('Tulis alasan perubahan poin.');
+      const closedMsg = revalidateClosed(s, id);
+      if (closedMsg) return fail(closedMsg);
       const i = s.submissions.findIndex((x) => x.id === id && x.status === 'validated');
       if (i < 0) return fail('Poin hanya bisa diubah untuk submission yang sudah tervalidasi.');
       const sub = s.submissions[i];
