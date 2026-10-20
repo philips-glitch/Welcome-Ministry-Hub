@@ -414,6 +414,19 @@ function RiddleBank({ challenge, form, set, riddles, setRiddles, draw, setDraw, 
       say('ok', `Undian baru (seed ${seed}) disimpan.`);
     } catch (e) { say('bad', e.message); }
   };
+  // Manual assignment: pick the riddle for one group's slot (the rest of the draw stays as it is).
+  const assign = async (no, slot, riddleId) => {
+    if (locked) return;
+    if (riddleId && draw.some((d) => d.group_no === no && d.slot !== slot && d.riddle_id === riddleId)) return say('bad', `Riddle itu sudah dipakai grup ${no} di slot lain.`);
+    const rows = [...draw.filter((d) => !(d.group_no === no && d.slot === slot)), ...(riddleId ? [{ group_no: no, slot, riddle_id: riddleId }] : [])]
+      .map(({ group_no, slot: sl, riddle_id }) => ({ group_no, slot: sl, riddle_id }));
+    try {
+      if (Number(challenge.riddles_per_group) !== n) await save({ id: challenge.id, riddles_per_group: n });
+      await api.saveDraw(challenge.id, rows, form.draw_seed ?? null);
+      setDraw(rows.map((r) => ({ ...r, challenge_id: challenge.id })));
+      say('ok', riddleId ? `Grup ${no} · slot ${slot}: Riddle #${byId[riddleId]?.no}.` : `Grup ${no} · slot ${slot} dikosongkan.`);
+    } catch (e) { say('bad', e.message); }
+  };
   const toggleLock = async () => {
     if (!locked && !draw.length) return say('bad', 'Undi dulu sebelum mengunci.');
     try { const row = await save({ id: challenge.id, draw_locked: !locked }); set('draw_locked', row.draw_locked); say('ok', row.draw_locked ? 'Undian dikunci.' : 'Undian dibuka lagi.'); }
@@ -462,16 +475,27 @@ function RiddleBank({ challenge, form, set, riddles, setRiddles, draw, setDraw, 
             <button className="btn btn-outline" disabled={locked} onClick={shuffle} style={{ marginLeft: 'auto', height: 34, padding: '0 12px', borderRadius: 9, fontSize: 12, opacity: locked ? 0.4 : 1 }}>{draw.length ? 'Acak ulang' : 'Undi'}</button>
             <button className="btn" onClick={toggleLock} style={{ height: 34, padding: '0 12px', borderRadius: 9, fontSize: 12, fontWeight: 800, background: locked ? '#2F7A55' : '#1F4D3A', color: '#FBF6EA' }}>{locked ? '✓ Undian terkunci' : 'Kunci undian'}</button>
           </div>
-          <span className="muted" style={{ fontSize: 11 }}>{n} riddle berbeda per grup, diambil acak dari {riddles?.length ?? 0}. Grup tidak bisa memilih. Undian tersimpan langsung.</span>
+          <span className="muted" style={{ fontSize: 11 }}>{n} riddle berbeda per grup. Klik “{draw.length ? 'Acak ulang' : 'Undi'}” untuk acak dari {riddles?.length ?? 0} riddle, atau pilih manual per grup di bawah. Grup tidak bisa memilih. Tersimpan langsung.</span>
           {GROUPS.map(({ no, name, color }) => {
             const mine = draw.filter((d) => d.group_no === no).sort((a, b) => a.slot - b.slot);
             return (
               <div key={no} className="row" style={{ gap: 8, padding: '5px 0', borderBottom: '1px solid #F0E9DA' }}>
                 <span style={{ width: 8, height: 22, borderRadius: 3, background: color }} />
                 <span style={{ fontSize: 12.5, fontWeight: 700, width: 120 }}>{no} {name}</span>
-                <div style={{ display: 'flex', gap: 5 }}>
-                  {mine.length ? mine.map((d) => <span key={d.slot} title={byId[d.riddle_id]?.prompt} style={{ width: 30, height: 26, borderRadius: 7, background: '#E3EFE6', color: '#1F4D3A', font: "800 12px 'Bricolage Grotesque'", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{byId[d.riddle_id]?.no ?? '?'}</span>)
-                    : <span className="muted" style={{ fontSize: 11 }}>belum diundi</span>}
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {locked
+                    ? (mine.length ? mine.map((d) => <span key={d.slot} title={byId[d.riddle_id]?.prompt} style={{ width: 30, height: 26, borderRadius: 7, background: '#E3EFE6', color: '#1F4D3A', font: "800 12px 'Bricolage Grotesque'", display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{byId[d.riddle_id]?.no ?? '?'}</span>)
+                      : <span className="muted" style={{ fontSize: 11 }}>belum diundi</span>)
+                    : Array.from({ length: n }, (_, i) => {
+                      const cur = mine.find((d) => d.slot === i + 1);
+                      return (
+                        <select key={i} aria-label={`Grup ${no} slot ${i + 1}`} title={cur ? byId[cur.riddle_id]?.prompt : 'Pilih riddle'} value={cur?.riddle_id || ''} onChange={(e) => assign(no, i + 1, e.target.value || null)}
+                          style={{ ...input, width: 58, height: 28, padding: '0 4px', fontSize: 12, fontWeight: 700, background: cur ? '#E3EFE6' : '#FFFDF8' }}>
+                          <option value="">—</option>
+                          {(riddles || []).map((r) => <option key={r.id} value={r.id}>#{r.no}</option>)}
+                        </select>
+                      );
+                    })}
                 </div>
               </div>
             );
