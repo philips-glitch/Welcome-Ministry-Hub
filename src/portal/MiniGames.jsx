@@ -1,33 +1,11 @@
 import { useState } from 'react';
 import { TRIVIA } from '../lib/trivia.js';
+import { NASIHAT } from '../lib/nasihat.js';
 import { Confetti } from './motion.jsx';
 
 // Mini Games: Trivia Alkitab, just for fun (no points, nothing saved). 10 random questions out of the bank.
 const ROUND = 10;
 const LETTERS = ['a', 'b', 'c', 'd'];
-// One of these is shown (at random) under the title on the start card.
-const VERSES = [
-  ["Kolose 3:23–24","“Apa pun juga yang kamu perbuat, perbuatlah dengan segenap hatimu seperti untuk Tuhan dan bukan untuk manusia.”"],
-  ["Roma 12:11","“Janganlah hendaknya kerajinanmu kendor, biarlah rohmu menyala-nyala dan layanilah Tuhan.”"],
-  ["1 Korintus 10:31","“Jika engkau makan atau jika engkau minum, atau jika engkau melakukan sesuatu yang lain, lakukanlah semuanya itu untuk kemuliaan Allah.”"],
-  ["Galatia 1:10","“Jadi bagaimana sekarang: adakah kucari kesukaan manusia atau kesukaan Allah?”"],
-  ["Matius 6:4","“Hendaklah sedekahmu itu diberikan dengan tersembunyi, maka Bapamu yang melihat yang tersembunyi akan membalasnya kepadamu.”"],
-  ["Markus 10:43–45","Yesus mengajarkan bahwa siapa yang ingin menjadi besar di antara para murid harus menjadi pelayan, sebagaimana Anak Manusia datang bukan untuk dilayani, melainkan untuk melayani."],
-  ["Galatia 5:13","“Layanilah seorang akan yang lain oleh kasih.”"],
-  ["Filipi 2:3–4","Paulus mengingatkan agar kita tidak mencari kepentingan sendiri atau pujian yang sia-sia, melainkan dengan rendah hati mengutamakan kepentingan orang lain."],
-  ["Yohanes 13:14–15","Yesus membasuh kaki murid-murid-Nya dan memberikan teladan agar mereka juga saling melayani."],
-  ["1 Petrus 4:10","“Layanilah seorang akan yang lain, sesuai dengan karunia yang telah diperoleh tiap-tiap orang sebagai pengurus yang baik dari kasih karunia Allah.”"],
-  ["1 Korintus 4:2","“Yang akhirnya dituntut dari pelayan-pelayan yang demikian ialah, bahwa mereka ternyata dapat dipercayai.”"],
-  ["Lukas 16:10","“Barangsiapa setia dalam perkara-perkara kecil, ia setia juga dalam perkara-perkara besar.”"],
-  ["1 Korintus 15:58","“Karena itu, saudara-saudaraku yang kekasih, berdirilah teguh, jangan goyah, dan giatlah selalu dalam pekerjaan Tuhan!”"],
-  ["2 Timotius 2:15","Paulus mendorong Timotius untuk berusaha menjadi seorang pekerja yang tidak perlu malu dan yang berterus terang memberitakan perkataan kebenaran."],
-  ["Efesus 6:7","“Dan yang dengan rela menjalankan pelayanannya seperti orang-orang yang melayani Tuhan dan bukan manusia.”"],
-  ["Yesaya 40:31","“Tetapi orang-orang yang menanti-nantikan TUHAN mendapat kekuatan baru.”"],
-  ["Galatia 6:9","“Janganlah kita jemu-jemu berbuat baik, karena apabila sudah datang waktunya, kita akan menuai, jika kita tidak menjadi lemah.”"],
-  ["Filipi 4:13","“Segala perkara dapat kutanggung di dalam Dia yang memberi kekuatan kepadaku.”"],
-  ["2 Korintus 12:9","“Cukuplah kasih karunia-Ku bagimu, sebab justru dalam kelemahanlah kuasa-Ku menjadi sempurna.”"],
-  ["Ibrani 6:10","Allah tidak lalai memperhatikan pekerjaan, kasih, dan pelayanan yang telah ditunjukkan umat-Nya bagi nama-Nya."],
-];
 
 function pickRound() {
   const idx = TRIVIA.map((_, i) => i);
@@ -48,7 +26,8 @@ export default function MiniGames() {
   const [picked, setPicked] = useState(null); // chosen option on the current question
   const [right, setRight] = useState(0);
   const [done, setDone] = useState(false);
-  const [[verseRef, verse]] = useState(() => VERSES[Math.floor(Math.random() * VERSES.length)]);
+  // One nasihat at random under the title, each time Mini Games opens.
+  const [[tipTitle, verse, verseRef, message]] = useState(() => NASIHAT[Math.floor(Math.random() * NASIHAT.length)]);
 
   const start = () => { setRound(pickRound()); setAt(0); setPicked(null); setRight(0); setDone(false); };
   const choose = (i) => { if (picked != null) return; setPicked(i); if (i === TRIVIA[round[at]][2]) setRight((n) => n + 1); };
@@ -64,8 +43,12 @@ export default function MiniGames() {
         <section style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 24, padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <span style={{ fontSize: 34 }}>📖</span>
           <span style={{ font: "800 26px/1.15 'Bricolage Grotesque'" }}>WM Trivia</span>
-          <span style={{ fontSize: 15, lineHeight: 1.5, fontWeight: 800 }}>{verse}</span>
-          <span style={{ fontSize: 13, opacity: 0.85, marginTop: -6 }}>— {verseRef}</span>
+          <div className="col" style={{ gap: 6, background: 'rgba(251,246,234,.1)', borderRadius: 16, padding: '12px 14px' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.04em', color: '#E3A92B' }}>{tipTitle}</span>
+            <span style={{ fontSize: 15, lineHeight: 1.5, fontWeight: 800 }}>{verse}</span>
+            <span style={{ fontSize: 13, opacity: 0.85 }}>— {verseRef}</span>
+            <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.95 }}><b>Pesan:</b> {message}</span>
+          </div>
           <button className="p-btn-lg" onClick={start} style={{ background: '#E3A92B', color: '#1B2620' }}>Mulai main</button>
         </section>
       </div>
