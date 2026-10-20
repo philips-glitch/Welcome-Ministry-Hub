@@ -283,6 +283,18 @@ function ScoringSummary({ c, scoring: s }) {
       </div>
     );
   }
+  if (s.type === 'proportional') {
+    const items = c.riddles_per_group > 0 ? c.riddles_per_group : 1;
+    return (
+      <div className="col" style={{ gap: 10 }}>
+        {bar([[s.answer_pts, '#1F4D3A'], [s.participation_pts, '#E3A92B']])}
+        <div style={grid}>
+          <div className="col"><span style={{ fontWeight: 700 }}>Jawaban benar</span><span className="muted">{s.answer_pts} poin per riddle × {items}</span></div>
+          <div className="col"><span style={{ fontWeight: 700 }}>Partisipasi per foto</span><span className="muted">anggota di foto ÷ anggota grup × {s.participation_pts}</span></div>
+        </div>
+      </div>
+    );
+  }
   if (s.type === 'connect') {
     return (
       <div className="col" style={{ gap: 10 }}>

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -439,11 +439,17 @@ const methods = {
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
-    const { rows: [before] } = await db.query('select s.status, s.group_no, p.role_id as by_role from submissions s left join profiles p on p.id = s.submitted_by where s.id = $1', [id]);
+    const { rows: [before] } = await db.query(`select s.status, s.group_no, p.role_id as by_role, c.scoring from submissions s
+      join challenges c on c.id = s.challenge_id left join profiles p on p.id = s.submitted_by where s.id = $1`, [id]);
     if (!before) bad('Submission ini sudah diganti pengirimnya dengan versi baru. Muat ulang antrean.');
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
+    // Skenario 1 riddles: the score follows from answer + headcount ÷ team size (unless a validator overrides it).
+    else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
+      const n = (await db.query(`select count(*)::int as n from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows[0].n;
+      patch = { ...patch, score: computeScore(before.scoring, { location_correct: !!patch.location_correct, participant_count: patch.participant_count, team_size: n }) };
+    }
     const keys = REVIEW.filter((k) => k in patch);
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}
       where id = $1 returning *`, [id, ...keys.map((k) => val(k, patch[k])), me.id]);

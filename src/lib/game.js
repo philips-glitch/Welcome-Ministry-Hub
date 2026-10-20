@@ -19,6 +19,7 @@ export const SECTIONS = [
 
 export const SCORING_TYPES = [
   ['riddle', 'Riddle foto', 'Lokasi benar + partisipasi (tier jumlah orang)'],
+  ['proportional', 'Riddle proporsional (Skenario 1)', 'Per riddle: jawaban benar + anggota di foto ÷ anggota grup'],
   ['rubric', 'Rubrik + partisipasi tim', 'Nilai per kriteria tiap submission + poin partisipasi tim'],
   ['connect', 'Kenalan (individu)', 'Tiap anggota submit sendiri · rata-rata individu + tingkat partisipasi'],
   ['flat', 'Poin tetap', 'Tervalidasi = poin penuh'],
@@ -50,8 +51,11 @@ export const DEFAULT_CONNECT = {
 // Get to Know Me answers from the Member Form: the key validators compare Q1–Q3 against.
 export const GTKM_FIELDS = [['words', '3 kata tentang dirinya'], ['enjoy', 'Hal yang paling disukai'], ['talent', 'Hidden talent']];
 
+// Riddle scoring "Skenario 1 — Proportional": per riddle, a correct answer earns answer_pts and the photo earns
+// participation_pts × (members in the photo ÷ team size). 4 riddles × (12.5 + 12.5) = 100.
+export const DEFAULT_PROPORTIONAL = { type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 };
 export const withDefaults = (scoring) => ({
-  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT }[scoring?.type] || {}),
+  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT, proportional: DEFAULT_PROPORTIONAL }[scoring?.type] || {}),
   ...scoring,
 });
 export const isConnect = (c) => c?.scoring?.type === 'connect';
@@ -70,6 +74,7 @@ export function itemMax(scoring) {
   const s = withDefaults(scoring);
   if (s.type === 'connect') return sum(s.questions.map((q) => q.max)) + (Number(s.photo_bonus) || 0);
   if (s.type === 'rubric') return sum(s.criteria.map((c) => c.max));
+  if (s.type === 'proportional') return (Number(s.answer_pts) || 0) + (Number(s.participation_pts) || 0);
   return Number(s.max) || 0;
 }
 // Max points one team can earn in a challenge.
@@ -152,8 +157,12 @@ export function formOf(c) {
 }
 
 // Points for one submission under a challenge's scoring rules.
-export function computeScore(scoring, { location_correct, participant_count, manual, marks }) {
+export function computeScore(scoring, { location_correct, participant_count, manual, marks, team_size }) {
   if (['connect', 'rubric'].includes(scoring?.type)) return marksScore(scoring, marks);
+  if (scoring?.type === 'proportional') {
+    const p = proportionalParts(scoring, { location_correct, participant_count, team_size });
+    return Math.round((p.answer + p.part) * 1000) / 1000;
+  }
   const s = { ...DEFAULT_SCORING, ...scoring };
   if (s.type === 'flat') return s.max;
   if (s.type === 'manual') return Math.max(0, Math.min(s.max, Number(manual) || 0));
@@ -161,6 +170,13 @@ export function computeScore(scoring, { location_correct, participant_count, man
   const loc = location_correct ? s.max * (s.location_weight / 100) : 0;
   const part = (tierPoints(s.tiers, participant_count) / tierMax) * s.max * (s.participation_weight / 100);
   return round1(loc + part);
+}
+// Skenario 1 parts for one riddle: answer points + participation points (members in photo ÷ team size, max 1).
+export function proportionalParts(scoring, { location_correct, participant_count, team_size }) {
+  const s = withDefaults(scoring);
+  const n = Number(team_size) || 0;
+  const rate = n ? Math.min(1, Math.max(0, Number(participant_count) || 0) / n) : 0;
+  return { answer: location_correct ? Number(s.answer_pts) || 0 : 0, rate, part: Math.round(rate * (Number(s.participation_pts) || 0) * 1000) / 1000 };
 }
 export function scoreParts(scoring, sub) {
   const s = { ...DEFAULT_SCORING, ...scoring };

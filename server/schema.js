@@ -125,6 +125,12 @@ create table if not exists submissions (
 );
 -- Set when a Super Admin / PIC reopens a validated submission: editable again (even past the deadline) until re-validated.
 alter table submissions add column if not exists reopened_at timestamptz;
+-- Scores keep 3 decimals (riddle Skenario 1: 9 of 12 in the photo = 9.375).
+do $$ begin
+  if (select numeric_scale from information_schema.columns where table_name = 'submissions' and column_name = 'score') <> 3 then
+    alter table submissions alter column score type numeric(7,3);
+  end if;
+end $$;
 -- Point changes by a Super Admin / PIC after validation: [{from, to, note, by, by_name, at}].
 alter table submissions add column if not exists adjustments jsonb not null default '[]';
 create index if not exists submissions_challenge_idx on submissions (challenge_id, status);
@@ -171,6 +177,7 @@ export async function migrate(db) {
   const { rows } = await db.query(`select value from app_meta where key = 'seeded'`);
   if (!rows.length) await db.tx((t) => seed(t));
   await updateTexts(db);
+  await r2Proportional(db);
   await bootstrapAdmins(db);
 }
 
@@ -215,6 +222,18 @@ const TEXT_UPDATES = [
   ['R1', 'points_rewards', "- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = members who submitted ÷ team size.",
     "- Team score = (average member score ÷ 24 × 70) + (participation rate × 30), max 100. The average counts members who took part; participation rate = (members who submitted + members who were interviewed) ÷ team size × ½."],
 ];
+// Oct 2026: R2 switches to "Skenario 1 — Proportional" scoring. Once, and only while it still has the seeded rubric
+// and no validated submissions.
+async function r2Proportional(db) {
+  const { rows } = await db.query(`select value from app_meta where key = 'r2_proportional'`);
+  if (rows.length) return;
+  await db.query(`update challenges c set scoring = $1::jsonb,
+      sections = jsonb_set(sections, '{points_rewards}', to_jsonb($2::text))
+    where c.code = 'R2' and c.scoring->>'type' = 'rubric'
+      and not exists (select 1 from submissions s where s.challenge_id = c.id and s.status = 'validated')`,
+  [JSON.stringify({ type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 }), "- Per riddle (4 riddle), max 25 pts: correct answer = 12.5 pts, plus participation = members in the photo ÷ team size × 12.5.\n- Participation is counted per photo: each riddle's photo is validated on its own.\n- Max 4 × 12.5 (answers) + 4 × 12.5 (participation) = 100. Example (12 members): 12, 9, 10 and 6 in the photos → 12.5 + 9.38 + 10.42 + 6.25 = 38.54; 3 correct answers → 37.5; total 76.0."]);
+  await db.query(`insert into app_meta values ('r2_proportional', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
+}
 async function updateTexts(db) {
   for (const [code, key, from, to] of TEXT_UPDATES) {
     await db.query(`update challenges set sections = jsonb_set(sections, $2::text[], to_jsonb(replace(sections->>$3, $4, $5)))

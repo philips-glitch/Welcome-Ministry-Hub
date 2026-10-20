@@ -1,7 +1,7 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow } from './game.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
@@ -332,7 +332,13 @@ export function gameMethods({ load, save, delay, fail }) {
       if (only !== null && s.submissions[i].group_no !== only) return fail('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
       const prevStatus = s.submissions[i].status;
       // A captain's own entries are validated like anyone's but always score 0.
-      if (playsWithoutPoints(s.profiles.find((p) => p.id === s.submissions[i].submitted_by))) patch = { ...patch, score: 0 };
+      const sub0 = s.submissions[i];
+      const sc = s.challenges.find((c) => c.id === sub0.challenge_id)?.scoring;
+      if (playsWithoutPoints(s.profiles.find((p) => p.id === sub0.submitted_by))) patch = { ...patch, score: 0 };
+      else if (withDefaults(sc).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
+        const n = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).length;
+        patch = { ...patch, score: computeScore(sc, { location_correct: !!patch.location_correct, participant_count: patch.participant_count, team_size: n }) };
+      }
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }
       save(); return delay(structuredClone(withReviewer(s, s.submissions[i])));

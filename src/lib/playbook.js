@@ -94,20 +94,16 @@ export const PLAYBOOK = [
       ].join('\n'),
       connection: "The goal isn't just to find the answer. It's to find it together.",
       points_rewards: [
-        '- Each correct photo: 10 pts (the photo clearly shows the correct answer). Wrong or invalid: 0.',
-        '- No creativity scoring: the validator only checks whether the team found and captured the correct answer.',
-        '- Team participation: 10–14 members → 10 pts · 7–9 → 6 · 6 or fewer → 2.',
-        '- Max 4 × 10 + 10 = 50. Example: 3 correct + 12 of 13 members took part → 30 + 10 = 40/50.',
+        "- Per riddle (4 riddle), max 25 pts: correct answer = 12.5 pts, plus participation = members in the photo ÷ team size × 12.5.",
+        "- Participation is counted per photo: each riddle's photo is validated on its own.",
+        "- Max 4 × 12.5 (answers) + 4 × 12.5 (participation) = 100. Example (12 members): 12, 9, 10 and 6 in the photos → 12.5 + 9.38 + 10.42 + 6.25 = 38.54; 3 correct answers → 37.5; total 76.0.",
       ].join('\n'),
       flourish_hub: 'The Group Leader submits per clue: your answer, a photo that proves it, the IG Story link, and tags everyone who took part. Participation counts everyone tagged across your validated photos.',
       make_it_flourish: "GUESS. FIND. SNAP. Let's flourish together!",
       duration: '21–25 October 2026 · deadline Sunday 25 October, 23:59 WIB.',
     },
-    scoring: {
-      type: 'rubric',
-      criteria: [{ key: 'correct', label: 'Jawaban benar & foto jelas membuktikan', max: 10, binary: true }],
-      participation: PARTICIPATION_2,
-    },
+    // Skenario 1 — Proportional Scoring (Skema Penilaian Riddle): per riddle 12.5 answer + 12.5 × headcount ÷ team.
+    scoring: { type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 },
     form: {
       photo: 'required', link: 'required', link_label: 'Link IG Story', answer_label: 'Jawaban kalian', tag_label: 'Siapa aja yang ikut?',
       confirm: [

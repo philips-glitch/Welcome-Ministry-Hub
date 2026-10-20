@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, validatesOnly, playsWithoutPoints } from '../lib/groups.js';
+import { leaderName, validatesOnly, playsWithoutPoints, isPlayer } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import PersonRole from '../components/PersonRole.jsx';
-import { computeScore, scoreParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
+import { computeScore, scoreParts, proportionalParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
 import { DEMO_NOW } from '../data.js';
 import { Lightbox } from '../components/Photo.jsx';
 
@@ -89,6 +89,7 @@ export default function ValidationQueue() {
     setReview({
       checks: s.checks || checksList.map(() => true),
       count: s.participant_count ?? s.tagged_ids.filter((id) => !noPoints(id)).length,
+      answerOk: s.location_correct ?? true,
       marks: { ...(s.marks || {}) },
       reason: s.reject_reason || null,
       override: false, overrideScore: '', overrideNote: '',
@@ -101,7 +102,13 @@ export default function ValidationQueue() {
     select(list[(i + d + list.length) % list.length]);
   };
 
-  const auto = cur && review ? computeScore(scoring, { location_correct: review.checks[1], participant_count: review.count, manual: review.manual, marks: review.marks }) : 0;
+  // Riddle with headcount + right/wrong answer: classic tiers, or Skenario 1 (÷ team size).
+  const prop = scoring.type === 'proportional';
+  const riddleLike = scoring.type === 'riddle' || prop;
+  const teamSize = cur ? members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).length : 0;
+  const answerOk = prop ? review?.answerOk : review?.checks[1];
+  const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: review.count, manual: review.manual, marks: review.marks, team_size: teamSize }) : 0;
+  const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: review.count, team_size: teamSize }) : null;
   const byCaptain = !!cur && noPoints(cur.submitted_by);
   const score = byCaptain ? 0 : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
@@ -133,8 +140,8 @@ export default function ValidationQueue() {
     if (kind === 'validated' && review.override && !review.overrideNote.trim()) return setToast(['warn', 'Override skor wajib pakai alasan.']);
     const patch = {
       status: kind, checks: review.checks,
-      location_correct: scoring.type === 'riddle' ? review.checks[1] : null,
-      participant_count: scoring.type === 'riddle' ? review.count : null,
+      location_correct: riddleLike ? answerOk : null,
+      participant_count: riddleLike ? review.count : null,
       marks: ['connect', 'rubric'].includes(scoring.type) ? review.marks : null,
       score: kind === 'validated' ? score : null,
       override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
@@ -311,12 +318,18 @@ export default function ValidationQueue() {
                     </button>
                   );
                 })}
-                {scoring.type === 'riddle' && (
+                {prop && (
+                  <button onClick={() => setR({ answerOk: !review.answerOk })} className="row" style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', background: review.answerOk ? '#E3EFE6' : '#FBE4E0' }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 6, border: '2px solid #1F4D3A', background: review.answerOk ? '#1F4D3A' : 'transparent', color: '#FBF6EA', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{review.answerOk ? '✓' : ''}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Jawaban riddle benar</span>
+                  </button>
+                )}
+                {riddleLike && (
                   <div className="row" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Jumlah peserta di foto</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{prop ? `Anggota di foto (dari ${teamSize})` : 'Jumlah peserta di foto'}</span>
                     <StepBtn onClick={() => setR({ count: Math.max(0, review.count - 1) })}>−</StepBtn>
                     <span className="num" style={{ font: "800 18px 'Bricolage Grotesque'", width: 28, textAlign: 'center' }}>{review.count}</span>
-                    <StepBtn onClick={() => setR({ count: Math.min(20, review.count + 1) })}>+</StepBtn>
+                    <StepBtn onClick={() => setR({ count: Math.min(prop ? teamSize : 20, review.count + 1) })}>+</StepBtn>
                   </div>
                 )}
                 {scoring.type === 'manual' && (
@@ -366,6 +379,12 @@ export default function ValidationQueue() {
                     <span className="num" style={{ font: "800 36px/1 'Bricolage Grotesque'" }}>{score}</span>
                     <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {byCaptain ? 'captain — ikut main tanpa poin' : review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
                   </div>
+                  {pparts && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
+                      <span>Jawaban {answerOk ? 'benar' : 'salah'}</span><span className="num">{pparts.answer.toFixed(2)}</span>
+                      <span>Partisipasi {review.count} ÷ {teamSize} anggota × {withDefaults(scoring).participation_pts}</span><span className="num">{pparts.part.toFixed(2)}</span>
+                    </div>
+                  )}
                   {parts && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
                       <span>Lokasi {review.checks[1] ? 'benar' : 'salah'} × {scoring.location_weight}%</span><span className="num">{parts.loc.toFixed(1)}</span>

@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { setDb, getDb, fromPglite } from './db.js';
 import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
-import { connectBreakdown } from '../src/lib/game.js';
+import { connectBreakdown, computeScore, groupPoints } from '../src/lib/game.js';
 
 process.env.ADMIN_SETUP_PASSWORD = ' "setup-pass-123"\n';   // pasted with quotes + spaces: forgiven
 const lite = new PGlite();
@@ -49,6 +49,17 @@ let n = 0; const ok = (msg) => console.log(`✓ ${++n}. ${msg}`);
   assert.equal(connectBreakdown(sc, [v('A', 'B', 12), v('B', 'A', 12)], 2).part, 30);
 }
 ok('participation formula: (unique people who submitted + unique people interviewed) ÷ team size × ½');
+
+// 0b · riddle Skenario 1 (PDF example): 12 members; 12, 9, 10, 6 in the photos; 3 of 4 answers right → 76.0
+{
+  const sc = { type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 };
+  const per = [[12, true], [9, true], [10, true], [6, false]].map(([count, ok]) => computeScore(sc, { location_correct: ok, participant_count: count, team_size: 12 }));
+  assert.deepEqual(per, [25, 21.875, 22.917, 6.25]);
+  const subs = per.map((score, i) => ({ status: 'validated', submitted_by: 'L', riddle_id: 'r' + i, version: 1, score }));
+  assert.equal(groupPoints({ scoring: sc, riddles_per_group: 4 }, subs, 12), 76);
+  assert.equal(computeScore(sc, { location_correct: true, participant_count: 15, team_size: 12 }), 25);   // capped at the team size
+}
+ok('riddle Skenario 1: per riddle 12.5 answer + headcount ÷ team × 12.5 (PDF example = 76)');
 
 // 1 · bootstrap + login
 const admin = client();
@@ -244,6 +255,11 @@ const s2b = await leader.call('createSubmission', { sub: { challenge_id: r2.id, 
 assert.equal(s2b.version, 2); assert.equal(s2b.media_path, s2.media_path);
 assert.equal((await leader.media(s2b.media_path)).statusCode, 200);
 assert.equal((await kapten.call('listSubmissions', { challengeId: r2.id })).length, 1);
+// R2 uses Skenario 1: the server scores it from the real team size (group 01 = 3 players; captains don't count).
+assert.equal(r2.scoring.type, 'proportional');
+const r2rev = await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, participant_count: 2, score: 999, checks: [true, true, true] } });
+assert.equal(r2rev.score, 20.833);   // 12.5 + 2/3 × 12.5
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r2.id).points, 20.8);
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
@@ -267,6 +283,15 @@ await restart(); await admin.login('angel', 'setup-pass-123');
 const pr = (await admin.call('listChallenges')).find((x) => x.code === 'R1').sections.points_rewards;
 assert.ok(pr.startsWith('Intro\n') && pr.includes('(members who submitted + members who were interviewed) ÷ team size × ½') && !pr.includes(OLD_P));
 ok('R1 points text in the database follows the new participation formula');
+// A database seeded before Skenario 1 (R2 still on the rubric, nothing validated) switches R2 once on start.
+const r2now = (await admin.call('listChallenges')).find((x) => x.code === 'R2');
+await db.query(`update challenges set scoring = '{"type":"rubric","criteria":[]}' where code = 'R2'`);
+await db.query(`update submissions set status = 'submitted' where challenge_id = $1`, [r2now.id]);
+await db.query(`delete from app_meta where key = 'r2_proportional'`);
+await restart(); await admin.login('angel', 'setup-pass-123');
+const r2after = (await admin.call('listChallenges')).find((x) => x.code === 'R2');
+assert.equal(r2after.scoring.type, 'proportional'); assert.ok(r2after.sections.points_rewards.includes('÷ team size × 12.5'));
+ok('the live R2 switches to Skenario 1 once (only while nothing in R2 is validated)');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });
