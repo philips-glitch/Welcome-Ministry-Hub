@@ -39,8 +39,8 @@ export default function MiniGames() {
         </div>
         <section style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 24, padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <span style={{ fontSize: 34 }}>📖</span>
-          <span style={{ font: "800 26px/1.15 'Bricolage Grotesque'" }}>Trivia Alkitab</span>
-          <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9 }}>{ROUND} soal pilihan ganda, diambil acak dari {TRIVIA.length} soal Perjanjian Lama & Baru. Setiap kali main, soalnya beda. Seberapa kenal kamu dengan Alkitab?</span>
+          <span style={{ font: "800 26px/1.15 'Bricolage Grotesque'" }}>WM Trivia</span>
+          <span style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9 }}>Selamat Bermain !</span>
           <button className="p-btn-lg" onClick={start} style={{ background: '#E3A92B', color: '#1B2620' }}>Mulai main</button>
         </section>
       </div>
@@ -53,7 +53,7 @@ export default function MiniGames() {
   return (
     <div className="p-stack" style={{ maxWidth: 620 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span className="p-title">Trivia Alkitab</span>
+        <span className="p-title">WM Trivia</span>
         <span className="muted" style={{ fontSize: 13, fontWeight: 700 }}>Soal {at + 1}/{ROUND} · {right} benar</span>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
@@ -88,7 +88,7 @@ export default function MiniGames() {
       </section>
 
       {done && (
-        <div role="dialog" aria-modal="true" aria-label="Hasil trivia" style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(20,40,31,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div role="dialog" aria-modal="true" aria-label="Hasil WM Trivia" style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(20,40,31,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div className="p-card p-pop" style={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 400, borderRadius: 24, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
             {right === ROUND && <Confetti />}
             <span style={{ fontSize: 48 }}>{v.emoji}</span>
