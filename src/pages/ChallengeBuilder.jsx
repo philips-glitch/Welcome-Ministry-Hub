@@ -237,7 +237,7 @@ function ScoringEditor({ challenge, scoring, setScoring, replace }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px', gap: '6px 8px', fontSize: 12.5, alignItems: 'center' }}>
           <span><b>Jawaban benar</b> · poin per riddle</span>
           <input type="number" min="0" step="0.5" aria-label="Poin jawaban benar" value={s.answer_pts} onChange={(e) => setScoring({ answer_pts: num(e.target.value) })} style={{ ...input, width: 64, height: 30 }} />
-          <span><b>Partisipasi</b> · maks per riddle (× anggota di foto ÷ anggota grup)</span>
+          <span><b>Partisipasi</b> · maks per riddle (× anggota yang dipilih leader ÷ anggota grup)</span>
           <input type="number" min="0" step="0.5" aria-label="Poin partisipasi" value={s.participation_pts} onChange={(e) => setScoring({ participation_pts: num(e.target.value) })} style={{ ...input, width: 64, height: 30 }} />
         </div>
       )}

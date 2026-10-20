@@ -107,8 +107,10 @@ export default function ValidationQueue() {
   const riddleLike = scoring.type === 'riddle' || prop;
   const teamSize = cur ? members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).length : 0;
   const answerOk = prop ? review?.answerOk : review?.checks[1];
-  const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: review.count, manual: review.manual, marks: review.marks, team_size: teamSize }) : 0;
-  const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: review.count, team_size: teamSize }) : null;
+  // Skenario 1: participation = members the Group Leader selected (captains don't count).
+  const picked = cur && prop ? new Set(cur.tagged_ids.filter((id) => members.some((p) => p.id === id && isPlayer(p) && p.group_no === cur.group_no))).size : 0;
+  const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: prop ? picked : review.count, manual: review.manual, marks: review.marks, team_size: teamSize }) : 0;
+  const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: picked, team_size: teamSize }) : null;
   const byCaptain = !!cur && noPoints(cur.submitted_by);
   const score = byCaptain ? 0 : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
@@ -141,7 +143,7 @@ export default function ValidationQueue() {
     const patch = {
       status: kind, checks: review.checks,
       location_correct: riddleLike ? answerOk : null,
-      participant_count: riddleLike ? review.count : null,
+      participant_count: prop ? picked : riddleLike ? review.count : null,
       marks: ['connect', 'rubric'].includes(scoring.type) ? review.marks : null,
       score: kind === 'validated' ? score : null,
       override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
@@ -324,9 +326,15 @@ export default function ValidationQueue() {
                     <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Jawaban riddle benar</span>
                   </button>
                 )}
-                {riddleLike && (
+                {prop && (
                   <div className="row" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{prop ? `Anggota di foto (dari ${teamSize})` : 'Jumlah peserta di foto'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Dipilih leader (ikut riddle ini)</span>
+                    <span className="num" style={{ font: "800 18px 'Bricolage Grotesque'" }}>{picked} <span style={{ fontSize: 12, fontWeight: 600, color: '#56655C' }}>dari {teamSize}</span></span>
+                  </div>
+                )}
+                {scoring.type === 'riddle' && (
+                  <div className="row" style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Jumlah peserta di foto</span>
                     <StepBtn onClick={() => setR({ count: Math.max(0, review.count - 1) })}>−</StepBtn>
                     <span className="num" style={{ font: "800 18px 'Bricolage Grotesque'", width: 28, textAlign: 'center' }}>{review.count}</span>
                     <StepBtn onClick={() => setR({ count: Math.min(prop ? teamSize : 20, review.count + 1) })}>+</StepBtn>
@@ -382,7 +390,7 @@ export default function ValidationQueue() {
                   {pparts && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
                       <span>Jawaban {answerOk ? 'benar' : 'salah'}</span><span className="num">{pparts.answer.toFixed(2)}</span>
-                      <span>Partisipasi {review.count} ÷ {teamSize} anggota × {withDefaults(scoring).participation_pts}</span><span className="num">{pparts.part.toFixed(2)}</span>
+                      <span>Partisipasi {picked} dipilih ÷ {teamSize} anggota × {withDefaults(scoring).participation_pts}</span><span className="num">{pparts.part.toFixed(2)}</span>
                     </div>
                   )}
                   {parts && (

@@ -19,7 +19,7 @@ export const SECTIONS = [
 
 export const SCORING_TYPES = [
   ['riddle', 'Riddle foto', 'Lokasi benar + partisipasi (tier jumlah orang)'],
-  ['proportional', 'Riddle proporsional (Skenario 1)', 'Per riddle: jawaban benar + anggota di foto ÷ anggota grup'],
+  ['proportional', 'Riddle proporsional (Skenario 1)', 'Per riddle: jawaban benar + anggota yang dipilih leader ÷ anggota grup'],
   ['rubric', 'Rubrik + partisipasi tim', 'Nilai per kriteria tiap submission + poin partisipasi tim'],
   ['connect', 'Kenalan (individu)', 'Tiap anggota submit sendiri · rata-rata individu + tingkat partisipasi'],
   ['flat', 'Poin tetap', 'Tervalidasi = poin penuh'],

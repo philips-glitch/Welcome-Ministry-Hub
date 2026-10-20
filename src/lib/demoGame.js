@@ -336,8 +336,9 @@ export function gameMethods({ load, save, delay, fail }) {
       const sc = s.challenges.find((c) => c.id === sub0.challenge_id)?.scoring;
       if (playsWithoutPoints(s.profiles.find((p) => p.id === sub0.submitted_by))) patch = { ...patch, score: 0 };
       else if (withDefaults(sc).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
-        const n = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).length;
-        patch = { ...patch, score: computeScore(sc, { location_correct: !!patch.location_correct, participant_count: patch.participant_count, team_size: n }) };
+        const team = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).map((p) => p.id);
+        const count = new Set((sub0.tagged_ids || []).filter((id) => team.includes(id))).size;
+        patch = { ...patch, participant_count: count, score: computeScore(sc, { location_correct: !!patch.location_correct, participant_count: count, team_size: team.length }) };
       }
       s.submissions[i] = { ...s.submissions[i], ...patch, reviewed_by: s.sessionId, reviewed_at: new Date().toISOString() };
       if (s.submissions[i].status !== prevStatus) { notifs(s); notifyReview(s, s.submissions[i]); }

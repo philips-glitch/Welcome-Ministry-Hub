@@ -94,8 +94,8 @@ export const PLAYBOOK = [
       ].join('\n'),
       connection: "The goal isn't just to find the answer. It's to find it together.",
       points_rewards: [
-        "- Per riddle (4 riddle), max 25 pts: correct answer = 12.5 pts, plus participation = members in the photo ÷ team size × 12.5.",
-        "- Participation is counted per photo: each riddle's photo is validated on its own.",
+        "- Per riddle (4 riddle), max 25 pts: correct answer = 12.5 pts, plus participation = members who took part ÷ team size × 12.5.",
+        "- Participation is counted per riddle: the Group Leader submits and selects by name who took part (captains don't count).",
         "- Max 4 × 12.5 (answers) + 4 × 12.5 (participation) = 100. Example (12 members): 12, 9, 10 and 6 in the photos → 12.5 + 9.38 + 10.42 + 6.25 = 38.54; 3 correct answers → 37.5; total 76.0.",
       ].join('\n'),
       flourish_hub: 'The Group Leader submits per clue: your answer, a photo that proves it, the IG Story link, and tags everyone who took part. Participation counts everyone tagged across your validated photos.',

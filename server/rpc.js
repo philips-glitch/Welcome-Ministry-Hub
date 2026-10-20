@@ -406,6 +406,11 @@ const methods = {
       if (last?.status === 'validated') bad('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
     }
     if (last) superseded.push(last);
+    // Selected people must be from this group (game players).
+    if (row.tagged_ids.length) {
+      const ok = new Set((await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()}`, [me.group_no])).rows.map((r) => r.id));
+      row.tagged_ids = [...new Set(row.tagged_ids.filter((id) => ok.has(id)))];
+    }
     if (row.riddle_id && !(await db.query('select 1 from riddle_draws where challenge_id = $1 and group_no = $2 and riddle_id = $3', [c.id, me.group_no, row.riddle_id])).rows.length) bad('Riddle ini bukan untuk grup kamu.');
 
     let media_path = null, media_name = null;
@@ -439,7 +444,7 @@ const methods = {
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
-    const { rows: [before] } = await db.query(`select s.status, s.group_no, p.role_id as by_role, c.scoring from submissions s
+    const { rows: [before] } = await db.query(`select s.status, s.group_no, s.tagged_ids, p.role_id as by_role, c.scoring from submissions s
       join challenges c on c.id = s.challenge_id left join profiles p on p.id = s.submitted_by where s.id = $1`, [id]);
     if (!before) bad('Submission ini sudah diganti pengirimnya dengan versi baru. Muat ulang antrean.');
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
@@ -447,8 +452,10 @@ const methods = {
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
     // Skenario 1 riddles: the score follows from answer + headcount ÷ team size (unless a validator overrides it).
     else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
-      const n = (await db.query(`select count(*)::int as n from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows[0].n;
-      patch = { ...patch, score: computeScore(before.scoring, { location_correct: !!patch.location_correct, participant_count: patch.participant_count, team_size: n }) };
+      // Participation = the members the Group Leader selected (captains don't count), out of the team size.
+      const team = (await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows.map((r) => r.id);
+      const count = new Set((before.tagged_ids || []).filter((id) => team.includes(id))).size;
+      patch = { ...patch, participant_count: count, score: computeScore(before.scoring, { location_correct: !!patch.location_correct, participant_count: count, team_size: team.length }) };
     }
     const keys = REVIEW.filter((k) => k in patch);
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}

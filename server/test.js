@@ -258,8 +258,10 @@ assert.equal((await kapten.call('listSubmissions', { challengeId: r2.id })).leng
 // R2 uses Skenario 1: the server scores it from the real team size (group 01 = 3 players; captains don't count).
 assert.equal(r2.scoring.type, 'proportional');
 const r2rev = await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, participant_count: 2, score: 999, checks: [true, true, true] } });
-assert.equal(r2rev.score, 20.833);   // 12.5 + 2/3 × 12.5
-assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r2.id).points, 20.8);
+// Participation comes from the leader's selection (Budi = 1 of 3), not from a number the validator sends.
+assert.equal(r2rev.participant_count, 1);
+assert.equal(r2rev.score, 16.667);   // 12.5 + 1/3 × 12.5
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r2.id).points, 16.7);
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes

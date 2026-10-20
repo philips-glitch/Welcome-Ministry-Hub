@@ -290,7 +290,7 @@ function ScoringSummary({ c, scoring: s }) {
         {bar([[s.answer_pts, '#1F4D3A'], [s.participation_pts, '#E3A92B']])}
         <div style={grid}>
           <div className="col"><span style={{ fontWeight: 700 }}>Jawaban benar</span><span className="muted">{s.answer_pts} poin per riddle × {items}</span></div>
-          <div className="col"><span style={{ fontWeight: 700 }}>Partisipasi per foto</span><span className="muted">anggota di foto ÷ anggota grup × {s.participation_pts}</span></div>
+          <div className="col"><span style={{ fontWeight: 700 }}>Partisipasi per foto</span><span className="muted">anggota yang dipilih leader ÷ anggota grup × {s.participation_pts}</span></div>
         </div>
       </div>
     );

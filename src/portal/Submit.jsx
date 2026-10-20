@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEMO_NOW } from '../data.js';
 import { api } from '../lib/api.js';
-import { tierPoints, withDefaults, formOf, isConnect, itemMax, fmtWIB } from '../lib/game.js';
+import { tierPoints, withDefaults, formOf, isConnect, itemMax, fmtWIB, proportionalParts } from '../lib/game.js';
+import { isPlayer } from '../lib/groups.js';
 import { submitRules, initials, avatarColor } from './portalData.js';
 import { Confetti } from './motion.jsx';
 import { resizeImage, formatBytes } from '../lib/image.js';
@@ -94,6 +95,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const tiersDesc = [...(scoring.tiers || [])].sort((a, b) => b.min - a.min);
   const nextTier = scoring.type === 'riddle' ? [...tiersDesc].reverse().find((t) => t.min > n) : null;
   const hint = !nextTier ? 'Tier tertinggi — mantap!' : `Tambah ${nextTier.min - n} orang lagi untuk ${nextTier.pts} poin`;
+  // Skenario 1: participation = members selected ÷ team size × participation_pts (captains can't be picked).
+  const prop = scoring.type === 'proportional';
+  const pickList = prop ? data.roster.filter(isPlayer) : data.roster;
+  const propPart = prop ? proportionalParts(scoring, { participant_count: [...tagged].filter((id) => pickList.some((p) => p.id === id)).length, team_size: pickList.length }).part : null;
   const teamTiers = scoring.type === 'rubric' ? [...(scoring.participation?.tiers || [])].sort((a, b) => b.min - a.min).map((t) => `≥${t.min} org: ${t.pts}`).join(' · ') : null;
   const allChecked = checks.every(Boolean);
   const answersDone = connect && scoring.questions.every((q) => (answers[q.key] || '').trim());
@@ -251,19 +256,20 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
           <section className="col" style={{ gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <span style={h3}>{step(form.tag_label)}</span>
-              <button className="link" style={{ fontSize: 13 }} onClick={() => setTagged(n === data.roster.length ? new Set() : new Set(data.roster.map((p) => p.id)))}>{n === data.roster.length && n ? 'Kosongkan' : 'Pilih semua'}</button>
+              <button className="link" style={{ fontSize: 13 }} onClick={() => setTagged(n === pickList.length ? new Set() : new Set(pickList.map((p) => p.id)))}>{n === pickList.length && n ? 'Kosongkan' : 'Pilih semua'}</button>
             </div>
             <div key={pts ?? n} className="p-bump" style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className="num" style={{ font: "800 30px/1 'Bricolage Grotesque'" }}>{n}</span>
               <div className="col" style={{ flex: 1 }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>anggota ditag{pts != null ? ` → ${pts} poin partisipasi` : ''}</span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{prop ? `dari ${pickList.length} anggota ikut → ${propPart} poin partisipasi` : `anggota ditag${pts != null ? ` → ${pts} poin partisipasi` : ''}`}</span>
+                {prop && <span style={{ fontSize: 12, opacity: 0.85 }}>Pilih nama anggota yang ikut riddle ini. Partisipasi = yang dipilih ÷ anggota grup × {withDefaults(scoring).participation_pts}.</span>}
                 {pts != null && <span style={{ fontSize: 12, opacity: 0.85 }}>{hint}</span>}
                 {teamTiers && <span style={{ fontSize: 12, opacity: 0.85 }}>Partisipasi tim dihitung dari semua yang ditag di submission tervalidasi ({teamTiers})</span>}
               </div>
             </div>
             {!data.roster.length && <span className="muted" style={{ fontSize: 13 }}>Daftar anggota grup belum tersedia.</span>}
             <div className="p-roster">
-              {data.roster.map((p) => {
+              {pickList.map((p) => {
                 const sel = tagged.has(p.id);
                 return (
                   <button key={p.id} aria-pressed={sel} aria-label={p.full_name} onClick={() => setTagged((t) => { const s = new Set(t); s.has(p.id) ? s.delete(p.id) : s.add(p.id); return s; })} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minHeight: 64 }}>
