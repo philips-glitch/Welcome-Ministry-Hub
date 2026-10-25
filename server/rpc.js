@@ -450,16 +450,15 @@ const methods = {
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
-    // Skenario 1 riddles: full score / manual score (with a reason) stay within 0–max per riddle.
-    else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && patch.override_note) {
-      patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(before.scoring)), Number(patch.score) || 0)) };
-    }
-    // Skenario 1 riddles: the score follows from answer + headcount ÷ team size (unless a validator overrides it).
-    else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
+    // Skenario 1 riddles: riddle part = full (12.5) / 0, or a manual riddle score with a reason (marks.riddle);
+    // participation always follows from the members the leader selected ÷ team size.
+    else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated') {
+      const manual = patch.marks?.riddle ?? null;
+      if (manual != null && !String(patch.override_note || '').trim()) bad('Skor manual riddle wajib pakai alasan.');
       // Participation = the members the Group Leader selected (captains don't count), out of the team size.
       const team = (await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows.map((r) => r.id);
       const count = new Set((before.tagged_ids || []).filter((id) => team.includes(id))).size;
-      patch = { ...patch, participant_count: count, score: computeScore(before.scoring, { location_correct: !!patch.location_correct, participant_count: count, team_size: team.length }) };
+      patch = { ...patch, participant_count: count, score: computeScore(before.scoring, { location_correct: !!patch.location_correct, participant_count: count, team_size: team.length, answer_score: manual }) };
     }
     const keys = REVIEW.filter((k) => k in patch);
     const { rows: [row] } = await db.query(`update submissions set ${[...keys.map((k, i) => `${k} = $${i + 2}`), `reviewed_by = $${keys.length + 2}`, 'reviewed_at = now()'].join(', ')}

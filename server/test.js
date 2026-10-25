@@ -262,10 +262,11 @@ const r2rev = await kapten.call('reviewSubmission', { id: s2b.id, patch: { statu
 assert.equal(r2rev.participant_count, 1);
 assert.equal(r2rev.score, 16.667);   // 12.5 + 1/3 × 12.5
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r2.id).points, 16.7);
-// Riddle validation options: full score (checklist) and a manual score with a reason — capped at 25 per riddle.
-assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: false, score: 25, override_note: 'Skor penuh (checklist)' } })).score, 25);
-assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', score: 10, override_note: 'Foto kurang jelas' } })).score, 10);
-assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', score: 999, override_note: 'salah ketik' } })).score, 25);
+// Riddle validation: "Skor penuh riddle" = 12.5, or a manual riddle score with a reason — participation (Budi = 1/3 → 4.167) stays automatic.
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, score: 999 } })).score, 16.667);
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 6 }, override_note: 'Foto kurang jelas' } })).score, 10.167);
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 99 }, override_note: 'salah ketik' } })).score, 16.667);
+await rejects(kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 6 } } }), /wajib pakai alasan/);
 await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, score: 0, checks: [true, true, true] } });
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 

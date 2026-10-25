@@ -157,10 +157,10 @@ export function formOf(c) {
 }
 
 // Points for one submission under a challenge's scoring rules.
-export function computeScore(scoring, { location_correct, participant_count, manual, marks, team_size }) {
+export function computeScore(scoring, { location_correct, participant_count, manual, marks, team_size, answer_score }) {
   if (['connect', 'rubric'].includes(scoring?.type)) return marksScore(scoring, marks);
   if (scoring?.type === 'proportional') {
-    const p = proportionalParts(scoring, { location_correct, participant_count, team_size });
+    const p = proportionalParts(scoring, { location_correct, participant_count, team_size, answer_score });
     return Math.round((p.answer + p.part) * 1000) / 1000;
   }
   const s = { ...DEFAULT_SCORING, ...scoring };
@@ -172,11 +172,14 @@ export function computeScore(scoring, { location_correct, participant_count, man
   return round1(loc + part);
 }
 // Skenario 1 parts for one riddle: answer points + participation points (members in photo ÷ team size, max 1).
-export function proportionalParts(scoring, { location_correct, participant_count, team_size }) {
+// answer_score: a manual riddle score (0–answer_pts) instead of full/zero; participation stays automatic.
+export function proportionalParts(scoring, { location_correct, participant_count, team_size, answer_score }) {
   const s = withDefaults(scoring);
   const n = Number(team_size) || 0;
+  const full = Number(s.answer_pts) || 0;
   const rate = n ? Math.min(1, Math.max(0, Number(participant_count) || 0) / n) : 0;
-  return { answer: location_correct ? Number(s.answer_pts) || 0 : 0, rate, part: Math.round(rate * (Number(s.participation_pts) || 0) * 1000) / 1000 };
+  const answer = answer_score != null && answer_score !== '' ? Math.max(0, Math.min(full, Number(answer_score) || 0)) : location_correct ? full : 0;
+  return { answer, rate, part: Math.round(rate * (Number(s.participation_pts) || 0) * 1000) / 1000 };
 }
 export function scoreParts(scoring, sub) {
   const s = { ...DEFAULT_SCORING, ...scoring };
