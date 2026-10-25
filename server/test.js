@@ -109,7 +109,7 @@ const r1 = ch.find((c) => c.code === 'R1');
 await admin.call('saveChallenge', { c: { id: r1.id, status: 'live', deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
 // …and R2 not open yet (re-validating R1 is allowed until R2 opens).
 const r2open = new Date(Date.now() + 7 * 864e5).toISOString();
-await admin.call('saveChallenge', { c: { id: ch.find((c) => c.code === 'R2').id, open_at: r2open } });
+await admin.call('saveChallenge', { c: { id: ch.find((c) => c.code === 'R2').id, status: 'scheduled', open_at: r2open } });
 const ids = Object.fromEntries((await admin.call('listProfiles')).map((p) => [p.username, p.id]));
 const sub = (t) => ({ sub: { challenge_id: r1.id, group_no: '01', target_id: t, answers: { q1: 'a', q2: 'b', q3: 'c', q4: 'd' }, declaration: true } });
 await rejects(ana.call('createSubmission', sub(ids.ana)), /bukan diri sendiri/);
@@ -262,6 +262,11 @@ const r2rev = await kapten.call('reviewSubmission', { id: s2b.id, patch: { statu
 assert.equal(r2rev.participant_count, 1);
 assert.equal(r2rev.score, 16.667);   // 12.5 + 1/3 × 12.5
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r2.id).points, 16.7);
+// Riddle validation options: full score (checklist) and a manual score with a reason — capped at 25 per riddle.
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: false, score: 25, override_note: 'Skor penuh (checklist)' } })).score, 25);
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', score: 10, override_note: 'Foto kurang jelas' } })).score, 10);
+assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', score: 999, override_note: 'salah ketik' } })).score, 25);
+await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, score: 0, checks: [true, true, true] } });
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes

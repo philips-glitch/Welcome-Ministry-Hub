@@ -92,7 +92,7 @@ export default function ValidationQueue() {
       answerOk: s.location_correct ?? true,
       marks: { ...(s.marks || {}) },
       reason: s.reject_reason || null,
-      override: false, overrideScore: '', overrideNote: '',
+      override: false, overrideScore: '', overrideNote: '', full: false,
       manual: s.score ?? '',
     });
   }
@@ -112,7 +112,7 @@ export default function ValidationQueue() {
   const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: prop ? picked : review.count, manual: review.manual, marks: review.marks, team_size: teamSize }) : 0;
   const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: picked, team_size: teamSize }) : null;
   const byCaptain = !!cur && noPoints(cur.submitted_by);
-  const score = byCaptain ? 0 : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
+  const score = byCaptain ? 0 : review?.full ? max : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
   const missing = review ? marksMissing(scoring, review.marks) : [];
   const G = cur ? group(cur.group_no) : null;
@@ -138,7 +138,7 @@ export default function ValidationQueue() {
     if (!cur || !review) return;
     if (cur.status !== 'submitted') return setToast(['warn', 'Submission ini sudah diputuskan. Pilih yang masih pending.']);
     if ((kind === 'rejected' || kind === 'resubmit') && !review.reason) return setToast(['warn', 'Pilih alasan dulu sebelum menolak / minta resubmit.']);
-    if (kind === 'validated' && missing.length && !review.override) return setToast(['warn', `Beri nilai dulu: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}.`]);
+    if (kind === 'validated' && missing.length && !review.override && !review.full) return setToast(['warn', `Beri nilai dulu: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}.`]);
     if (kind === 'validated' && review.override && !review.overrideNote.trim()) return setToast(['warn', 'Override skor wajib pakai alasan.']);
     const patch = {
       status: kind, checks: review.checks,
@@ -146,7 +146,7 @@ export default function ValidationQueue() {
       participant_count: prop ? picked : riddleLike ? review.count : null,
       marks: ['connect', 'rubric'].includes(scoring.type) ? review.marks : null,
       score: kind === 'validated' ? score : null,
-      override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
+      override_note: kind === 'validated' && review.full ? 'Skor penuh (checklist)' : kind === 'validated' && review.override ? review.overrideNote.trim() : null,
       reject_reason: kind === 'validated' ? null : review.reason,
     };
     try {
@@ -385,7 +385,7 @@ export default function ValidationQueue() {
                 <div style={{ background: '#1F4D3A', color: '#FBF6EA', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <span className="num" style={{ font: "800 36px/1 'Bricolage Grotesque'" }}>{score}</span>
-                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {byCaptain ? 'captain — ikut main tanpa poin' : review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
+                    <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {byCaptain ? 'captain — ikut main tanpa poin' : review.full ? 'skor penuh (checklist)' : review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
                   </div>
                   {pparts && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
@@ -405,7 +405,14 @@ export default function ValidationQueue() {
                   )}
                   {scoring.type === 'flat' && <span style={{ fontSize: 12, opacity: 0.9 }}>Poin tetap untuk submission yang tervalidasi.</span>}
                 </div>
-                <button className="link" style={{ textAlign: 'left' }} onClick={() => setR({ override: !review.override })}>{review.override ? '× Batal override' : '✎ Override skor manual…'}</button>
+                {/* Riddle validation only: give full points with one check, or a manual score with a reason. */}
+                {prop && !byCaptain && (
+                  <button onClick={() => setR({ full: !review.full, override: false })} className="row" style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', background: review.full ? '#E3EFE6' : '#FFFDF8' }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 6, border: '2px solid #1F4D3A', background: review.full ? '#1F4D3A' : 'transparent', color: '#FBF6EA', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>{review.full ? '✓' : ''}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Skor penuh ({max} poin)</span>
+                  </button>
+                )}
+                {(!prop || !byCaptain) && <button className="link" style={{ textAlign: 'left' }} onClick={() => setR({ override: !review.override, full: false })}>{review.override ? (prop ? '× Batal skor manual' : '× Batal override') : (prop ? '✎ Skor manual (wajib alasan)…' : '✎ Override skor manual…')}</button>}
                 {review.override && (
                   <div className="col" style={{ gap: 6, padding: 10, borderRadius: 10, background: '#F8E9C4' }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#7A5410' }}>Override skor wajib pakai alasan</span>

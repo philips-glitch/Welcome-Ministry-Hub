@@ -450,6 +450,10 @@ const methods = {
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
+    // Skenario 1 riddles: full score / manual score (with a reason) stay within 0–max per riddle.
+    else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && patch.override_note) {
+      patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(before.scoring)), Number(patch.score) || 0)) };
+    }
     // Skenario 1 riddles: the score follows from answer + headcount ÷ team size (unless a validator overrides it).
     else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated' && !patch.override_note) {
       // Participation = the members the Group Leader selected (captains don't count), out of the team size.
