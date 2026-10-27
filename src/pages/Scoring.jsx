@@ -1,23 +1,17 @@
 import { useMemo, useState } from 'react';
 import { rank } from '../data.js';
 import { useGame } from '../lib/gameStore.jsx';
-import { useMembers } from '../lib/members.jsx';
-import { isStaffOf } from '../lib/groups.js';
 import { buildStandings } from '../lib/game.js';
 
 const round1 = (x) => Math.round(x * 10) / 10;
 
 export default function Scoring() {
   const { challenges, scores, pending, groups } = useGame();
-  const members = useMembers().rows || [];
   const { cols: SCORE_COLS, rows } = useMemo(() => {
-    const captains = {};
-    members.forEach((p) => { if (p.group_no && isStaffOf(p, p.group_no)) (captains[p.group_no] ||= []).push(p.full_name); });
-    Object.keys(captains).forEach((k) => { captains[k] = captains[k].join(', '); });
-    return buildStandings(scores || [], challenges || [], captains, groups || []);
-  }, [scores, challenges, members, groups]);
+    return buildStandings(scores || [], challenges || [], {}, groups || []);
+  }, [scores, challenges, groups]);
   const FILTERS = [['total', 'Total', 'Semua challenge'], ...SCORE_COLS.map((c) => [c.key, c.short === 'SQ' ? 'Side Quest' : `${c.short} · ${c.label.split(' ')[0].replace(/[,.:;!?]+$/, '')}`, c.label])];
-  const COLS = `48px minmax(150px,1.3fr) 110px repeat(${SCORE_COLS.length}, 58px) 72px minmax(120px,1fr)`;
+  const COLS = `48px minmax(150px,1.3fr) repeat(${SCORE_COLS.length}, 58px) 72px minmax(120px,1fr)`;
   const [by, setBy] = useState('total');
   // Groups and challenges arrive after the first render.
   if (!groups || !challenges) return <div className="page"><span className="muted">Memuat skor…</span></div>;
@@ -69,7 +63,7 @@ export default function Scoring() {
           </div>
         </div>
         <div className="muted" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, fontSize: 12, fontWeight: 700, padding: '10px 18px', background: '#F6F0E2', alignItems: 'center' }}>
-          <span>#</span><span>Grup</span><span>Captain</span>
+          <span>#</span><span>Grup</span>
           {SCORE_COLS.map((c) => <span key={c.key} title={c.label + (c.max ? ` · maks ${c.max}` : '')} style={{ textAlign: 'right', color: by === c.key ? '#1F4D3A' : c.open ? undefined : '#B5AC98' }}>{c.short}</span>)}
           <span style={{ textAlign: 'right', color: by === 'total' ? '#1F4D3A' : undefined }}>Total</span><span />
         </div>
@@ -77,7 +71,6 @@ export default function Scoring() {
           <div key={r.no} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, alignItems: 'center', fontSize: 13, padding: '10px 18px', borderTop: '1px solid #F0E9DA' }}>
             <span style={{ font: "800 16px 'Bricolage Grotesque'", color: r.rank <= 3 ? '#1F4D3A' : '#56655C' }}>{r.rank}</span>
             <span className="row" style={{ gap: 8, fontWeight: 700 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: r.color }} />{r.no} {r.name}</span>
-            <span style={{ color: '#3C4A42' }}>{r.captain}</span>
             {SCORE_COLS.map(({ key: k }) => (
               <span key={k} className="num" style={{ textAlign: 'right', fontWeight: by === k ? 800 : 500, color: r[k] ? '#1B2620' : '#B5AC98' }}>{r[k] || '—'}</span>
             ))}
