@@ -347,6 +347,14 @@ assert.ok(r3after.sections.rules.includes('One member, one participation credit'
 assert.deepEqual(r3after.form.reel_confirm, ['Satu video resmi tim, maksimal 60 detik', 'IG tidak diprivate dan sudah ditag ke akun IG flourishtogether.ur']);
 assert.equal(r3after.form.confirm.length, 2); assert.ok(r3after.sections.flourish_hub.includes('Reels kamu'));
 ok('the live R3 gets the updated rules, scoring and 8 Nov deadline once (only while nothing in R3 is validated)');
+// R4 form wording update (once): keeps the admin's other settings.
+await db.query(`update challenges set form = $1::jsonb where code = 'R4'`, [JSON.stringify({ photo: 'required', link: 'optional', link_label: 'Link scrapbook', tag_label: 'Siapa aja yang ikut?' })]);
+await db.query(`delete from app_meta where key = 'r4_form_v1'`);
+await restart(); await admin.login('angel', 'setup-pass-123');
+const r4 = (await admin.call('listChallenges')).find((x) => x.code === 'R4').form;
+assert.deepEqual([r4.photo_label, r4.photo_pick_label, r4.link, r4.link_label, r4.tag_label], ['Cover', 'Upload disini', 'required', 'Link scrapbook', 'Siapa aja yang terlibat?']);
+assert.deepEqual(r4.confirm, ['Semua orang di foto adalah anggota {grup}', 'Tidak menyebut nama gereja & tidak ada wajah jemaat tanpa izin', 'Deklarasi No-AI']);
+ok('R4 form: Cover / Upload disini, scrapbook link required, "Siapa aja yang terlibat?", rules without IG Story + short Deklarasi No-AI');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });

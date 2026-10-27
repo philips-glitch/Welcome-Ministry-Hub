@@ -180,6 +180,7 @@ export async function migrate(db) {
   await r2Proportional(db);
   await r3GiveGrow(db);
   await r3Reels(db);
+  await r4Form(db);
   await bootstrapAdmins(db);
 }
 
@@ -260,6 +261,27 @@ async function r3Reels(db) {
       updated_at = now()
     where code = 'R3' and scoring->>'type' = 'give_grow'`, ["{\"photo\":\"none\",\"link\":\"required\",\"link_label\":\"Link video resmi tim (maks 60 detik)\",\"answer_label\":\"Link BTS (foto / video, mis. Google Drive)\",\"answer_optional\":true,\"tags\":true,\"tags_optional\":true,\"tag_label\":\"Siapa yang ikut OFFLINE (terlibat shooting, ada di BTS)?\",\"confirm\":[\"Satu video resmi tim, maksimal 60 detik\",\"Anggota offline benar-benar terlibat shooting / produksi (terdokumentasi di BTS)\"],\"checks\":[\"Satu video resmi, maks 60 detik\",\"Sesuai tema Give and Grow\",\"BTS menunjukkan anggota yang terlibat\",\"Reel publik & tag akun resmi\",\"Pantas & tanpa wajah orang tanpa izin\"],\"reasons\":[\"Lebih dari 60 detik\",\"Link tidak bisa dibuka\",\"Tema tidak sesuai\",\"BTS tidak ada / tidak jelas\",\"Wajah orang tanpa izin\"],\"reel_link_label\":\"Link Reels Instagram (diupload di akun IG pribadi)\",\"reel_hint\":\"Tempel link REELS (bukan IG Story) yang kamu upload di akun Instagram pribadi: 15–60 detik, sesuai tema Give and Grow.\",\"reel_confirm\":[\"Satu video resmi tim, maksimal 60 detik\",\"IG tidak diprivate dan sudah ditag ke akun IG flourishtogether.ur\"],\"reel_checks\":[\"Reels (bukan IG Story), 15–60 detik\",\"Akun IG pribadi & tidak diprivate\",\"Sudah tag akun IG flourishtogether.ur\",\"Sesuai tema Give and Grow\"],\"reel_reasons\":[\"Bukan Reels (IG Story)\",\"Akun IG diprivate\",\"Tidak tag flourishtogether.ur\",\"Durasi tidak sesuai\",\"Tema tidak sesuai\",\"Link tidak bisa dibuka\"]}", "Group Leader: submit once for the team — the official video link (max 60 s), the BTS link (e.g. Google Drive) and the members who took part offline. Members with an individual Reel: open Give and Grow → \"Reels kamu\" and submit your own Reels link (Reels on your personal Instagram, not IG Story; account not private; tag @flourishtogether.ur). The committee verifies everyone; unverified claims are not counted.", "5. SUBMIT — by 8 Nov the Group Leader submits in Flourish Hub: the official video link, the BTS link, the members who took part offline, and the members who posted a Reel (with their Reel links).", "5. SUBMIT — by 8 Nov the Group Leader submits the official video link, the BTS link and the members who took part offline; each member who posted a Reel submits their own Reel link in Flourish Hub."]);
   await db.query(`insert into app_meta values ('r3_reels', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
+}
+// Oct 2026: R4 submit form wording — "Cover" / "Upload disini", scrapbook link required, "Siapa aja yang terlibat?",
+// rules without the IG Story point and with a short "Deklarasi No-AI". Once; other R4 settings are kept.
+async function r4Form(db) {
+  const { rows } = await db.query(`select value from app_meta where key = 'r4_form_v1'`);
+  if (rows.length) return;
+  const { rows: [c] } = await db.query(`select id, form from challenges where code = 'R4'`);
+  if (c) {
+    const form = c.form || {};
+    const base = form.confirm?.length ? form.confirm : [
+      'Semua orang di foto adalah anggota {grup}',
+      'IG Story sudah tag akun event',
+      'Tidak menyebut nama gereja & tidak ada wajah jemaat tanpa izin',
+      'Deklarasi No-AI',
+    ];
+    // drop point 2 (IG Story), point 4 becomes just "Deklarasi No-AI"
+    const confirm = base.length >= 4 ? [base[0], base[2], 'Deklarasi No-AI', ...base.slice(4)] : base.filter((r) => !/ig story/i.test(r));
+    const next = { ...form, photo_label: 'Cover', photo_pick_label: 'Upload disini', link: 'required', tag_label: 'Siapa aja yang terlibat?', confirm };
+    await db.query('update challenges set form = $2::jsonb, updated_at = now() where id = $1', [c.id, JSON.stringify(next)]);
+  }
+  await db.query(`insert into app_meta values ('r4_form_v1', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
 }
 async function updateTexts(db) {
   for (const [code, key, from, to] of TEXT_UPDATES) {

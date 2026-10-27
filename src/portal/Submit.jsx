@@ -24,7 +24,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const reopenedOk = (x) => !!x?.reopened_at && x.status !== 'validated' && ['live', 'closed'].includes(c?.status);
   // Give and Grow: riddleId 'reel' = a member submits their own Reels link.
   const reelMode = c?.scoring?.type === 'give_grow' && riddleId === 'reel';
-  const rules = reelMode && form.reel_confirm?.length ? form.reel_confirm : form.confirm?.length ? form.confirm : submitRules(me);
+  const rules = (reelMode && form.reel_confirm?.length ? form.reel_confirm : form.confirm?.length ? form.confirm : submitRules(me))
+    .map((r) => r.replace(/\{grup\}/g, me.group?.name || 'grup kamu'));
+  // A challenge can rename the photo field, e.g. "Cover" / "Upload disini".
+  const photoLabel = form.photo_label || 'Foto';
 
   // Until the deadline anything not yet validated can be (re)sent. Riddles: not sent yet, pending, or rejected.
   const sendable = useMemo(() => (riddleMode ? data.draw : [])
@@ -116,10 +119,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   ] : connect ? [
     ['Orang', !!person, false, 'pilih orang'],
     ['Jawaban', answersDone, false, 'semua jawaban'],
-    ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
+    ...(form.photo !== 'none' ? [[photoLabel, !!file || keepPhoto, form.photo === 'optional', photoLabel.toLowerCase()]] : []),
     ['Cek aturan', allChecked, false, 'semua aturan'],
   ] : [
-    ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
+    ...(form.photo !== 'none' ? [[photoLabel, !!file || keepPhoto, form.photo === 'optional', photoLabel.toLowerCase()]] : []),
     ...(form.answer_label ? [[form.answer_optional ? 'BTS' : 'Jawaban', !!answer.trim(), !!form.answer_optional, 'jawaban']] : []),
     ...(form.link !== 'none' ? [['Link', !!ig.trim(), form.link === 'optional', form.link_label.toLowerCase()]] : []),
     ...(form.tags ? [[gg ? 'Offline' : 'Tag anggota', n > 0, gg, gg ? 'anggota offline' : 'tag anggota']] : []),
@@ -167,13 +170,13 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   // A function so its step number is taken where it renders.
   const photoBlock = () => form.photo !== 'none' && (
     <section className="col" style={{ gap: 10 }}>
-      <span style={h3}>{step(connect ? `Foto bareng (opsional · +${scoring.photo_bonus} poin)` : form.photo === 'optional' ? 'Foto (opsional)' : 'Foto')}</span>
+      <span style={h3}>{step(connect ? `Foto bareng (opsional · +${scoring.photo_bonus} poin)` : form.photo === 'optional' ? `${photoLabel} (opsional)` : photoLabel)}</span>
       <label className="p-card" style={{ position: 'relative', borderRadius: 18, padding: 12, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: file || keepPhoto ? '1.5px solid #2F7A55' : '1.5px dashed #D5CAB0' }}>
         <div className={preview ? '' : 'placeholder-stripes mono'} style={{ width: 64, height: 64, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#7B7260', flex: 'none', overflow: 'hidden' }}>
-          {preview ? <img src={preview} alt="Pratinjau foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'foto'}
+          {preview ? <img src={preview} alt="Pratinjau foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : photoLabel.toLowerCase()}
         </div>
         <div className="col" style={{ gap: 4, flex: 1, minWidth: 0 }}>
-          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : keepPhoto ? 'Pakai foto sebelumnya' : connect ? 'Pilih foto kalian berdua' : 'Pilih foto grup'}</span>
+          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file ? file.name : keepPhoto ? 'Pakai foto sebelumnya' : connect ? 'Pilih foto kalian berdua' : form.photo_pick_label || 'Pilih foto grup'}</span>
           <span className="muted" style={{ fontSize: 12 }}>{shrinking ? 'Memperkecil foto…' : file ? `${origSize && origSize > file.size ? formatBytes(origSize) + ' → ' : ''}${formatBytes(file.size)} · ketuk untuk ganti` : keepPhoto ? 'Ketuk untuk ganti foto' : `JPG / PNG / HEIC, maks ${MAX_MB} MB · otomatis diperkecil`}</span>
         </div>
         <input type="file" accept="image/*" onChange={(e) => pickFile(e.target.files?.[0])} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
