@@ -327,6 +327,16 @@ assert.deepEqual(s4.tagged_ids.sort(), [ids.ana, ids.budi, ids.kapten].sort()); 
 const r4rev = await kapten.call('reviewSubmission', { id: s4.id, patch: { status: 'validated', score: 1, checks: [true], marks: { verified: [ids.ana, ids.budi, ids.kapten] } } });
 assert.equal(r4rev.score, 90); assert.equal(r4rev.participant_count, 2);
 ok('R4: Group Leader submits e-poster + tags; validator confirms; score = 70 + verified ÷ team × 30');
+// Super Admin can delete test data: the submission, its earlier versions and its photo go; the group starts fresh.
+await rejects(kapten.call('deleteSubmission', { id: s4.id }), /Super Admin/);
+const del = await admin.call('deleteSubmission', { id: s4.id });
+assert.deepEqual(del.ids, [s4.id]);
+assert.ok(!(await admin.call('listSubmissions', { challengeId: r4c.id })).some((x) => x.group_no === '01'));
+assert.equal((await db.query('select count(*)::int as n from media where path = $1', [s4.media_path])).rows[0].n, 0);
+const s4c = await leader.call('createSubmission', { sub: { challenge_id: r4c.id, group_no: '01', ig_url: 'https://drive/poster.pdf', tagged_ids: [ids.ana], declaration: true },
+  media: { name: 'cover.png', type: 'image/png', data: png.toString('base64') } });
+assert.equal(s4c.version, 1);
+ok('Super Admin deletes a submission with all its versions + photo; the group can submit again from version 1');
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes

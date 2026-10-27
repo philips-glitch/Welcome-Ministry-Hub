@@ -382,6 +382,18 @@ export function gameMethods({ load, save, delay, fail }) {
       notifs(s); notifyReopen(s, s.submissions[i]);
       save(); return delay(structuredClone(s.submissions[i]));
     },
+    // Same as deleteSubmission() on the server: the submission and all its earlier versions go.
+    async deleteSubmission(id) {
+      const s = load();
+      if (!canDemo(s, 'roles.manage')) return fail('Hanya Super Admin yang bisa menghapus submission.');
+      const x = s.submissions.find((y) => y.id === id);
+      if (!x) return fail('Submission tidak ditemukan. Muat ulang antrean.');
+      const same = (y) => y.challenge_id === x.challenge_id && y.group_no === x.group_no && (x.target_id
+        ? y.submitted_by === x.submitted_by && y.target_id === x.target_id : !y.target_id && (y.riddle_id ?? null) === (x.riddle_id ?? null));
+      const ids = s.submissions.filter(same).map((y) => y.id);
+      s.submissions = s.submissions.filter((y) => !same(y));
+      save(); return delay({ ids });
+    },
     // Same as adjustScore() on the server.
     async adjustScore(id, score, note) {
       const s = load();

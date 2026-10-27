@@ -150,6 +150,19 @@ export default function ValidationQueue() {
     } catch (e) { setToast(['bad', e.message]); }
   };
 
+  // Super Admin only: delete a submission with all its versions (e.g. test data) — the group starts fresh.
+  const remove = async () => {
+    if (!cur) return;
+    if (!window.confirm(`Hapus “${titleOf(cur)}” beserta semua versinya? Data ini hilang permanen dan grup bisa submit dari awal.`)) return;
+    try {
+      const { ids } = await api.deleteSubmission(cur.id);
+      setSubs((xs) => xs.filter((s) => !ids.includes(s.id)));
+      setSelId(null);
+      reloadScores();
+      setToast(['ok', `Dihapus · ${titleOf(cur)}`]);
+    } catch (e) { setToast(['bad', e.message]); }
+  };
+
   const decide = async (kind) => {
     if (!cur || !review) return;
     if (cur.status !== 'submitted') return setToast(['warn', 'Submission ini sudah diputuskan. Pilih yang masih pending.']);
@@ -314,6 +327,7 @@ export default function ValidationQueue() {
                         onError={(m) => setToast(['bad', m])} />
                     )}
                     {cur.status === 'validated' && canRevalidate && <button className="link" style={{ textAlign: 'left', color: '#7A5410', fontSize: 12 }} onClick={reopen}>↺ Buka lagi — skor dihapus, pengirim bisa mengubahnya</button>}
+                    {auth.can('roles.manage') && <button className="link" style={{ textAlign: 'left', color: '#A23B2A', fontSize: 12 }} onClick={remove}>🗑 Hapus submission ini (semua versi) — untuk data test / salah kirim</button>}
                     {cur.status === 'submitted' && cur.reopened_at && <span style={{ color: '#7A5410' }}><b>Dibuka lagi</b> oleh panitia {fmtWIB(cur.reopened_at)} — pengirim bisa mengubahnya sampai divalidasi ulang.</span>}
                   </div>
                 </div>

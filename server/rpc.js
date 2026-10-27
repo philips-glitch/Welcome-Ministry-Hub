@@ -517,6 +517,21 @@ const methods = {
     await notifyReopen(db, row);
     return subRow(row);
   },
+  // Super Admin only: remove a submission and all its earlier versions (e.g. test data), so the group starts fresh.
+  async deleteSubmission({ db, me }, { id }) {
+    needUser(me);
+    if (!can(me, 'roles.manage')) deny('Hanya Super Admin yang bisa menghapus submission.');
+    const { rows: [s] } = await db.query('select challenge_id, group_no, submitted_by, riddle_id, target_id from submissions where id = $1', [id]);
+    if (!s) bad('Submission tidak ditemukan. Muat ulang antrean.');
+    return db.tx(async (q) => {
+      const { rows } = await q.query(`delete from submissions where challenge_id = $1 and group_no = $2 and ${s.target_id
+        ? 'submitted_by = $3 and target_id = $4' : 'target_id is null and riddle_id is not distinct from $3'} returning id, media_path`,
+      s.target_id ? [s.challenge_id, s.group_no, s.submitted_by, s.target_id] : [s.challenge_id, s.group_no, s.riddle_id]);
+      const paths = rows.map((r) => r.media_path).filter(Boolean);
+      if (paths.length) await q.query('delete from media m where m.path = any($1::text[]) and not exists (select 1 from submissions s where s.media_path = m.path)', [paths]);
+      return { ids: rows.map((r) => r.id) };
+    });
+  },
   // Super Admin / Challenge PIC: change the points of a validated submission, while the event is open or after
   // it closed. A reason is required; every change is kept on the submission and the group is told.
   async adjustScore({ db, me }, { id, score, note }) {
