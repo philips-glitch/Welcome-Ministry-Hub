@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -411,6 +411,11 @@ const methods = {
       const ok = new Set((await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()}`, [me.group_no])).rows.map((r) => r.id));
       row.tagged_ids = [...new Set(row.tagged_ids.filter((id) => ok.has(id)))];
     }
+    // Give and Grow: online participants (Reel links) must be from this group too.
+    if (row.answers?.online && typeof row.answers.online === 'object') {
+      const ok = new Set((await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()}`, [me.group_no])).rows.map((r) => r.id));
+      row.answers = { ...row.answers, online: Object.fromEntries(Object.entries(row.answers.online).filter(([id, link]) => ok.has(id) && String(link || '').trim()).map(([id, link]) => [id, String(link).trim().slice(0, 500)])) };
+    }
     if (row.riddle_id && !(await db.query('select 1 from riddle_draws where challenge_id = $1 and group_no = $2 and riddle_id = $3', [c.id, me.group_no, row.riddle_id])).rows.length) bad('Riddle ini bukan untuk grup kamu.');
 
     let media_path = null, media_name = null;
@@ -450,6 +455,17 @@ const methods = {
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
     // A captain's own entries are validated like anyone's but always score 0.
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
+    // Give and Grow: video rubric + verified participation, computed here with the real team (or a manual score
+    // with a reason, kept within 0–max).
+    else if (withDefaults(before.scoring).type === 'give_grow' && patch.status === 'validated') {
+      const sc = withDefaults(before.scoring);
+      if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(sc), Number(patch.score) || 0)) };
+      else {
+        const team = (await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows.map((r) => r.id);
+        const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team });
+        patch = { ...patch, participant_count: p.participants, score: p.total };
+      }
+    }
     // Skenario 1 riddles: riddle part = full (12.5) / 0, or a manual riddle score with a reason (marks.riddle);
     // participation always follows from the members the leader selected ÷ team size.
     else if (withDefaults(before.scoring).type === 'proportional' && patch.status === 'validated') {

@@ -61,6 +61,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const [answer, setAnswer] = useState('');
   const [answers, setAnswers] = useState({});
   const [tagged, setTagged] = useState(() => new Set());
+  const [online, setOnline] = useState({});   // Give and Grow: member id → Reel link
   const [checks, setChecks] = useState(() => rules.map(() => false));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -70,7 +71,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   useEffect(() => {
     if (!prior) return;
     if (connect) setAnswers({ ...(prior.answers || {}) });
-    else { setIg(prior.ig_url || ''); setAnswer(prior.answers?.answer || ''); setTagged(new Set(prior.tagged_ids || [])); }
+    else { setIg(prior.ig_url || ''); setAnswer(prior.answers?.answer || ''); setTagged(new Set(prior.tagged_ids || [])); setOnline({ ...(prior.answers?.online || {}) }); }
   }, [prior?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const keepPhoto = !file && !!prior?.media_path;
 
@@ -95,9 +96,12 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const tiersDesc = [...(scoring.tiers || [])].sort((a, b) => b.min - a.min);
   const nextTier = scoring.type === 'riddle' ? [...tiersDesc].reverse().find((t) => t.min > n) : null;
   const hint = !nextTier ? 'Tier tertinggi — mantap!' : `Tambah ${nextTier.min - n} orang lagi untuk ${nextTier.pts} poin`;
+  // Give and Grow: offline = tagged; online = members with a Reel link (not already offline). Captains can't be picked.
+  const gg = scoring.type === 'give_grow';
+  const onlineIds = gg ? Object.keys(online).filter((id) => !tagged.has(id)) : [];
   // Skenario 1: participation = members selected ÷ team size × participation_pts (captains can't be picked).
   const prop = scoring.type === 'proportional';
-  const pickList = prop ? data.roster.filter(isPlayer) : data.roster;
+  const pickList = prop || gg ? data.roster.filter(isPlayer) : data.roster;
   const propPart = prop ? proportionalParts(scoring, { participant_count: [...tagged].filter((id) => pickList.some((p) => p.id === id)).length, team_size: pickList.length }).part : null;
   const teamTiers = scoring.type === 'rubric' ? [...(scoring.participation?.tiers || [])].sort((a, b) => b.min - a.min).map((t) => `≥${t.min} org: ${t.pts}`).join(' · ') : null;
   const allChecked = checks.every(Boolean);
@@ -111,9 +115,9 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
     ['Cek aturan', allChecked, false, 'semua aturan'],
   ] : [
     ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
-    ...(form.answer_label ? [['Jawaban', !!answer.trim(), false, 'jawaban']] : []),
+    ...(form.answer_label ? [[form.answer_optional ? 'BTS' : 'Jawaban', !!answer.trim(), !!form.answer_optional, 'jawaban']] : []),
     ...(form.link !== 'none' ? [['Link', !!ig.trim(), form.link === 'optional', form.link_label.toLowerCase()]] : []),
-    ...(form.tags ? [['Tag anggota', n > 0, false, 'tag anggota']] : []),
+    ...(form.tags ? [[gg ? 'Peserta' : 'Tag anggota', gg ? n + onlineIds.length > 0 && onlineIds.every((id) => (online[id] || '').trim()) : n > 0, false, gg ? 'peserta (offline/online) + link Reel' : 'tag anggota']] : []),
     ['Cek aturan', allChecked, false, 'semua aturan'],
   ];
   const missing = steps.filter(([, ok, optional]) => !ok && !optional).map((s) => s[3]);
@@ -146,7 +150,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
         target_id: connect ? person.id : null,
         replaces: connect ? replaces || null : null,
         keep_media: form.photo !== 'none' && keepPhoto,
-        answers: connect ? Object.fromEntries(scoring.questions.map((q) => [q.key, answers[q.key].trim()])) : form.answer_label ? { answer: answer.trim() } : null,
+        answers: connect ? Object.fromEntries(scoring.questions.map((q) => [q.key, answers[q.key].trim()])) : gg ? { answer: answer.trim(), online: Object.fromEntries(onlineIds.map((id) => [id, online[id].trim()])) } : form.answer_label ? { answer: answer.trim() } : null,
       });
       setDone({ ...row, label: connect ? `Kenalan dengan ${person.full_name}` : riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name });
       onSubmitted(row);
@@ -282,6 +286,23 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
                 );
               })}
             </div>
+            {gg && (
+              <div className="col" style={{ gap: 8, marginTop: 6 }}>
+                <span style={h3}>Siapa yang ikut ONLINE (Reel pribadi)?</span>
+                <span className="muted" style={{ fontSize: 12 }}>Untuk anggota yang tidak ikut offline: centang namanya lalu tempel link Reel-nya (15–60 detik, akun pribadi, publik, tag akun Flourish Together). Tiap anggota dihitung sekali.</span>
+                {pickList.filter((p) => !tagged.has(p.id)).map((p) => {
+                  const on = p.id in online;
+                  return (
+                    <div key={p.id} className="row" style={{ gap: 8 }}>
+                      <button aria-pressed={on} onClick={() => setOnline((o) => { const x = { ...o }; if (p.id in x) delete x[p.id]; else x[p.id] = ''; return x; })}
+                        style={{ fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 999, border: '1px solid #DCD2BC', background: on ? '#1F4D3A' : '#FFFDF8', color: on ? '#FBF6EA' : '#3C4A42', flex: 'none' }}>{(p.full_name || '').split(' ')[0]}</button>
+                      {on && <input type="url" inputMode="url" placeholder="Link Reel Instagram" aria-label={`Link Reel ${p.full_name}`} value={online[p.id]} onChange={(e) => setOnline((o) => ({ ...o, [p.id]: e.target.value }))} style={{ ...textField, flex: 1, height: 40, padding: '0 12px' }} />}
+                    </div>
+                  );
+                })}
+                <span className="muted" style={{ fontSize: 12 }}>Total: {n} offline + {onlineIds.length} online dari {pickList.length} anggota.</span>
+              </div>
+            )}
           </section>
         )}
 

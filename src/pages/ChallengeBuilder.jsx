@@ -3,7 +3,7 @@ import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
 import {
-  STATUSES, statusMeta, SECTIONS, SCORING_TYPES, DEFAULT_SCORING, DEFAULT_RUBRIC, DEFAULT_CONNECT, DEFAULT_PROPORTIONAL, GTKM_FIELDS, withDefaults, formOf,
+  STATUSES, statusMeta, SECTIONS, SCORING_TYPES, DEFAULT_SCORING, DEFAULT_RUBRIC, DEFAULT_CONNECT, DEFAULT_PROPORTIONAL, DEFAULT_GIVE_GROW, GTKM_FIELDS, withDefaults, formOf,
   itemMax, teamMax, computeScore, drawRiddles, fmtWIB, toLocalInput, fromLocalInput,
 } from '../lib/game.js';
 
@@ -200,10 +200,10 @@ function ScoringEditor({ challenge, scoring, setScoring, replace }) {
   const num = (v) => (v === '' ? '' : Number(v));
   const ex1 = s.type === 'riddle' && computeScore(s, { location_correct: true, participant_count: 11 });
   const ex2 = s.type === 'riddle' && computeScore(s, { location_correct: false, participant_count: 8 });
-  const computed = ['connect', 'rubric', 'proportional'].includes(s.type);
+  const computed = ['connect', 'rubric', 'proportional', 'give_grow'].includes(s.type);
   const pick = (type) => replace(
     type === 'riddle' ? { ...DEFAULT_SCORING, max: s.max || 10 } : type === 'rubric' ? structuredClone(DEFAULT_RUBRIC)
-      : type === 'proportional' ? { ...DEFAULT_PROPORTIONAL }
+      : type === 'proportional' ? { ...DEFAULT_PROPORTIONAL } : type === 'give_grow' ? structuredClone(DEFAULT_GIVE_GROW)
       : type === 'connect' ? structuredClone(DEFAULT_CONNECT) : { type, max: Number(s.max) || 20 });
   const setRow = (k, i, patch) => setScoring({ [k]: s[k].map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   return (

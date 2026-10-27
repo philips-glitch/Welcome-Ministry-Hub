@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { setDb, getDb, fromPglite } from './db.js';
 import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
-import { connectBreakdown, computeScore, groupPoints } from '../src/lib/game.js';
+import { connectBreakdown, computeScore, groupPoints, giveGrowParts } from '../src/lib/game.js';
 
 process.env.ADMIN_SETUP_PASSWORD = ' "setup-pass-123"\n';   // pasted with quotes + spaces: forgiven
 const lite = new PGlite();
@@ -60,6 +60,19 @@ ok('participation formula: (unique people who submitted + unique people intervie
   assert.equal(computeScore(sc, { location_correct: true, participant_count: 15, team_size: 12 }), 25);   // capped at the team size
 }
 ok('riddle Skenario 1: per riddle 12.5 answer + headcount ÷ team × 12.5 (PDF example = 76)');
+
+// 0c · R3 Give and Grow (rules doc): video rubric 50 + participation 50
+{
+  const sc = { type: 'give_grow' };
+  const team = Array.from({ length: 12 }, (_, i) => 'm' + i);
+  // video 42; 6 offline + 3 online (+1 who did both, counted once) = 9 of 12 → 30; offline +5; BTS video 5 → 82
+  const p = giveGrowParts(sc, { marks: { fit: 18, useful: 12, clear: 8, team: 4, offline: team.slice(0, 6), online: [...team.slice(6, 9), 'm0'], bts: 'video' }, team_ids: team });
+  assert.deepEqual([p.video, p.participants, p.overall, p.offlineBonus, p.bts, p.total], [42, 9, 30, 5, 5, 82]);
+  // online only (no offline bonus), BTS photos = 2, someone outside the team (e.g. a captain) doesn't count
+  const q = giveGrowParts(sc, { marks: { fit: 20, useful: 15, clear: 10, team: 5, online: ['m1', 'CAP'], bts: 'photos' }, team_ids: team });
+  assert.deepEqual([q.participants, q.offlineBonus, q.bts, q.total], [1, 0, 2, 55.333]);
+}
+ok('R3 Give and Grow: video 50 + unique participants ÷ team × 40 + offline 5 + BTS (doc example = 82)');
 
 // 1 · bootstrap + login
 const admin = client();
@@ -223,7 +236,7 @@ for (const who of [kapten2, ana]) {
   assert.deepEqual(await who.call('getDraw', { challengeId: r2.id }), []);
 }
 ok('before it opens, captains and members get no riddles or draw ("Coming soon")');
-await admin.call('saveChallenge', { c: { id: r2.id, status: 'live' } });
+await admin.call('saveChallenge', { c: { id: r2.id, status: 'live', deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
 assert.equal((await kapten2.call('listRiddles', { challengeId: r2.id })).length, 10);
 assert.ok((await ana.call('listNotifications')).some((x) => /Guess, Find, Snap! sudah dibuka/.test(x.title)));
 const seen = await ana.call('listRiddles', { challengeId: r2.id });
@@ -268,6 +281,18 @@ assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { statu
 assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 99 }, override_note: 'salah ketik' } })).score, 16.667);
 await rejects(kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 6 } } }), /wajib pakai alasan/);
 await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, score: 0, checks: [true, true, true] } });
+// R3: the Group Leader submits the official video + BTS link + offline names + online Reel links; the server scores it.
+const r3 = ch.find((c) => c.code === 'R3');
+await admin.call('saveChallenge', { c: { id: r3.id, status: 'live', open_at: new Date(Date.now() - 60e3).toISOString(), deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
+const s3 = await leader.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', tagged_ids: [ids.ana], declaration: true,
+  answers: { answer: 'https://drive/bts', online: { [ids.budi]: 'https://reel/budi', [ids.kapten]: 'https://reel/kapten', [ids.dodi]: 'https://reel/dodi' } } } });
+assert.deepEqual(Object.keys(s3.answers.online).sort(), [ids.budi, ids.kapten].sort());   // Dodi (other group) dropped
+const r3rev = await kapten.call('reviewSubmission', { id: s3.id, patch: { status: 'validated', score: 999, checks: [true, true, true],
+  marks: { fit: 20, useful: 15, clear: 10, team: 5, offline: [ids.ana], online: [ids.budi, ids.kapten], bts: 'photos' } } });
+// video 50 + (Ana, Budi = 2 of 3; captain doesn't count) × 40 = 26.667 + offline 5 + BTS photos 2 = 83.667
+assert.equal(r3rev.score, 83.667); assert.equal(r3rev.participant_count, 2);
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r3.id).points, 83.7);
+ok('R3: leader lists offline + online (Reel) participants; validator verifies; server scores video + participation');
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
@@ -300,6 +325,16 @@ await restart(); await admin.login('angel', 'setup-pass-123');
 const r2after = (await admin.call('listChallenges')).find((x) => x.code === 'R2');
 assert.equal(r2after.scoring.type, 'proportional'); assert.ok(r2after.sections.points_rewards.includes('÷ team size × 12.5'));
 ok('the live R2 switches to Skenario 1 once (only while nothing in R2 is validated)');
+// A database seeded before the R3 update (old rubric, nothing validated) gets the new R3 rules once.
+const r3id = (await admin.call('listChallenges')).find((x) => x.code === 'R3').id;
+await db.query(`update challenges set scoring = '{"type":"rubric","criteria":[]}' where code = 'R3'`);
+await db.query(`update submissions set status = 'submitted' where challenge_id = $1`, [r3id]);
+await db.query(`delete from app_meta where key = 'r3_give_grow'`);
+await restart(); await admin.login('angel', 'setup-pass-123');
+const r3after = (await admin.call('listChallenges')).find((x) => x.code === 'R3');
+assert.equal(r3after.scoring.type, 'give_grow'); assert.equal(new Date(r3after.deadline_at).toISOString(), '2026-11-08T16:59:00.000Z');
+assert.ok(r3after.sections.rules.includes('One member, one participation credit'));
+ok('the live R3 gets the updated rules, scoring and 8 Nov deadline once (only while nothing in R3 is validated)');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });

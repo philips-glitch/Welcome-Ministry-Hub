@@ -283,6 +283,16 @@ function ScoringSummary({ c, scoring: s }) {
       </div>
     );
   }
+  if (s.type === 'give_grow') {
+    const video = s.criteria.reduce((a, k) => a + k.max, 0);
+    return (
+      <div className="col" style={{ gap: 8, fontSize: 13, lineHeight: 1.4 }}>
+        {bar([[video, '#1F4D3A'], [s.overall_pts + s.offline_pts + s.bts_video_pts, '#E3A92B']])}
+        <span><b>Video tim · {video}</b> — {s.criteria.map((k) => `${k.label} ${k.max}`).join(' · ')}</span>
+        <span><b>Partisipasi · {s.overall_pts + s.offline_pts + s.bts_video_pts}</b> — anggota unik (offline + online) ÷ anggota tim × {s.overall_pts} · ada offline +{s.offline_pts} · BTS foto ≥3 +{s.bts_photo_pts} / video ≥15 dtk +{s.bts_video_pts}</span>
+      </div>
+    );
+  }
   if (s.type === 'proportional') {
     const items = c.riddles_per_group > 0 ? c.riddles_per_group : 1;
     return (

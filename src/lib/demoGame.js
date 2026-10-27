@@ -1,7 +1,7 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
 import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore } from './game.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
@@ -335,6 +335,14 @@ export function gameMethods({ load, save, delay, fail }) {
       const sub0 = s.submissions[i];
       const sc = s.challenges.find((c) => c.id === sub0.challenge_id)?.scoring;
       if (playsWithoutPoints(s.profiles.find((p) => p.id === sub0.submitted_by))) patch = { ...patch, score: 0 };
+      else if (withDefaults(sc).type === 'give_grow' && patch.status === 'validated') {
+        if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(sc)), Number(patch.score) || 0)) };
+        else {
+          const team = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).map((p) => p.id);
+          const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team });
+          patch = { ...patch, participant_count: p.participants, score: p.total };
+        }
+      }
       else if (withDefaults(sc).type === 'proportional' && patch.status === 'validated') {
         if (patch.marks?.riddle != null && !String(patch.override_note || '').trim()) return fail('Skor manual riddle wajib pakai alasan.');
         const team = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).map((p) => p.id);

@@ -19,6 +19,7 @@ export const SECTIONS = [
 
 export const SCORING_TYPES = [
   ['riddle', 'Riddle foto', 'Lokasi benar + partisipasi (tier jumlah orang)'],
+  ['give_grow', 'Video + partisipasi (Give and Grow)', 'Rubrik video 50 + partisipasi offline/online, bonus offline & BTS 50'],
   ['proportional', 'Riddle proporsional (Skenario 1)', 'Per riddle: jawaban benar + anggota yang dipilih leader ÷ anggota grup'],
   ['rubric', 'Rubrik + partisipasi tim', 'Nilai per kriteria tiap submission + poin partisipasi tim'],
   ['connect', 'Kenalan (individu)', 'Tiap anggota submit sendiri · rata-rata individu + tingkat partisipasi'],
@@ -54,8 +55,11 @@ export const GTKM_FIELDS = [['words', '3 kata tentang dirinya'], ['enjoy', 'Hal 
 // Riddle scoring "Skenario 1 — Proportional": per riddle, a correct answer earns answer_pts and the photo earns
 // participation_pts × (members in the photo ÷ team size). 4 riddles × (12.5 + 12.5) = 100.
 export const DEFAULT_PROPORTIONAL = { type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 };
+// Give and Grow: official team video (rubric) + participation = unique verified participants (offline ∪ online)
+// ÷ team × overall_pts, + offline_pts if anyone took part offline, + BTS (photos ≥3 / video ≥15 s).
+export const DEFAULT_GIVE_GROW = {"type":"give_grow","criteria":[{"key":"fit","label":"Challenge & fit","max":20,"hint":"Follows Give and Grow and one clear theme."},{"key":"useful","label":"Useful / meaningful content","max":15,"hint":"Gives viewers a meaningful lesson or practical insight."},{"key":"clear","label":"Clarity (easy to understand)","max":10,"hint":"Easy to follow and within 60 seconds."},{"key":"team","label":"Team involvement / execution","max":5,"hint":"Shows genuine team involvement in the making."}],"overall_pts":40,"offline_pts":5,"bts_photo_pts":2,"bts_video_pts":5};
 export const withDefaults = (scoring) => ({
-  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT, proportional: DEFAULT_PROPORTIONAL }[scoring?.type] || {}),
+  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT, proportional: DEFAULT_PROPORTIONAL, give_grow: DEFAULT_GIVE_GROW }[scoring?.type] || {}),
   ...scoring,
 });
 export const isConnect = (c) => c?.scoring?.type === 'connect';
@@ -75,6 +79,7 @@ export function itemMax(scoring) {
   if (s.type === 'connect') return sum(s.questions.map((q) => q.max)) + (Number(s.photo_bonus) || 0);
   if (s.type === 'rubric') return sum(s.criteria.map((c) => c.max));
   if (s.type === 'proportional') return (Number(s.answer_pts) || 0) + (Number(s.participation_pts) || 0);
+  if (s.type === 'give_grow') return sum(s.criteria.map((c) => c.max)) + (Number(s.overall_pts) || 0) + (Number(s.offline_pts) || 0) + Math.max(Number(s.bts_photo_pts) || 0, Number(s.bts_video_pts) || 0);
   return Number(s.max) || 0;
 }
 // Max points one team can earn in a challenge.
@@ -140,11 +145,14 @@ export function marksScore(scoring, marks = {}) {
   const s = withDefaults(scoring);
   if (s.type === 'connect') return round1(sum(s.questions.map((q) => Math.min(q.max, Number(marks[q.key]) || 0))) + (marks.photo ? Number(s.photo_bonus) || 0 : 0));
   if (s.type === 'rubric') return round1(sum(s.criteria.map((c) => Math.min(c.max, Number(marks[c.key]) || 0))));
+  if (s.type === 'give_grow') return giveGrowParts(s, { marks, team_ids: [] }).video;
   return 0;
 }
 export const marksMissing = (scoring, marks = {}) => {
   const s = withDefaults(scoring);
-  return (s.type === 'connect' ? s.questions : s.type === 'rubric' ? s.criteria : []).filter((x) => marks[x.key] == null || marks[x.key] === '');
+  const missing = (s.type === 'connect' ? s.questions : ['rubric', 'give_grow'].includes(s.type) ? s.criteria : []).filter((x) => marks[x.key] == null || marks[x.key] === '');
+  if (s.type === 'give_grow' && !marks.bts) missing.push({ key: 'bts', label: 'BTS' });
+  return missing;
 };
 
 // How a challenge is submitted and reviewed (challenges.form). Missing keys fall back by scoring type.
@@ -154,6 +162,22 @@ export function formOf(c) {
   const t = c?.scoring?.type;
   const base = t === 'connect' ? { photo: 'optional', link: 'none', tags: false } : { photo: 'required', link: t === 'riddle' ? 'required' : 'optional', tags: true };
   return { link_label: 'Link Image', answer_label: null, tag_label: 'Siapa aja di foto?', confirm: null, checks: null, reasons: null, ...base, ...c?.form };
+}
+
+// Give and Grow parts for the team's official submission. marks: rubric criteria + offline / online (verified
+// member ids) + bts ('none' | 'photos' | 'video'). team_ids: the team (members + Group Leaders, no captains).
+export function giveGrowParts(scoring, { marks = {}, team_ids = [] }) {
+  const s = withDefaults(scoring);
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const video = sum(s.criteria.map((c) => Math.min(c.max, Math.max(0, Number(marks[c.key]) || 0))));
+  const team = new Set(team_ids);
+  const offline = [...new Set(marks.offline || [])].filter((id) => team.has(id));
+  const online = [...new Set(marks.online || [])].filter((id) => team.has(id));
+  const participants = new Set([...offline, ...online]).size;
+  const overall = team.size ? r3(Math.min(1, participants / team.size) * (Number(s.overall_pts) || 0)) : 0;
+  const offlineBonus = offline.length ? Number(s.offline_pts) || 0 : 0;
+  const bts = marks.bts === 'video' ? Number(s.bts_video_pts) || 0 : marks.bts === 'photos' ? Number(s.bts_photo_pts) || 0 : 0;
+  return { video, participants, offline: offline.length, online: online.length, overall, offlineBonus, bts, total: r3(video + overall + offlineBonus + bts) };
 }
 
 // Points for one submission under a challenge's scoring rules.
