@@ -293,6 +293,7 @@ export function gameMethods({ load, save, delay, fail }) {
         if (last?.status === 'validated') return fail('Reels kamu sudah divalidasi — tidak bisa dikirim ulang.');
       } else {
         if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
+        if (withDefaults(c.scoring).type === 'give_grow' && me.role_id !== 'group_leader') return fail('Hanya Group Leader yang bisa submit video tim. Kamu bisa ikut lewat Reels pribadi.');
         if (last?.status === 'validated') return fail('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
       }
       // Same path layout as the server: <group>/<id>-<name>.

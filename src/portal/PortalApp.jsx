@@ -55,7 +55,8 @@ export default function PortalApp({ route }) {
   const gr = game.groupOf(profile.group_no);
   const g = gr && [gr.no, gr.name, gr.color];
   // Connect challenges (Get to Know Me) are done by every player; the rest by whoever has portal.submit (Group Leader).
-  const canSubmitFor = (c) => !!g && (isConnect(c) ? isGamePlayer(profile) : can('portal.submit'));
+  // Give and Grow: only the Group Leader role sends the team submission (members only send their own Reels).
+  const canSubmitFor = (c) => !!g && (isConnect(c) ? isGamePlayer(profile) : c?.scoring?.type === 'give_grow' ? profile.role_id === 'group_leader' : can('portal.submit'));
   const me = {
     id: profile.id,
     first: (profile.full_name || profile.username || '').split(' ')[0],

@@ -410,6 +410,8 @@ const methods = {
       if (last?.status === 'validated') bad('Reels kamu sudah divalidasi — tidak bisa dikirim ulang.');
     } else {
       if (!can(me, 'portal.submit')) bad('Hanya Group Leader yang bisa submit challenge ini.');
+      // Give and Grow: the team submission is the Group Leader's only — members take part with their own Reels.
+      if (withDefaults(c.scoring).type === 'give_grow' && me.role_id !== 'group_leader') bad('Hanya Group Leader yang bisa submit video tim. Kamu bisa ikut lewat Reels pribadi.');
       if (last?.status === 'validated') bad('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
     }
     if (last) superseded.push(last);

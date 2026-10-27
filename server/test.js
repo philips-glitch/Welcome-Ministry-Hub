@@ -285,6 +285,10 @@ await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated'
 const r3 = ch.find((c) => c.code === 'R3');
 await admin.call('saveChallenge', { c: { id: r3.id, status: 'live', open_at: new Date(Date.now() - 60e3).toISOString(), deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
 await rejects(budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', declaration: true } }), /Group Leader/);
+// Even if the member role were given the submit permission, the R3 team submission stays the Group Leader's.
+await admin.call('setGrant', { role: 'member', perm: 'portal.submit', on: true });
+await rejects(budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', declaration: true } }), /Hanya Group Leader yang bisa submit video tim/);
+await admin.call('setGrant', { role: 'member', perm: 'portal.submit', on: false });
 const s3 = await leader.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', tagged_ids: [ids.ana], declaration: true, answers: { answer: 'https://drive/bts' } } });
 const reelBudi = await budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://instagram.com/reel/budi', declaration: true, reel: true } });
 assert.equal(reelBudi.target_id, ids.budi);
