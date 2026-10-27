@@ -17,7 +17,8 @@ async function labelOf(q, sub) {
   if (!c) return null;
   const r = sub.riddle_id ? (await q('select no from riddles where id = $1', [sub.riddle_id])).rows[0] : null;
   const first = async (id) => ((await q('select full_name from profiles where id = $1', [id])).rows[0]?.full_name || '?').split(' ')[0];
-  return { c, label: `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${await first(sub.submitted_by)} → ${await first(sub.target_id)}` : ''}` };
+  const who = !sub.target_id ? '' : sub.target_id === sub.submitted_by ? ` · Reels ${await first(sub.submitted_by)}` : ` · ${await first(sub.submitted_by)} → ${await first(sub.target_id)}`;
+  return { c, label: `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${who}` };
 }
 
 export async function notifyReview(db, sub) {

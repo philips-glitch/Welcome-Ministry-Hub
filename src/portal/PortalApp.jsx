@@ -62,6 +62,8 @@ export default function PortalApp({ route }) {
     roleName: roleName(profile.role_id),
     group: g && { no: g[0], name: g[1], color: g[2] },
     canSubmit: canSubmitFor(challenge),
+    // Give and Grow: every group member can submit their own Reels.
+    canReel: !!g && challenge?.scoring?.type === 'give_grow' && isGamePlayer(profile),
     noPoints: playsWithoutPoints(profile),
   };
   const data = useGroupChallenge(challenge, me.group?.no);
@@ -86,7 +88,7 @@ export default function PortalApp({ route }) {
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id, swap = null) => { setRiddleId(id); setReplaces(swap); go('submit'); }} />;
-  else if (page === 'submit') content = me.canSubmit ? <Submit key={challenge?.id + ':' + riddleId + ':' + replaces} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} replaces={replaces} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
+  else if (page === 'submit') content = me.canSubmit || (riddleId === 'reel' && me.canReel) ? <Submit key={challenge?.id + ':' + riddleId + ':' + replaces} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} replaces={replaces} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
   else if (page === 'leaderboard') content = <Leaderboard me={me} standings={standings} />;
   else if (page === 'games') content = <MiniGames />;
   else if (page === 'notifications') content = <Notifications notif={notif} openChallenge={openChallenge} />;

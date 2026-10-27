@@ -255,13 +255,14 @@ export function gameMethods({ load, save, delay, fail }) {
     // Same checks as prepare_submission() in SQL.
     // Same rules as the server: an entry can be re-sent until the deadline unless it's validated; a pending
     // previous version is replaced (and a pending Get to Know Me entry can be switched to someone else).
-    async createSubmission({ file, replaces, keep_media, ...sub }) {
+    async createSubmission({ file, replaces, keep_media, reel, ...sub }) {
       const s = load();
       const c = s.challenges.find((x) => x.id === sub.challenge_id);
       if (!c) return fail('Challenge ini sedang tidak menerima submission.');
       const me = s.profiles.find((p) => p.id === s.sessionId);
       if (!me?.active || me.group_no !== sub.group_no) return fail('Hanya bisa submit untuk grup sendiri.');
-      const row0 = { riddle_id: null, target_id: null, ...sub, submitted_by: s.sessionId };
+      const isReel = withDefaults(c.scoring).type === 'give_grow' && reel === true;
+      const row0 = { riddle_id: null, target_id: null, ...sub, ...(isReel ? { target_id: s.sessionId, riddle_id: null, tagged_ids: [], answers: null } : {}), submitted_by: s.sessionId };
       const unit = s.submissions.filter((x) => x.challenge_id === sub.challenge_id && x.group_no === sub.group_no);
       const lastOf = (key) => unit.filter((x) => unitKey(x) === key).sort((a, b) => b.version - a.version)[0];
       const last = lastOf(unitKey(row0));
@@ -286,6 +287,10 @@ export function gameMethods({ load, save, delay, fail }) {
         const active = new Set(mine.map((x) => x.target_id)
           .filter((tid) => tid !== t.id && tid !== swap?.target_id && ['submitted', 'validated'].includes(lastOf(`${me.id}>${tid}`).status)));
         if (active.size >= withDefaults(c.scoring).people) return fail(`Maksimal ${withDefaults(c.scoring).people} orang per member.`);
+      } else if (isReel) {
+        if (!isGamePlayer(me)) return fail('Reels hanya untuk peserta grup.');
+        if (!sub.ig_url) return fail('Tempel link Reels kamu.');
+        if (last?.status === 'validated') return fail('Reels kamu sudah divalidasi — tidak bisa dikirim ulang.');
       } else {
         if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
         if (last?.status === 'validated') return fail('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
@@ -335,11 +340,13 @@ export function gameMethods({ load, save, delay, fail }) {
       const sub0 = s.submissions[i];
       const sc = s.challenges.find((c) => c.id === sub0.challenge_id)?.scoring;
       if (playsWithoutPoints(s.profiles.find((p) => p.id === sub0.submitted_by))) patch = { ...patch, score: 0 };
+      else if (withDefaults(sc).type === 'give_grow' && sub0.target_id && patch.status === 'validated') patch = { ...patch, score: 0, marks: null };
       else if (withDefaults(sc).type === 'give_grow' && patch.status === 'validated') {
         if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(sc)), Number(patch.score) || 0)) };
         else {
           const team = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).map((p) => p.id);
-          const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team });
+          const reels = s.submissions.filter((x) => x.challenge_id === sub0.challenge_id && x.group_no === sub0.group_no && x.target_id && x.status === 'validated').map((x) => x.submitted_by);
+          const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team, online_ids: reels });
           patch = { ...patch, participant_count: p.participants, score: p.total };
         }
       }

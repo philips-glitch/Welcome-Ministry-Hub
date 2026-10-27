@@ -189,6 +189,18 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                 : <button className="p-btn-lg" disabled style={{ background: '#E2DACA', color: '#6B665A', cursor: 'not-allowed' }}>{!open ? (soon ? SOON : 'Submit ditutup') : single?.status === 'validated' ? 'Sudah divalidasi' : 'Submit oleh Group Leader'}</button>}
             </section>
           )}
+          {scoring.type === 'give_grow' && me.group && (() => {
+            const mine = data.subs.filter((x) => x.target_id && x.target_id === me.id && x.submitted_by === me.id).sort((a, b) => b.version - a.version)[0];
+            const can = me.canReel && ((open && mine?.status !== 'validated') || lateOk(mine));
+            return (
+              <section className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <span className="p-h">Reels kamu (partisipasi online)</span>
+                <span className="muted" style={{ fontSize: 13 }}>{soon ? SOON : !mine ? 'Tidak ikut shooting offline? Upload Reels di akun Instagram pribadimu, lalu kirim link-nya di sini.' : `Status: ${STATUS[mine.status]}${mine.reject_reason ? ` · “${mine.reject_reason}”` : ''}${mine.reviewed_by_name ? ' ·' : ''}`}{mine?.reviewed_by_name && <> {mine.status === 'validated' ? 'disetujui' : 'ditinjau'}{by(mine)}</>}</span>
+                {mine?.ig_url && <a href={mine.ig_url.startsWith('http') ? mine.ig_url : 'https://' + mine.ig_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 700, color: '#1F4D3A', overflowWrap: 'anywhere' }}>▶ {mine.ig_url}</a>}
+                {can && <button className="p-btn-lg" onClick={() => pickRiddle('reel')} style={{ background: '#E3A92B', color: '#1B2620' }}>{mine ? (mine.status === 'submitted' ? 'Ubah link Reels' : 'Kirim ulang Reels') : 'Kirim link Reels'}</button>}
+              </section>
+            );
+          })()}
           <span className="muted" style={{ fontSize: 12 }}>
             {!open ? (soon ? SOON : 'Challenge ini sudah ditutup.')
               : connect ? (me.noPoints ? 'Kamu captain: ikut main seperti member, tapi tanpa poin — skor kamu selalu 0 dan tidak dihitung ke poin grup.' : me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia. Selama belum divalidasi, kamu bisa ubah sampai deadline.' : 'Challenge ini dikerjakan tiap peserta grup.')

@@ -368,9 +368,11 @@ const methods = {
     if (!me.active || !me.group_no || me.group_no !== sub.group_no) bad('Hanya bisa submit untuk grup sendiri.');
     const onTime = c.status === 'live' && !(c.deadline_at && Date.now() > new Date(c.deadline_at).getTime());
     const connect = isConnect(c);
+    // Give and Grow: a member's own Reels link is a submission of its own (one per member).
+    const reel = withDefaults(c.scoring).type === 'give_grow' && sub.reel === true;
     const row = {
       challenge_id: c.id, group_no: me.group_no, submitted_by: me.id,
-      riddle_id: connect ? null : sub.riddle_id || null, target_id: connect ? sub.target_id || null : null,
+      riddle_id: connect || reel ? null : sub.riddle_id || null, target_id: connect ? sub.target_id || null : reel ? me.id : null,
       ig_url: sub.ig_url || null, tagged_ids: Array.isArray(sub.tagged_ids) ? sub.tagged_ids : [],
       answers: sub.answers || null, declaration: !!sub.declaration,
     };
@@ -401,6 +403,11 @@ const methods = {
         .filter((tid) => tid !== t.id && tid !== swap?.target_id && ['submitted', 'validated'].includes(lastOf(`${me.id}>${tid}`).status)));
       const people = withDefaults(c.scoring).people;
       if (active.size >= people) bad(`Maksimal ${people} orang per member.`);
+    } else if (reel) {
+      if (!isGamePlayer(me)) bad('Reels hanya untuk peserta grup.');
+      if (!row.ig_url) bad('Tempel link Reels kamu.');
+      row.tagged_ids = []; row.answers = null;
+      if (last?.status === 'validated') bad('Reels kamu sudah divalidasi — tidak bisa dikirim ulang.');
     } else {
       if (!can(me, 'portal.submit')) bad('Hanya Group Leader yang bisa submit challenge ini.');
       if (last?.status === 'validated') bad('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
@@ -449,7 +456,7 @@ const methods = {
   async reviewSubmission({ db, me }, { id, patch }) {
     needUser(me);
     if (!can(me, 'submissions.validate')) deny();
-    const { rows: [before] } = await db.query(`select s.status, s.group_no, s.tagged_ids, p.role_id as by_role, c.scoring from submissions s
+    const { rows: [before] } = await db.query(`select s.status, s.group_no, s.tagged_ids, s.target_id, s.challenge_id, p.role_id as by_role, c.scoring from submissions s
       join challenges c on c.id = s.challenge_id left join profiles p on p.id = s.submitted_by where s.id = $1`, [id]);
     if (!before) bad('Submission ini sudah diganti pengirimnya dengan versi baru. Muat ulang antrean.');
     if (validatesOnly(me) !== null && before.group_no !== validatesOnly(me)) deny('Captain hanya bisa memvalidasi submission dari grupnya sendiri.');
@@ -457,12 +464,15 @@ const methods = {
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
     // Give and Grow: video rubric + verified participation, computed here with the real team (or a manual score
     // with a reason, kept within 0–max).
+    // A member's Reels earns no points itself — it counts as that member's participation.
+    else if (withDefaults(before.scoring).type === 'give_grow' && before.target_id && patch.status === 'validated') patch = { ...patch, score: 0, marks: null };
     else if (withDefaults(before.scoring).type === 'give_grow' && patch.status === 'validated') {
       const sc = withDefaults(before.scoring);
       if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(sc), Number(patch.score) || 0)) };
       else {
         const team = (await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows.map((r) => r.id);
-        const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team });
+        const reels = (await db.query(`select distinct submitted_by from submissions where challenge_id = $1 and group_no = $2 and target_id is not null and status = 'validated'`, [before.challenge_id, before.group_no])).rows.map((r) => r.submitted_by);
+        const p = giveGrowParts(sc, { marks: patch.marks || {}, team_ids: team, online_ids: reels });
         patch = { ...patch, participant_count: p.participants, score: p.total };
       }
     }
@@ -520,7 +530,7 @@ const methods = {
     needUser(me);
     const challenges = (await db.query(`select * from challenges where status <> 'draft'`)).rows;
     // version: only the latest validated version of each entry counts.
-    const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score, version from submissions where status = 'validated'`)).rows.map(subRow);
+    const valid = (await db.query(`select status, challenge_id, group_no, submitted_by, target_id, riddle_id, tagged_ids, score, version, marks, override_note from submissions where status = 'validated'`)).rows.map(subRow);
     // Captains play without points: not in the roster count, and their entries/tags are skipped.
     const roster = {};
     (await db.query(`select group_no, count(*)::int as n from profiles where ${GAME_PLAYER_SQL()} and role_id <> 'captain' group by group_no`)).rows

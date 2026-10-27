@@ -281,18 +281,24 @@ assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { statu
 assert.equal((await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 99 }, override_note: 'salah ketik' } })).score, 16.667);
 await rejects(kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', marks: { riddle: 6 } } }), /wajib pakai alasan/);
 await kapten.call('reviewSubmission', { id: s2b.id, patch: { status: 'validated', location_correct: true, score: 0, checks: [true, true, true] } });
-// R3: the Group Leader submits the official video + BTS link + offline names + online Reel links; the server scores it.
+// R3: the Group Leader submits the official video + BTS + offline names; members submit their own Reels.
 const r3 = ch.find((c) => c.code === 'R3');
 await admin.call('saveChallenge', { c: { id: r3.id, status: 'live', open_at: new Date(Date.now() - 60e3).toISOString(), deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
-const s3 = await leader.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', tagged_ids: [ids.ana], declaration: true,
-  answers: { answer: 'https://drive/bts', online: { [ids.budi]: 'https://reel/budi', [ids.kapten]: 'https://reel/kapten', [ids.dodi]: 'https://reel/dodi' } } } });
-assert.deepEqual(Object.keys(s3.answers.online).sort(), [ids.budi, ids.kapten].sort());   // Dodi (other group) dropped
-const r3rev = await kapten.call('reviewSubmission', { id: s3.id, patch: { status: 'validated', score: 999, checks: [true, true, true],
-  marks: { fit: 20, useful: 15, clear: 10, team: 5, offline: [ids.ana], online: [ids.budi, ids.kapten], bts: 'photos' } } });
-// video 50 + (Ana, Budi = 2 of 3; captain doesn't count) × 40 = 26.667 + offline 5 + BTS photos 2 = 83.667
-assert.equal(r3rev.score, 83.667); assert.equal(r3rev.participant_count, 2);
+await rejects(budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', declaration: true } }), /Group Leader/);
+const s3 = await leader.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://video', tagged_ids: [ids.ana], declaration: true, answers: { answer: 'https://drive/bts' } } });
+const reelBudi = await budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://instagram.com/reel/budi', declaration: true, reel: true } });
+assert.equal(reelBudi.target_id, ids.budi);
+const reelKapten = await kapten.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: 'https://instagram.com/reel/kapten', declaration: true, reel: true } });
+await rejects(budi.call('createSubmission', { sub: { challenge_id: r3.id, group_no: '01', ig_url: '', declaration: true, reel: true } }), /link Reels/);
+const marks = { fit: 20, useful: 15, clear: 10, team: 5, offline: [ids.ana], bts: 'photos' };
+// Official first: only Ana (offline) so far → 50 + 1/3 × 40 + 5 + 2 = 70.333
+assert.equal((await kapten.call('reviewSubmission', { id: s3.id, patch: { status: 'validated', score: 999, checks: [true, true, true], marks } })).score, 70.333);
+// Budi's and the captain's Reels approved later: no points of their own; Budi now counts online, the captain never does
+assert.equal((await kapten.call('reviewSubmission', { id: reelBudi.id, patch: { status: 'validated', score: 12, checks: [true] } })).score, 0);
+await kapten.call('reviewSubmission', { id: reelKapten.id, patch: { status: 'validated', checks: [true] } });
+// team: 50 + (Ana offline + Budi online = 2 of 3) × 40 = 26.667 + 5 + 2 = 83.667 → 83.7
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r3.id).points, 83.7);
-ok('R3: leader lists offline + online (Reel) participants; validator verifies; server scores video + participation');
+ok('R3: leader submits video + BTS + offline; members submit own Reels; approved Reels count online (captains never)');
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
@@ -334,6 +340,8 @@ await restart(); await admin.login('angel', 'setup-pass-123');
 const r3after = (await admin.call('listChallenges')).find((x) => x.code === 'R3');
 assert.equal(r3after.scoring.type, 'give_grow'); assert.equal(new Date(r3after.deadline_at).toISOString(), '2026-11-08T16:59:00.000Z');
 assert.ok(r3after.sections.rules.includes('One member, one participation credit'));
+assert.deepEqual(r3after.form.reel_confirm, ['Satu video resmi tim, maksimal 60 detik', 'IG tidak diprivate dan sudah ditag ke akun IG flourishtogether.ur']);
+assert.equal(r3after.form.confirm.length, 2); assert.ok(r3after.sections.flourish_hub.includes('Reels kamu'));
 ok('the live R3 gets the updated rules, scoring and 8 Nov deadline once (only while nothing in R3 is validated)');
 
 // 8 · passwords: reset signs the person out; super admin protected

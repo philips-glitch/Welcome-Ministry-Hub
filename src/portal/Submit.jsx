@@ -22,7 +22,9 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const open = c && c.status === 'live' && (!c.deadline_at || new Date(c.deadline_at).getTime() > nowMs());
   // After the deadline only what an admin reopened can still be changed (until it's validated again).
   const reopenedOk = (x) => !!x?.reopened_at && x.status !== 'validated' && ['live', 'closed'].includes(c?.status);
-  const rules = form.confirm?.length ? form.confirm : submitRules(me);
+  // Give and Grow: riddleId 'reel' = a member submits their own Reels link.
+  const reelMode = c?.scoring?.type === 'give_grow' && riddleId === 'reel';
+  const rules = reelMode && form.reel_confirm?.length ? form.reel_confirm : form.confirm?.length ? form.confirm : submitRules(me);
 
   // Until the deadline anything not yet validated can be (re)sent. Riddles: not sent yet, pending, or rejected.
   const sendable = useMemo(() => (riddleMode ? data.draw : [])
@@ -51,7 +53,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const person = connect && !blocked(target) ? pickable.find((p) => p.id === target) : null;
   const prevForPerson = person && data.subs.filter((x) => x.submitted_by === me.id && x.target_id === person.id).sort((a, b) => b.version - a.version)[0];
   // The version this one replaces (same person / riddle / challenge, not validated): prefill it, keep its photo.
-  const prior = connect ? (prevForPerson?.status !== 'validated' ? prevForPerson : null) : riddleMode ? cur?.sub || null : data.latest(null);
+  const prior = reelMode ? data.subs.filter((x) => x.target_id === me.id && x.submitted_by === me.id).sort((a, b) => b.version - a.version)[0] || null : connect ? (prevForPerson?.status !== 'validated' ? prevForPerson : null) : riddleMode ? cur?.sub || null : data.latest(null);
 
   const [file, setFile] = useState(null);
   const [origSize, setOrigSize] = useState(null);
@@ -98,7 +100,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const hint = !nextTier ? 'Tier tertinggi — mantap!' : `Tambah ${nextTier.min - n} orang lagi untuk ${nextTier.pts} poin`;
   // Give and Grow: offline = tagged; online = members with a Reel link (not already offline). Captains can't be picked.
   const gg = scoring.type === 'give_grow';
-  const onlineIds = gg ? Object.keys(online).filter((id) => !tagged.has(id)) : [];
+  const onlineIds = [];
   // Skenario 1: participation = members selected ÷ team size × participation_pts (captains can't be picked).
   const prop = scoring.type === 'proportional';
   const pickList = prop || gg ? data.roster.filter(isPlayer) : data.roster;
@@ -108,7 +110,10 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
   const answersDone = connect && scoring.questions.every((q) => (answers[q.key] || '').trim());
 
   // [label, ok, optional, missing-label]
-  const steps = connect ? [
+  const steps = reelMode ? [
+    ['Link Reels', !!ig.trim(), false, 'link Reels'],
+    ['Cek aturan', allChecked, false, 'semua aturan'],
+  ] : connect ? [
     ['Orang', !!person, false, 'pilih orang'],
     ['Jawaban', answersDone, false, 'semua jawaban'],
     ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
@@ -117,7 +122,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
     ...(form.photo !== 'none' ? [['Foto', !!file || keepPhoto, form.photo === 'optional', 'foto']] : []),
     ...(form.answer_label ? [[form.answer_optional ? 'BTS' : 'Jawaban', !!answer.trim(), !!form.answer_optional, 'jawaban']] : []),
     ...(form.link !== 'none' ? [['Link', !!ig.trim(), form.link === 'optional', form.link_label.toLowerCase()]] : []),
-    ...(form.tags ? [[gg ? 'Peserta' : 'Tag anggota', gg ? n + onlineIds.length > 0 && onlineIds.every((id) => (online[id] || '').trim()) : n > 0, false, gg ? 'peserta (offline/online) + link Reel' : 'tag anggota']] : []),
+    ...(form.tags ? [[gg ? 'Offline' : 'Tag anggota', n > 0, gg, gg ? 'anggota offline' : 'tag anggota']] : []),
     ['Cek aturan', allChecked, false, 'semua aturan'],
   ];
   const missing = steps.filter(([, ok, optional]) => !ok && !optional).map((s) => s[3]);
@@ -150,7 +155,8 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
         target_id: connect ? person.id : null,
         replaces: connect ? replaces || null : null,
         keep_media: form.photo !== 'none' && keepPhoto,
-        answers: connect ? Object.fromEntries(scoring.questions.map((q) => [q.key, answers[q.key].trim()])) : gg ? { answer: answer.trim(), online: Object.fromEntries(onlineIds.map((id) => [id, online[id].trim()])) } : form.answer_label ? { answer: answer.trim() } : null,
+        answers: connect ? Object.fromEntries(scoring.questions.map((q) => [q.key, answers[q.key].trim()])) : reelMode ? null : form.answer_label ? { answer: answer.trim() } : null,
+        ...(reelMode ? { reel: true, tagged_ids: [] } : {}),
       });
       setDone({ ...row, label: connect ? `Kenalan dengan ${person.full_name}` : riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name });
       onSubmitted(row);
@@ -181,7 +187,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
       <div className="p-stack">
         <div className="row">
           <button onClick={() => go('challenge')} aria-label="Kembali" className="p-icon-btn" style={{ fontSize: 20 }}>‹</button>
-          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>{connect ? (person ? `Kenalan: ${person.full_name.split(' ')[0]}` : replaces ? 'Ganti orang' : 'Kenalan baru') : `Submit ${riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name}`}</span><span className="muted" style={{ fontSize: 12 }}>{c.name} · {me.group.name}</span></div>
+          <div className="col"><span style={{ font: "800 22px 'Bricolage Grotesque'" }}>{connect ? (person ? `Kenalan: ${person.full_name.split(' ')[0]}` : replaces ? 'Ganti orang' : 'Kenalan baru') : reelMode ? 'Kirim Reels kamu' : `Submit ${riddleMode ? `Riddle ${cur?.r?.no ?? ''}` : c.name}`}</span><span className="muted" style={{ fontSize: 12 }}>{c.name} · {me.group.name}</span></div>
         </div>
         {riddleMode && sendable.length > 1 && (
           <label className="col" style={{ gap: 6, fontSize: 13, fontWeight: 700 }}>Riddle
@@ -240,23 +246,23 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
 
         {!connect && photoBlock()}
 
-        {form.answer_label && (
+        {form.answer_label && !reelMode && (
           <section className="col" style={{ gap: 10 }}>
             <span style={h3}>{step(form.answer_label)}</span>
-            <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Menurut kalian, jawabannya apa?" aria-label={form.answer_label} style={{ ...textField, height: 52, padding: '0 14px' }} />
+            <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={gg ? "https://drive.google.com/…" : "Menurut kalian, jawabannya apa?"} aria-label={form.answer_label} style={{ ...textField, height: 52, padding: '0 14px' }} />
           </section>
         )}
 
         {form.link !== 'none' && (
           <section className="col" style={{ gap: 10 }}>
-            <span style={h3}>{step(form.link_label + (form.link === 'optional' ? ' (opsional)' : ''))}</span>
-            <input type="url" inputMode="url" placeholder="https://…" value={ig} onChange={(e) => setIg(e.target.value)} aria-label={form.link_label}
+            <span style={h3}>{step(reelMode ? form.reel_link_label || 'Link Reels Instagram' : form.link_label + (form.link === 'optional' ? ' (opsional)' : ''))}</span>
+            <input type="url" inputMode="url" placeholder={reelMode ? 'https://www.instagram.com/reel/…' : 'https://…'} value={ig} onChange={(e) => setIg(e.target.value)} aria-label={reelMode ? 'Link Reels' : form.link_label}
               style={{ ...textField, height: 52, padding: '0 14px', borderColor: ig.trim() ? '#2F7A55' : '#DCD2BC' }} />
-            <span className="muted" style={{ fontSize: 12 }}>{form.photo === 'none' ? 'Tempel link yang bisa dibuka panitia, mis. IG Story atau Google Drive.' : 'Tempel link gambar, mis. Google Drive, Google Photos, atau Instagram.'}</span>
+            <span className="muted" style={{ fontSize: 12 }}>{reelMode ? form.reel_hint || 'Reels di akun IG pribadi — bukan IG Story.' : form.photo === 'none' ? 'Tempel link yang bisa dibuka panitia, mis. IG Story atau Google Drive.' : 'Tempel link gambar, mis. Google Drive, Google Photos, atau Instagram.'}</span>
           </section>
         )}
 
-        {form.tags && !connect && (
+        {form.tags && !connect && !reelMode && (
           <section className="col" style={{ gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <span style={h3}>{step(form.tag_label)}</span>
@@ -286,7 +292,7 @@ export default function Submit({ go, me, challenge: c, data, riddleId, replaces,
                 );
               })}
             </div>
-            {gg && (
+            {false && (
               <div className="col" style={{ gap: 8, marginTop: 6 }}>
                 <span style={h3}>Siapa yang ikut ONLINE (Reel pribadi)?</span>
                 <span className="muted" style={{ fontSize: 12 }}>Untuk anggota yang tidak ikut offline: centang namanya lalu tempel link Reel-nya (15–60 detik, akun pribadi, publik, tag akun Flourish Together). Tiap anggota dihitung sekali.</span>

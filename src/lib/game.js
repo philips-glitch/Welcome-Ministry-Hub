@@ -135,6 +135,13 @@ export function groupPoints(c, subs, rosterSize, noPoints = new Set()) {
   const valid = latestPerUnit(subs.filter((x) => x.status === 'validated' && !noPoints.has(x.submitted_by)));
   if (!valid.length) return 0;
   if (s.type === 'connect') return connectBreakdown(s, valid, rosterSize, noPoints).points;
+  // Give and Grow: the official team video (+ its BTS / offline) and the members' validated Reels together.
+  if (s.type === 'give_grow') {
+    const official = valid.find((x) => !x.target_id);
+    const reels = valid.filter((x) => x.target_id).map((x) => x.submitted_by);
+    if (official?.marks && official.override_note == null) return round1(giveGrowParts(s, { marks: official.marks, team_size: rosterSize, online_ids: reels, exclude: noPoints }).total);
+    return round1((official ? Number(official.score) || 0 : 0) + (official ? 0 : giveGrowParts(s, { team_size: rosterSize, online_ids: reels, exclude: noPoints }).total));
+  }
   const base = sum(valid.map((x) => x.score));
   if (s.type !== 'rubric') return round1(base);
   return round1(base + tierPoints(s.participation?.tiers, new Set(valid.flatMap((x) => (x.tagged_ids || []).filter((id) => !noPoints.has(id)))).size));
@@ -166,15 +173,19 @@ export function formOf(c) {
 
 // Give and Grow parts for the team's official submission. marks: rubric criteria + offline / online (verified
 // member ids) + bts ('none' | 'photos' | 'video'). team_ids: the team (members + Group Leaders, no captains).
-export function giveGrowParts(scoring, { marks = {}, team_ids = [] }) {
+// online_ids: members whose own Reels submission is validated. Either team_ids (who counts) or team_size +
+// exclude (people who don't count, i.e. captains) describe the team.
+export function giveGrowParts(scoring, { marks = {}, team_ids = null, team_size = 0, online_ids = [], exclude = new Set() }) {
   const s = withDefaults(scoring);
   const r3 = (x) => Math.round(x * 1000) / 1000;
   const video = sum(s.criteria.map((c) => Math.min(c.max, Math.max(0, Number(marks[c.key]) || 0))));
-  const team = new Set(team_ids);
-  const offline = [...new Set(marks.offline || [])].filter((id) => team.has(id));
-  const online = [...new Set(marks.online || [])].filter((id) => team.has(id));
+  const team = team_ids ? new Set(team_ids) : null;
+  const counts = (id) => (team ? team.has(id) : !exclude.has(id));
+  const size = team ? team.size : Number(team_size) || 0;
+  const offline = [...new Set(marks.offline || [])].filter(counts);
+  const online = [...new Set([...(marks.online || []), ...online_ids])].filter(counts);
   const participants = new Set([...offline, ...online]).size;
-  const overall = team.size ? r3(Math.min(1, participants / team.size) * (Number(s.overall_pts) || 0)) : 0;
+  const overall = size ? r3(Math.min(1, participants / size) * (Number(s.overall_pts) || 0)) : 0;
   const offlineBonus = offline.length ? Number(s.offline_pts) || 0 : 0;
   const bts = marks.bts === 'video' ? Number(s.bts_video_pts) || 0 : marks.bts === 'photos' ? Number(s.bts_photo_pts) || 0 : 0;
   return { video, participants, offline: offline.length, online: online.length, overall, offlineBonus, bts, total: r3(video + overall + offlineBonus + bts) };

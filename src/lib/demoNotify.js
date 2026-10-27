@@ -20,7 +20,7 @@ export function notifyReview(s, sub, at) {
   if (!c) return;
   const r = s.riddles.find((x) => x.id === sub.riddle_id);
   const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
-  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${!sub.target_id ? '' : sub.target_id === sub.submitted_by ? ` · Reels ${first(sub.submitted_by)}` : ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}`}`;
   const base = { kind: 'review', challenge_id: c.id, group_no: sub.group_no };
   // A reopened submission can be validated again: that's a new notification.
   const again = sub.reopened_at ? `:${new Date(sub.reopened_at).getTime()}` : '';
@@ -35,7 +35,7 @@ export function notifyAdjust(s, sub, e, at) {
   if (!c) return;
   const r = s.riddles.find((x) => x.id === sub.riddle_id);
   const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
-  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${!sub.target_id ? '' : sub.target_id === sub.submitted_by ? ` · Reels ${first(sub.submitted_by)}` : ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}`}`;
   push(s, { kind: 'review', challenge_id: c.id, group_no: sub.group_no, title: 'Poin diubah panitia',
     body: `${label}: ${e.from ?? 0} → ${e.to} poin. Alasan: ${e.note}`, tone: 'info',
     dedupe_key: `adjust:${sub.id}:${new Date(e.at).getTime()}` }, at);
@@ -47,7 +47,7 @@ export function notifyReopen(s, sub, at) {
   if (!c) return;
   const r = s.riddles.find((x) => x.id === sub.riddle_id);
   const first = (id) => (s.profiles.find((p) => p.id === id)?.full_name || '?').split(' ')[0];
-  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${sub.target_id ? ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}` : ''}`;
+  const label = `${c.code} · ${c.name}${r ? ` · Riddle ${r.no}` : ''}${!sub.target_id ? '' : sub.target_id === sub.submitted_by ? ` · Reels ${first(sub.submitted_by)}` : ` · ${first(sub.submitted_by)} → ${first(sub.target_id)}`}`;
   push(s, { kind: 'review', challenge_id: c.id, group_no: sub.group_no, title: 'Submission dibuka lagi',
     body: `${label}: panitia membuka lagi submission ini. Bisa diubah sampai divalidasi ulang.`, tone: 'warn',
     dedupe_key: `reopen:${sub.id}:${new Date(sub.reopened_at).getTime()}` }, at);

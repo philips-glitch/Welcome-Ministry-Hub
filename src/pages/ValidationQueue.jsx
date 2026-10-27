@@ -55,8 +55,11 @@ export default function ValidationQueue() {
   const scoring = withDefaults(challenge?.scoring);
   const form = formOf(challenge);
   const connect = isConnect(challenge);
-  const checksList = form.checks?.length ? form.checks : CHECKS;
-  const reasons = form.reasons?.length ? form.reasons : REASONS;
+  // Give and Grow: a member's own Reels (target = themselves) is checked on its own list and earns no points.
+  const isReelSub = (s) => scoring.type === 'give_grow' && !!s?.target_id && s.target_id === s.submitted_by;
+  const curReel = isReelSub(subs?.find((x) => x.id === selId));
+  const checksList = curReel && form.reel_checks?.length ? form.reel_checks : form.checks?.length ? form.checks : CHECKS;
+  const reasons = curReel && form.reel_reasons?.length ? form.reel_reasons : form.reasons?.length ? form.reasons : REASONS;
   const max = itemMax(scoring);
 
   useEffect(() => {
@@ -111,19 +114,22 @@ export default function ValidationQueue() {
   // Skenario 1: participation = members the Group Leader selected (captains don't count).
   const picked = cur && prop ? new Set(cur.tagged_ids.filter((id) => members.some((p) => p.id === id && isPlayer(p) && p.group_no === cur.group_no))).size : 0;
   // Give and Grow: video rubric + verified participation (offline ∪ online) ÷ team + offline bonus + BTS.
-  const gg = scoring.type === 'give_grow';
-  const ggParts = cur && review && gg ? giveGrowParts(scoring, { marks: review.marks, team_ids: members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).map((p) => p.id) }) : null;
+  const reelSub = !!cur && isReelSub(cur);
+  const gg = scoring.type === 'give_grow' && !reelSub;
+  // Online participation = members of this group whose Reels is validated.
+  const reelers = gg && cur ? (subs || []).filter((x) => isReelSub(x) && x.group_no === cur.group_no && x.status === 'validated').map((x) => x.submitted_by) : [];
+  const ggParts = cur && review && gg ? giveGrowParts(scoring, { marks: review.marks, team_ids: members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).map((p) => p.id), online_ids: reelers }) : null;
   const toggleId = (k, id) => setMark(k, (review.marks[k] || []).includes(id) ? review.marks[k].filter((x) => x !== id) : [...(review.marks[k] || []), id]);
   // Riddle part: "Skor penuh riddle" (full) or a manual riddle score with a reason; participation stays automatic.
   const riddleManual = prop && review?.override && review.overrideScore !== '' ? Number(review.overrideScore) : null;
   const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: prop ? picked : review.count, manual: review.manual, marks: review.marks, team_size: teamSize, answer_score: riddleManual }) : 0;
   const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: picked, team_size: teamSize, answer_score: riddleManual }) : null;
   const byCaptain = !!cur && noPoints(cur.submitted_by);
-  const score = byCaptain ? 0 : gg && !review?.override ? ggParts?.total ?? 0 : prop ? auto : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
+  const score = byCaptain || reelSub ? 0 : gg && !review?.override ? ggParts?.total ?? 0 : prop ? auto : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
-  const missing = review ? marksMissing(scoring, review.marks) : [];
+  const missing = review && !reelSub ? marksMissing(scoring, review.marks) : [];
   const G = cur ? group(cur.group_no) : null;
-  const titleOf = (s) => (s.target_id ? `${first(nameOf(s.submitted_by))} → ${first(nameOf(s.target_id))}` : `${group(s.group_no)[1]}${riddleNo(s) ? ` · Riddle ${riddleNo(s)}` : ''}`);
+  const titleOf = (s) => (isReelSub(s) ? `Reels · ${nameOf(s.submitted_by)}` : s.target_id ? `${first(nameOf(s.submitted_by))} → ${first(nameOf(s.target_id))}` : `${group(s.group_no)[1]}${riddleNo(s) ? ` · Riddle ${riddleNo(s)}` : ''}`);
 
   // Rubric challenges: team participation = everyone tagged across the group's validated submissions.
   const teamTagged = cur && scoring.type === 'rubric'
@@ -151,7 +157,7 @@ export default function ValidationQueue() {
       status: kind, checks: review.checks,
       location_correct: riddleLike ? (prop && riddleManual != null ? null : answerOk) : null,
       participant_count: prop ? picked : riddleLike ? review.count : null,
-      marks: ['connect', 'rubric', 'give_grow'].includes(scoring.type) ? review.marks : prop && riddleManual != null ? { riddle: riddleManual } : null,
+      marks: reelSub ? null : ['connect', 'rubric', 'give_grow'].includes(scoring.type) ? review.marks : prop && riddleManual != null ? { riddle: riddleManual } : null,
       score: kind === 'validated' ? score : null,
       override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
       reject_reason: kind === 'validated' ? null : review.reason,
@@ -362,6 +368,7 @@ export default function ValidationQueue() {
                     </div>
                   </button>
                 )}
+                {reelSub && <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>Reels pribadi: setujui kalau valid — tidak ada poin sendiri, tapi {nameOf(cur.submitted_by)} terhitung partisipasi online grup.</span>}
                 {(scoring.type === 'rubric' || gg) && (
                   <div className="col" style={{ gap: 8 }}>
                     {scoring.criteria.map((k) => (
@@ -396,7 +403,11 @@ export default function ValidationQueue() {
                           </div>
                         </div>
                         <div className="col" style={{ gap: 6, padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC' }}>
-                          <span style={{ fontSize: 13, fontWeight: 700 }}>Online · Reel pribadi · {(review.marks.online || []).length} terverifikasi</span>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>Online · Reels member yang sudah disetujui · {reelers.length}</span>
+                          <span className="muted" style={{ fontSize: 12 }}>{reelers.length ? reelers.map(nameOf).join(', ') : 'Belum ada Reels yang disetujui.'} Reels divalidasi terpisah di antrean ini.</span>
+                        </div>
+                        <div className="col" style={{ gap: 6, padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC', display: Object.keys(cur.answers?.online || {}).length ? 'flex' : 'none' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>Online (dari leader, versi lama) · {(review.marks.online || []).length} terverifikasi</span>
                           {!Object.keys(cur.answers?.online || {}).length && <span className="muted" style={{ fontSize: 12 }}>Tidak ada Reel online.</span>}
                           {Object.entries(cur.answers?.online || {}).map(([id, link]) => { const on = (review.marks.online || []).includes(id); return (
                             <div key={id} className="row" style={{ gap: 8 }}>
