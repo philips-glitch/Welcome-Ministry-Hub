@@ -19,6 +19,7 @@ export const SECTIONS = [
 
 export const SCORING_TYPES = [
   ['riddle', 'Riddle foto', 'Lokasi benar + partisipasi (tier jumlah orang)'],
+  ['submit_participation', 'Submission + partisipasi anggota', 'Submit tervalidasi = poin tetap + anggota yang ditag ÷ anggota tim'],
   ['give_grow', 'Video + partisipasi (Give and Grow)', 'Rubrik video 50 + partisipasi offline/online, bonus offline & BTS 50'],
   ['proportional', 'Riddle proporsional (Skenario 1)', 'Per riddle: jawaban benar + anggota yang dipilih leader ÷ anggota grup'],
   ['rubric', 'Rubrik + partisipasi tim', 'Nilai per kriteria tiap submission + poin partisipasi tim'],
@@ -57,9 +58,11 @@ export const GTKM_FIELDS = [['words', '3 kata tentang dirinya'], ['enjoy', 'Hal 
 export const DEFAULT_PROPORTIONAL = { type: 'proportional', answer_pts: 12.5, participation_pts: 12.5 };
 // Give and Grow: official team video (rubric) + participation = unique verified participants (offline ∪ online)
 // ÷ team × overall_pts, + offline_pts if anyone took part offline, + BTS (photos ≥3 / video ≥15 s).
+// Spice It Up: a validated submission earns submit_pts; + participation_pts × verified tagged members ÷ team.
+export const DEFAULT_SUBMIT_PART = { type: 'submit_participation', submit_pts: 70, participation_pts: 30 };
 export const DEFAULT_GIVE_GROW = {"type":"give_grow","criteria":[{"key":"fit","label":"Challenge & fit","max":20,"hint":"Follows Give and Grow and one clear theme."},{"key":"useful","label":"Useful / meaningful content","max":15,"hint":"Gives viewers a meaningful lesson or practical insight."},{"key":"clear","label":"Clarity (easy to understand)","max":10,"hint":"Easy to follow and within 60 seconds."},{"key":"team","label":"Team involvement / execution","max":5,"hint":"Shows genuine team involvement in the making."}],"overall_pts":40,"offline_pts":5,"bts_photo_pts":2,"bts_video_pts":5};
 export const withDefaults = (scoring) => ({
-  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT, proportional: DEFAULT_PROPORTIONAL, give_grow: DEFAULT_GIVE_GROW }[scoring?.type] || {}),
+  ...({ riddle: DEFAULT_SCORING, rubric: DEFAULT_RUBRIC, connect: DEFAULT_CONNECT, proportional: DEFAULT_PROPORTIONAL, give_grow: DEFAULT_GIVE_GROW, submit_participation: DEFAULT_SUBMIT_PART }[scoring?.type] || {}),
   ...scoring,
 });
 export const isConnect = (c) => c?.scoring?.type === 'connect';
@@ -79,6 +82,7 @@ export function itemMax(scoring) {
   if (s.type === 'connect') return sum(s.questions.map((q) => q.max)) + (Number(s.photo_bonus) || 0);
   if (s.type === 'rubric') return sum(s.criteria.map((c) => c.max));
   if (s.type === 'proportional') return (Number(s.answer_pts) || 0) + (Number(s.participation_pts) || 0);
+  if (s.type === 'submit_participation') return (Number(s.submit_pts) || 0) + (Number(s.participation_pts) || 0);
   if (s.type === 'give_grow') return sum(s.criteria.map((c) => c.max)) + (Number(s.overall_pts) || 0) + (Number(s.offline_pts) || 0) + Math.max(Number(s.bts_photo_pts) || 0, Number(s.bts_video_pts) || 0);
   return Number(s.max) || 0;
 }
@@ -121,7 +125,9 @@ export function connectBreakdown(scoring, subs, rosterSize, noPoints = new Set()
 // event opens (R1 until R2 starts). Draft events don't count; the last one has no limit.
 export function revalidateWindow(c, challenges, now = Date.now()) {
   if (!c || c.kind !== 'main' || c.round == null) return { next: null, at: null, closed: false };
-  const next = (challenges || []).filter((x) => x.kind === 'main' && x.round > c.round && x.status !== 'draft').sort((a, b) => a.round - b.round)[0] || null;
+  // The next mini event that opens after this one's deadline (2-day margin): events running in parallel don't count.
+  const after = (x) => !c.deadline_at || !x.open_at || new Date(x.open_at).getTime() > new Date(c.deadline_at).getTime() - 2 * 864e5;
+  const next = (challenges || []).filter((x) => x.kind === 'main' && x.round > c.round && x.status !== 'draft' && after(x)).sort((a, b) => a.round - b.round)[0] || null;
   if (!next) return { next: null, at: null, closed: false };
   const closed = ['live', 'closed', 'published'].includes(next.status) || (!!next.open_at && now >= new Date(next.open_at).getTime());
   return { next, at: next.open_at || null, closed };
@@ -189,6 +195,16 @@ export function giveGrowParts(scoring, { marks = {}, team_ids = null, team_size 
   const offlineBonus = offline.length ? Number(s.offline_pts) || 0 : 0;
   const bts = marks.bts === 'video' ? Number(s.bts_video_pts) || 0 : marks.bts === 'photos' ? Number(s.bts_photo_pts) || 0 : 0;
   return { video, participants, offline: offline.length, online: online.length, overall, offlineBonus, bts, total: r3(video + overall + offlineBonus + bts) };
+}
+
+// Spice It Up parts: submit points + verified tagged members (marks.verified) ÷ team × participation points.
+export function submitPartParts(scoring, { marks = {}, team_ids = [] }) {
+  const s = withDefaults(scoring);
+  const team = new Set(team_ids);
+  const verified = [...new Set(marks.verified || [])].filter((id) => team.has(id)).length;
+  const part = team.size ? Math.round(Math.min(1, verified / team.size) * (Number(s.participation_pts) || 0) * 1000) / 1000 : 0;
+  const submit = Number(s.submit_pts) || 0;
+  return { submit, verified, part, total: Math.round((submit + part) * 1000) / 1000 };
 }
 
 // Points for one submission under a challenge's scoring rules.

@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { setDb, getDb, fromPglite } from './db.js';
 import { handleRpc, handleMedia } from './rpc.js';
 import { resetSecretCache } from './auth.js';
-import { connectBreakdown, computeScore, groupPoints, giveGrowParts } from '../src/lib/game.js';
+import { connectBreakdown, computeScore, groupPoints, giveGrowParts, submitPartParts, revalidateWindow } from '../src/lib/game.js';
 
 process.env.ADMIN_SETUP_PASSWORD = ' "setup-pass-123"\n';   // pasted with quotes + spaces: forgiven
 const lite = new PGlite();
@@ -73,6 +73,19 @@ ok('riddle Skenario 1: per riddle 12.5 answer + headcount ÷ team × 12.5 (PDF e
   assert.deepEqual([q.participants, q.offlineBonus, q.bts, q.total], [1, 0, 2, 55.333]);
 }
 ok('R3 Give and Grow: video 50 + unique participants ÷ team × 40 + offline 5 + BTS (doc example = 82)');
+
+// 0d · R4 Spice It Up: submission 70 + tagged members ÷ team × 30; its re-validation isn't cut by R5 (which opens before R4's deadline)
+{
+  const team = Array.from({ length: 12 }, (_, i) => 'm' + i);
+  const p = submitPartParts({ type: 'submit_participation' }, { marks: { verified: [...team.slice(0, 10), 'CAP'] }, team_ids: team });
+  assert.deepEqual([p.submit, p.verified, p.part, p.total], [70, 10, 25, 95]);
+  const r4 = { kind: 'main', round: 4, deadline_at: '2026-11-19T14:00:00Z' };
+  const r5 = { kind: 'main', round: 5, status: 'live', open_at: '2026-11-09T17:00:00Z' };
+  assert.equal(revalidateWindow(r4, [r4, r5]).closed, false);
+  const r3 = { kind: 'main', round: 3, deadline_at: '2026-11-08T16:59:00Z' };
+  assert.equal(revalidateWindow(r3, [r3, { ...r4, status: 'live', open_at: '2026-11-03T13:00:00Z' }, r5]).next.round, 5);
+}
+ok('R4: submission 70 + tagged members ÷ team × 30 (guideline example = 95); R4 stays re-validatable after R5 opens');
 
 // 1 · bootstrap + login
 const admin = client();
@@ -303,6 +316,17 @@ await kapten.call('reviewSubmission', { id: reelKapten.id, patch: { status: 'val
 // team: 50 + (Ana offline + Budi online = 2 of 3) × 40 = 26.667 + 5 + 2 = 83.667 → 83.7
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r3.id).points, 83.7);
 ok('R3: leader submits video + BTS + offline; members submit own Reels; approved Reels count online (captains never)');
+// R4: only the Group Leader submits; the validator confirms who is in the PDF; the server scores it.
+const r4c = ch.find((c) => c.code === 'R4');
+await admin.call('saveChallenge', { c: { id: r4c.id, status: 'live', open_at: new Date(Date.now() - 60e3).toISOString(), deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
+await rejects(budi.call('createSubmission', { sub: { challenge_id: r4c.id, group_no: '01', ig_url: 'https://drive/poster.pdf', tagged_ids: [ids.budi], declaration: true } }), /Group Leader/);
+const s4 = await leader.call('createSubmission', { sub: { challenge_id: r4c.id, group_no: '01', ig_url: 'https://drive/poster.pdf', tagged_ids: [ids.ana, ids.budi, ids.dodi, ids.kapten], declaration: true },
+  media: { name: 'cover.png', type: 'image/png', data: png.toString('base64') } });
+assert.deepEqual(s4.tagged_ids.sort(), [ids.ana, ids.budi, ids.kapten].sort());   // Dodi (other group) dropped
+// Ana + Budi confirmed (captain never counts): 70 + 2/3 × 30 = 90
+const r4rev = await kapten.call('reviewSubmission', { id: s4.id, patch: { status: 'validated', score: 1, checks: [true], marks: { verified: [ids.ana, ids.budi, ids.kapten] } } });
+assert.equal(r4rev.score, 90); assert.equal(r4rev.participant_count, 2);
+ok('R4: Group Leader submits e-poster + tags; validator confirms; score = 70 + verified ÷ team × 30');
 ok("photo stored; visible to its group, that group's captain and admins/PICs — not other groups or their captains");
 
 // 7b · the Vercel setting resets the Super Admins only when it changes
@@ -355,6 +379,16 @@ const r4 = (await admin.call('listChallenges')).find((x) => x.code === 'R4').for
 assert.deepEqual([r4.photo_label, r4.photo_pick_label, r4.link, r4.link_label, r4.tag_label], ['Cover', 'Upload disini', 'required', 'Link scrapbook', 'Siapa aja yang terlibat?']);
 assert.deepEqual(r4.confirm, ['Semua orang di foto adalah anggota {grup}', 'Tidak menyebut nama gereja & tidak ada wajah jemaat tanpa izin', 'Deklarasi No-AI']);
 ok('R4 form: Cover / Upload disini, scrapbook link required, "Siapa aja yang terlibat?", rules without IG Story + short Deklarasi No-AI');
+// A database where R4 isn't set up yet (manual score, nothing validated) gets the guideline once; the admin's form wording stays.
+const r4id = (await admin.call('listChallenges')).find((x) => x.code === 'R4').id;
+await db.query(`update challenges set scoring = '{"type":"manual","max":20}' where code = 'R4'`);
+await db.query(`update submissions set status = 'submitted' where challenge_id = $1`, [r4id]);
+await db.query(`delete from app_meta where key = 'r4_guideline'`);
+await restart(); await admin.login('angel', 'setup-pass-123');
+const r4g = (await admin.call('listChallenges')).find((x) => x.code === 'R4');
+assert.equal(r4g.scoring.type, 'submit_participation'); assert.equal(new Date(r4g.deadline_at).toISOString(), '2026-11-19T14:00:00.000Z');
+assert.equal(r4g.form.photo_label, 'Cover'); assert.equal(r4g.form.link, 'required'); assert.ok(r4g.sections.rules.includes('PDF in a 16:9 format'));
+ok('the live R4 gets the guideline, scoring and 19 Nov 21:00 deadline once (admin form wording kept)');
 
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });

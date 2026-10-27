@@ -1,7 +1,7 @@
 // Demo-mode game data, mirroring server/schema.js + server/rpc.js (same tables, same seed, same rules).
 import { GROUPS, RIDDLES, rng } from '../data.js';
-import { PLAYBOOK } from './playbook.js';
-import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts } from './game.js';
+import { PLAYBOOK, R4 } from './playbook.js';
+import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts, submitPartParts } from './game.js';
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
@@ -44,7 +44,7 @@ export function seedGame(profiles) {
   const challenges = [
     ...PLAYBOOK.map(({ code, kind, round, name, status, schedule, ...rest }) => ch(code, kind, round, name, status, schedule, { ...rest, pic_id: pic(PICS[code]) })),
     // Mini Event #4 is unchanged from before, only renumbered (was R3).
-    ch('R4', 'main', 4, 'Spice It Up', 'draft', ['2026-11-04T20:00', '2026-11-06T20:00', '2026-11-08T23:55', null], { pic_id: pic('Maya'), sort: 4 }),
+    ch('R4', 'main', 4, 'Spice It Up', 'draft', ['2026-11-04T20:00', '2026-11-06T20:00', R4.deadline, R4.validate_by], { pic_id: pic('Maya'), sort: 4, sections: R4.sections, scoring: R4.scoring, form: R4.form }),
   ].sort((a, b) => a.sort - b.sort);
   // Guess, Find, Snap! keeps the riddle bank; the draw happens when it goes live.
   const riddles = RIDDLES.map(([prompt, answer], i) => ({ id: `r-${i + 1}`, challenge_id: 'c-r2', no: i + 1, prompt, answer }));
@@ -294,6 +294,7 @@ export function gameMethods({ load, save, delay, fail }) {
       } else {
         if (!canDemo(s, 'portal.submit')) return fail('Hanya Group Leader yang bisa submit challenge ini.');
         if (withDefaults(c.scoring).type === 'give_grow' && me.role_id !== 'group_leader') return fail('Hanya Group Leader yang bisa submit video tim. Kamu bisa ikut lewat Reels pribadi.');
+        if (withDefaults(c.scoring).type === 'submit_participation' && me.role_id !== 'group_leader') return fail('Hanya Group Leader yang bisa submit challenge ini.');
         if (last?.status === 'validated') return fail('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
       }
       // Same path layout as the server: <group>/<id>-<name>.
@@ -341,6 +342,14 @@ export function gameMethods({ load, save, delay, fail }) {
       const sub0 = s.submissions[i];
       const sc = s.challenges.find((c) => c.id === sub0.challenge_id)?.scoring;
       if (playsWithoutPoints(s.profiles.find((p) => p.id === sub0.submitted_by))) patch = { ...patch, score: 0 };
+      else if (withDefaults(sc).type === 'submit_participation' && patch.status === 'validated') {
+        if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(sc)), Number(patch.score) || 0)) };
+        else {
+          const team = s.profiles.filter((p) => isPlayer(p) && p.group_no === sub0.group_no).map((p) => p.id);
+          const p = submitPartParts(sc, { marks: patch.marks || {}, team_ids: team });
+          patch = { ...patch, participant_count: p.verified, score: p.total };
+        }
+      }
       else if (withDefaults(sc).type === 'give_grow' && sub0.target_id && patch.status === 'validated') patch = { ...patch, score: 0, marks: null };
       else if (withDefaults(sc).type === 'give_grow' && patch.status === 'validated') {
         if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(withDefaults(sc)), Number(patch.score) || 0)) };

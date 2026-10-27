@@ -1,7 +1,7 @@
 // Database schema + first-run seed. Runs on every cold start; everything is idempotent.
 // Access rules live in the API (server/rpc.js), not in the database.
 import { PERMISSIONS, ROLES, DEFAULT_GRANTS } from '../src/lib/permissions.js';
-import { PLAYBOOK } from '../src/lib/playbook.js';
+import { PLAYBOOK, R4 } from '../src/lib/playbook.js';
 import { PALETTE } from '../src/lib/roster.js';
 import { RIDDLES } from '../src/data.js';
 import { createHmac } from 'node:crypto';
@@ -181,6 +181,7 @@ export async function migrate(db) {
   await r3GiveGrow(db);
   await r3Reels(db);
   await r4Form(db);
+  await r4Guideline(db);
   await bootstrapAdmins(db);
 }
 
@@ -202,7 +203,7 @@ async function seed(t) {
   const challenges = [
     ...PLAYBOOK.map(({ schedule, ...c }) => ({ ...c, schedule })),
     { code: 'R4', kind: 'main', round: 4, name: 'Spice It Up', status: 'draft', sort: 4, riddles_per_group: 0,
-      schedule: ['2026-11-04T20:00', '2026-11-06T20:00', '2026-11-08T23:55', null], sections: {}, scoring: { type: 'manual', max: 20 }, form: {} },
+      schedule: ['2026-11-04T20:00', '2026-11-06T20:00', R4.deadline, R4.validate_by], sections: R4.sections, scoring: R4.scoring, form: R4.form },
   ];
   for (const c of challenges) {
     const [a, o, d, v] = c.schedule;
@@ -282,6 +283,20 @@ async function r4Form(db) {
     await db.query('update challenges set form = $2::jsonb, updated_at = now() where id = $1', [c.id, JSON.stringify(next)]);
   }
   await db.query(`insert into app_meta values ('r4_form_v1', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
+}
+// Oct 2026: R4 "Spice It Up" guideline — e-poster PDF by the Group Leader (70) + tagged member participation (30),
+// deadline 19 Nov 21:00 WIB. Once, only while nothing in R4 is validated; the admin's other form settings stay.
+async function r4Guideline(db) {
+  const { rows } = await db.query(`select value from app_meta where key = 'r4_guideline'`);
+  if (rows.length) return;
+  const { rows: [c] } = await db.query(`select c.id, c.form from challenges c where c.code = 'R4'
+    and not exists (select 1 from submissions s where s.challenge_id = c.id and s.status = 'validated')`);
+  if (c) {
+    const form = { ...(c.form || {}), ...R4.form_patch };
+    await db.query(`update challenges set scoring = $2::jsonb, form = $3::jsonb, sections = $4::jsonb, deadline_at = $5, validate_by = $6, updated_at = now() where id = $1`,
+      [c.id, JSON.stringify(R4.scoring), JSON.stringify(form), JSON.stringify(R4.sections), wib(R4.deadline), wib(R4.validate_by)]);
+  }
+  await db.query(`insert into app_meta values ('r4_guideline', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
 }
 async function updateTexts(db) {
   for (const [code, key, from, to] of TEXT_UPDATES) {

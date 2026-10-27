@@ -296,6 +296,15 @@ function ScoringSummary({ c, scoring: s }) {
       </div>
     );
   }
+  if (s.type === 'submit_participation') {
+    return (
+      <div className="col" style={{ gap: 8, fontSize: 13, lineHeight: 1.4 }}>
+        {bar([[s.submit_pts, '#1F4D3A'], [s.participation_pts, '#E3A92B']])}
+        <span><b>Submission · {s.submit_pts}</b> — e-poster dikirim Group Leader & tervalidasi</span>
+        <span><b>Partisipasi anggota · {s.participation_pts}</b> — anggota unik yang ditag (fotonya ada di PDF) ÷ anggota tim × {s.participation_pts}</span>
+      </div>
+    );
+  }
   if (s.type === 'give_grow') {
     const video = s.criteria.reduce((a, k) => a + k.max, 0);
     return (

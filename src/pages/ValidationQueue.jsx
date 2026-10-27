@@ -5,7 +5,7 @@ import { useMembers } from '../lib/members.jsx';
 import { leaderName, validatesOnly, playsWithoutPoints, isPlayer } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import PersonRole from '../components/PersonRole.jsx';
-import { computeScore, scoreParts, proportionalParts, giveGrowParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
+import { computeScore, scoreParts, proportionalParts, giveGrowParts, submitPartParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
 import { DEMO_NOW } from '../data.js';
 import { Lightbox } from '../components/Photo.jsx';
 
@@ -94,7 +94,7 @@ export default function ValidationQueue() {
       count: s.participant_count ?? s.tagged_ids.filter((id) => !noPoints(id)).length,
       answerOk: s.location_correct ?? false,
       // Give and Grow: everyone the leader listed starts as verified; the validator unticks unproven claims.
-      marks: scoring.type === 'give_grow' ? { offline: s.tagged_ids || [], online: Object.keys(s.answers?.online || {}), bts: '', ...(s.marks || {}) } : { ...(s.marks || {}) },
+      marks: scoring.type === 'submit_participation' ? { verified: s.tagged_ids || [], ...(s.marks || {}) } : scoring.type === 'give_grow' ? { offline: s.tagged_ids || [], online: Object.keys(s.answers?.online || {}), bts: '', ...(s.marks || {}) } : { ...(s.marks || {}) },
       reason: s.reject_reason || null,
       override: s.marks?.riddle != null, overrideScore: s.marks?.riddle ?? '', overrideNote: s.marks?.riddle != null ? s.override_note || '' : '',
       manual: s.score ?? '',
@@ -119,13 +119,16 @@ export default function ValidationQueue() {
   // Online participation = members of this group whose Reels is validated.
   const reelers = gg && cur ? (subs || []).filter((x) => isReelSub(x) && x.group_no === cur.group_no && x.status === 'validated').map((x) => x.submitted_by) : [];
   const ggParts = cur && review && gg ? giveGrowParts(scoring, { marks: review.marks, team_ids: members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).map((p) => p.id), online_ids: reelers }) : null;
+  // Spice It Up: submit points + tagged members the validator confirms in the PDF ÷ team.
+  const sp = scoring.type === 'submit_participation';
+  const spParts = cur && review && sp ? submitPartParts(scoring, { marks: review.marks, team_ids: members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).map((p) => p.id) }) : null;
   const toggleId = (k, id) => setMark(k, (review.marks[k] || []).includes(id) ? review.marks[k].filter((x) => x !== id) : [...(review.marks[k] || []), id]);
   // Riddle part: "Skor penuh riddle" (full) or a manual riddle score with a reason; participation stays automatic.
   const riddleManual = prop && review?.override && review.overrideScore !== '' ? Number(review.overrideScore) : null;
   const auto = cur && review ? computeScore(scoring, { location_correct: answerOk, participant_count: prop ? picked : review.count, manual: review.manual, marks: review.marks, team_size: teamSize, answer_score: riddleManual }) : 0;
   const pparts = cur && review && prop ? proportionalParts(scoring, { location_correct: answerOk, participant_count: picked, team_size: teamSize, answer_score: riddleManual }) : null;
   const byCaptain = !!cur && noPoints(cur.submitted_by);
-  const score = byCaptain || reelSub ? 0 : gg && !review?.override ? ggParts?.total ?? 0 : prop ? auto : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
+  const score = byCaptain || reelSub ? 0 : sp && !review?.override ? spParts?.total ?? 0 : gg && !review?.override ? ggParts?.total ?? 0 : prop ? auto : review?.override && review.overrideScore !== '' ? Math.max(0, Math.min(max, Number(review.overrideScore))) : auto;
   const parts = cur && review && scoring.type === 'riddle' ? scoreParts(scoring, { location_correct: review.checks[1], participant_count: review.count }) : null;
   const missing = review && !reelSub ? marksMissing(scoring, review.marks) : [];
   const G = cur ? group(cur.group_no) : null;
@@ -157,7 +160,7 @@ export default function ValidationQueue() {
       status: kind, checks: review.checks,
       location_correct: riddleLike ? (prop && riddleManual != null ? null : answerOk) : null,
       participant_count: prop ? picked : riddleLike ? review.count : null,
-      marks: reelSub ? null : ['connect', 'rubric', 'give_grow'].includes(scoring.type) ? review.marks : prop && riddleManual != null ? { riddle: riddleManual } : null,
+      marks: reelSub ? null : ['connect', 'rubric', 'give_grow', 'submit_participation'].includes(scoring.type) ? review.marks : prop && riddleManual != null ? { riddle: riddleManual } : null,
       score: kind === 'validated' ? score : null,
       override_note: kind === 'validated' && review.override ? review.overrideNote.trim() : null,
       reject_reason: kind === 'validated' ? null : review.reason,
@@ -368,6 +371,18 @@ export default function ValidationQueue() {
                     </div>
                   </button>
                 )}
+                {sp && (
+                  <div className="col" style={{ gap: 6, padding: '10px 12px', borderRadius: 10, border: '1px solid #E9E0CC' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>Anggota yang ditag · {(review.marks.verified || []).length} terverifikasi</span>
+                    <span className="muted" style={{ fontSize: 11 }}>Cek fotonya ada di PDF (foto terbaru di area UR). Klik nama untuk mencoret yang tidak ada.</span>
+                    {!(cur.tagged_ids || []).length && <span className="muted" style={{ fontSize: 12 }}>Leader tidak men-tag anggota.</span>}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {(cur.tagged_ids || []).map((id) => { const on = (review.marks.verified || []).includes(id); return (
+                        <button key={id} onClick={() => toggleId('verified', id)} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 999, border: '1px solid #DCD2BC', background: on ? '#1F4D3A' : '#FFFDF8', color: on ? '#FBF6EA' : '#9A2A1E', textDecoration: on ? 'none' : 'line-through' }}>{nameOf(id)}</button>
+                      ); })}
+                    </div>
+                  </div>
+                )}
                 {reelSub && <span className="muted" style={{ fontSize: 12, background: '#F6F0E2', borderRadius: 8, padding: '8px 10px' }}>Reels pribadi: setujui kalau valid — tidak ada poin sendiri, tapi {nameOf(cur.submitted_by)} terhitung partisipasi online grup.</span>}
                 {(scoring.type === 'rubric' || gg) && (
                   <div className="col" style={{ gap: 8 }}>
@@ -438,6 +453,12 @@ export default function ValidationQueue() {
                     <span className="num" style={{ font: "800 36px/1 'Bricolage Grotesque'" }}>{score}</span>
                     <span style={{ fontSize: 13, opacity: 0.85 }}>/ {max} · {byCaptain ? 'captain — ikut main tanpa poin' : prop ? (riddleManual != null ? 'riddle manual + partisipasi otomatis' : 'partisipasi dihitung otomatis') : review.override ? 'override manual' : missing.length ? `belum dinilai: ${missing.map((m) => m.label || m.key.toUpperCase()).join(', ')}` : scoring.type === 'riddle' && !review.checks[0] ? 'IG tag belum ✓ — sebaiknya tolak' : 'dihitung otomatis'}</span>
                   </div>
+                  {spParts && !review.override && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
+                      <span>Submission</span><span className="num">{spParts.submit}</span>
+                      <span>Partisipasi {spParts.verified} ÷ {members.filter((p) => isPlayer(p) && p.group_no === cur.group_no).length} anggota × {scoring.participation_pts}</span><span className="num">{spParts.part.toFixed(2)}</span>
+                    </div>
+                  )}
                   {ggParts && !review.override && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 10px', fontSize: 12, opacity: 0.9 }}>
                       <span>Video (rubrik)</span><span className="num">{ggParts.video}</span>

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts, submitPartParts } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
 import { setupPassword, setupUsers } from './schema.js';
@@ -412,6 +412,7 @@ const methods = {
       if (!can(me, 'portal.submit')) bad('Hanya Group Leader yang bisa submit challenge ini.');
       // Give and Grow: the team submission is the Group Leader's only — members take part with their own Reels.
       if (withDefaults(c.scoring).type === 'give_grow' && me.role_id !== 'group_leader') bad('Hanya Group Leader yang bisa submit video tim. Kamu bisa ikut lewat Reels pribadi.');
+      if (withDefaults(c.scoring).type === 'submit_participation' && me.role_id !== 'group_leader') bad('Hanya Group Leader yang bisa submit challenge ini.');
       if (last?.status === 'validated') bad('Submission ini sudah divalidasi — tidak bisa dikirim ulang.');
     }
     if (last) superseded.push(last);
@@ -466,6 +467,16 @@ const methods = {
     if (before.by_role === 'captain') patch = { ...patch, score: 0 };
     // Give and Grow: video rubric + verified participation, computed here with the real team (or a manual score
     // with a reason, kept within 0–max).
+    // Spice It Up: submit points + verified tagged members ÷ team (or a manual score with a reason, within 0–max).
+    else if (withDefaults(before.scoring).type === 'submit_participation' && patch.status === 'validated') {
+      const sc = withDefaults(before.scoring);
+      if (patch.override_note) patch = { ...patch, score: Math.max(0, Math.min(itemMax(sc), Number(patch.score) || 0)) };
+      else {
+        const team = (await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()} and role_id <> 'captain'`, [before.group_no])).rows.map((r) => r.id);
+        const p = submitPartParts(sc, { marks: patch.marks || {}, team_ids: team });
+        patch = { ...patch, participant_count: p.verified, score: p.total };
+      }
+    }
     // A member's Reels earns no points itself — it counts as that member's participation.
     else if (withDefaults(before.scoring).type === 'give_grow' && before.target_id && patch.status === 'validated') patch = { ...patch, score: 0, marks: null };
     else if (withDefaults(before.scoring).type === 'give_grow' && patch.status === 'validated') {
