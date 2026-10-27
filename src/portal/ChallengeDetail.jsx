@@ -176,7 +176,8 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
                 })}
               </div>
             </section>
-          ) : (
+          ) : scoring.type === 'give_grow' && !me.canSubmit ? null : (
+            // Give and Grow: members only take part with their own Reels — the team submission is the leader's.
             <section className="p-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <span className="p-h">Submission grup</span>
               <span className="muted" style={{ fontSize: 13 }}>
@@ -204,7 +205,7 @@ export default function ChallengeDetail({ go, me, challenge: c, data, pickRiddle
           <span className="muted" style={{ fontSize: 12 }}>
             {!open ? (soon ? SOON : 'Challenge ini sudah ditutup.')
               : connect ? (me.noPoints ? 'Kamu captain: ikut main seperti member, tapi tanpa poin — skor kamu selalu 0 dan tidak dihitung ke poin grup.' : me.canSubmit ? 'Setiap anggota submit sendiri. Jawabanmu hanya terlihat oleh kamu dan panitia. Selama belum divalidasi, kamu bisa ubah sampai deadline.' : 'Challenge ini dikerjakan tiap peserta grup.')
-              : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup. Selama belum divalidasi, bisa diubah sampai deadline.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
+              : me.canSubmit ? 'Kamu Group Leader: kamu yang submit untuk grup. Selama belum divalidasi, bisa diubah sampai deadline.' : scoring.type === 'give_grow' ? 'Kamu ikut lewat Reels pribadi (kartu di atas). Video resmi tim, BTS dan anggota offline dikirim Group Leader.' : 'Hanya Group Leader yang bisa submit. Kirim foto kamu ke Leader ya.'}
           </span>
         </div>
 
