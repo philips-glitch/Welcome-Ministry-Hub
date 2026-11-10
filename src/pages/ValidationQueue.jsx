@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useGame } from '../lib/gameStore.jsx';
 import { useMembers } from '../lib/members.jsx';
-import { leaderName, validatesOnly, playsWithoutPoints, isPlayer } from '../lib/groups.js';
+import { leaderName, validatesOnly, playsWithoutPoints, isPlayer, isGamePlayer } from '../lib/groups.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 import PersonRole from '../components/PersonRole.jsx';
 import { computeScore, scoreParts, proportionalParts, giveGrowParts, submitPartParts, withDefaults, formOf, isConnect, itemMax, marksMissing, tierPoints, fmtWIB, revalidateWindow } from '../lib/game.js';
@@ -313,9 +313,16 @@ export default function ValidationQueue() {
                     <span><b>{connect ? 'Konfirmasi aturan' : 'Deklarasi No-AI'}:</b> {cur.declaration ? `✓ dicentang oleh ${connect ? first(nameOf(cur.submitted_by)) : 'leader'}` : '✕ tidak dicentang'}</span>
                     {!connect && <span className="muted">Ditag ({tagged.length}): {tagged.join(', ') || '—'}</span>}
                     {cur.status !== 'submitted' && <span><b>Keputusan:</b> {STATUS_CHIP[cur.status][0]}{cur.score != null ? ` · ${cur.score} pts` : ''}{cur.reject_reason ? ` · “${cur.reject_reason}”` : ''}{cur.override_note ? ` · override: ${cur.override_note}` : ''}{cur.reviewed_by_name && <> · oleh <PersonRole name={cur.reviewed_by_name} role={cur.reviewed_by_role} /></>}{cur.reviewed_at ? ` · ${fmtWIB(cur.reviewed_at)}` : ''}</span>}
-                    {(cur.adjustments || []).map((a, i) => (
-                      <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name ? <PersonRole name={a.by_name} role={a.by_role} /> : 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
+                    {(cur.adjustments || []).map((a, i) => (a.kind === 'edit'
+                      ? <span key={i} style={{ color: '#56655C' }}><b>Diedit panitia</b> oleh {a.by_name ? <PersonRole name={a.by_name} role={a.by_role} /> : 'panitia'} · {fmtWIB(a.at)}{a.note ? ` · “${a.note}”` : ''}</span>
+                      : <span key={i} style={{ color: '#56655C' }}><b>Poin diubah</b> {a.from ?? '—'} → {a.to} oleh {a.by_name ? <PersonRole name={a.by_name} role={a.by_role} /> : 'panitia'} · {fmtWIB(a.at)} · “{a.note}”</span>
                     ))}
+                    {scoring.type === 'give_grow' && canReopen && (
+                      <EditSubmission key={cur.id} sub={cur} reel={reelSub} form={form}
+                        team={members.filter((p) => p.group_no === cur.group_no && isGamePlayer(p))}
+                        onSaved={(row) => { setSubs((xs) => xs.map((s) => (s.id === row.id ? row : s))); select(row); reloadScores(); setToast(['ok', `Diedit · ${titleOf(cur)} — kembali Pending, validasi ulang`]); }}
+                        onError={(m) => setToast(['bad', m])} />
+                    )}
                     {cur.status === 'validated' && canReopen && win.next && (
                       <span style={{ color: win.closed ? '#9A2A1E' : '#56655C' }}>{win.closed
                         ? `Re-validasi & ubah poin ${challenge.code} sudah ditutup — ${win.next.code} sudah dibuka.`
@@ -573,6 +580,51 @@ function StepBtn({ onClick, children }) {
 }
 
 // Super Admin / PIC: change the points of a validated submission — a reason is required and kept.
+// Give and Grow — Super Admin / Challenge PIC edit the submission directly (also after the deadline).
+// Saving sends it back to pending so it's validated again on the new data.
+function EditSubmission({ sub, reel, form, team, onSaved, onError }) {
+  const [open, setOpen] = useState(false);
+  const [link, setLink] = useState(sub.ig_url || '');
+  const [bts, setBts] = useState(sub.answers?.answer || '');
+  const [tagged, setTagged] = useState(sub.tagged_ids || []);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const field = { height: 34, borderRadius: 8, background: '#FFFDF8', border: '1px solid #C9D6CC', padding: '0 8px', font: 'inherit', fontSize: 12.5 };
+  const save = async () => {
+    if (sub.status === 'validated' && !window.confirm('Submission ini sudah divalidasi. Setelah diedit, skornya dihapus dan harus divalidasi ulang. Lanjut?')) return;
+    setBusy(true);
+    try { onSaved(await api.editSubmission(sub.id, { ig_url: link, bts, tagged_ids: tagged, note })); setOpen(false); }
+    catch (e) { onError(e.message); }
+    finally { setBusy(false); }
+  };
+  if (!open) return <button className="link" style={{ textAlign: 'left', fontSize: 12 }} onClick={() => setOpen(true)}>✎ Edit submission (admin / PIC)</button>;
+  return (
+    <div className="col" style={{ gap: 6, padding: 10, borderRadius: 10, background: '#EEF4EF', border: '1px solid #C9D6CC', marginTop: 4 }}>
+      <b style={{ fontSize: 12.5 }}>Edit submission{reel ? ' Reels' : ''}</b>
+      <label className="col" style={{ gap: 3 }}><span>{reel ? 'Link Reels' : form.link_label || 'Link video'}</span>
+        <input aria-label="Link" value={link} onChange={(e) => setLink(e.target.value)} style={field} /></label>
+      {!reel && <>
+        <label className="col" style={{ gap: 3 }}><span>{form.answer_label || 'Link BTS'}</span>
+          <input aria-label="Link BTS" value={bts} onChange={(e) => setBts(e.target.value)} style={field} /></label>
+        <span>{form.tag_label || 'Anggota offline'}</span>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {team.map((p) => {
+            const on = tagged.includes(p.id);
+            return <button key={p.id} type="button" onClick={() => setTagged(on ? tagged.filter((x) => x !== p.id) : [...tagged, p.id])}
+              style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, border: '1px solid ' + (on ? '#1F4D3A' : '#DCD2BC'), background: on ? '#1F4D3A' : '#FFFDF8', color: on ? '#FBF6EA' : '#1B2620' }}>{on ? '✓ ' : ''}{p.full_name}</button>;
+          })}
+        </div>
+      </>}
+      <input aria-label="Catatan edit" placeholder="Catatan (opsional), mis. “link video salah, diganti sesuai chat GL”" value={note} onChange={(e) => setNote(e.target.value)} style={field} />
+      <span className="muted">Setelah disimpan, status kembali <b>Pending</b> dan skor dihapus — validasi ulang di antrean.</span>
+      <div className="row" style={{ gap: 6 }}>
+        <button className="btn btn-primary" style={{ height: 32 }} disabled={busy || !link.trim()} onClick={save}>{busy ? 'Menyimpan…' : 'Simpan edit'}</button>
+        <button className="btn btn-ghost" style={{ height: 32 }} onClick={() => setOpen(false)}>Batal</button>
+      </div>
+    </div>
+  );
+}
+
 function AdjustScore({ sub, max, onSaved, onError }) {
   const [open, setOpen] = useState(false);
   const [score, setScore] = useState(String(sub.score ?? ''));

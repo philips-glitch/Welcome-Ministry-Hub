@@ -532,6 +532,36 @@ const methods = {
       return { ids: rows.map((r) => r.id) };
     });
   },
+  // Give and Grow — Super Admin / Challenge PIC edit a submission directly (also after the deadline): the team's
+  // video / BTS links and offline members, or a member's Reels link. It goes back to pending (score removed) so it's
+  // validated again on the new data; the edit is kept in its history.
+  async editSubmission({ db, me }, { id, patch = {} }) {
+    needUser(me);
+    if (!can(me, 'challenges.manage')) deny('Hanya Super Admin dan Challenge PIC yang bisa mengedit submission.');
+    const { rows: [s] } = await db.query(`select s.*, c.scoring from submissions s join challenges c on c.id = s.challenge_id where s.id = $1`, [id]);
+    if (!s) bad('Submission tidak ditemukan. Muat ulang antrean.');
+    if (withDefaults(s.scoring).type !== 'give_grow') bad('Edit oleh panitia hanya untuk challenge Give and Grow.');
+    const latest = (await db.query(`select max(version)::int as v from submissions where challenge_id = $1 and group_no = $2 and submitted_by = $3
+      and target_id is not distinct from $4 and riddle_id is not distinct from $5`, [s.challenge_id, s.group_no, s.submitted_by, s.target_id, s.riddle_id])).rows[0].v;
+    if (latest !== s.version) bad('Ada versi yang lebih baru. Muat ulang antrean.');
+    const link = (v) => String(v ?? '').trim().slice(0, 500) || null;
+    const ig_url = link(patch.ig_url);
+    if (!ig_url) bad(s.target_id ? 'Link Reels wajib diisi.' : 'Link video resmi wajib diisi.');
+    let tagged = s.tagged_ids || [], answers = s.answers;
+    if (!s.target_id) {
+      const ok = new Set((await db.query(`select id from profiles where group_no = $1 and ${GAME_PLAYER_SQL()}`, [s.group_no])).rows.map((r) => r.id));
+      tagged = [...new Set((Array.isArray(patch.tagged_ids) ? patch.tagged_ids : tagged).filter((x) => ok.has(x)))];
+      answers = { ...(s.answers || {}), answer: link(patch.bts) || '' };
+    }
+    const e = { kind: 'edit', note: String(patch.note || '').trim().slice(0, 500) || null, by: me.id, by_name: me.full_name || me.username, by_role: me.role_id, at: new Date().toISOString() };
+    // Offline ticks are re-derived from the new member list; the rubric marks are kept for re-validation.
+    const marks = s.marks ? Object.fromEntries(Object.entries(s.marks).filter(([k]) => !['offline', 'online'].includes(k))) : null;
+    const { rows: [row] } = await db.query(`update submissions set ig_url = $2, tagged_ids = $3, answers = $4, marks = $5, status = 'submitted', score = null,
+      participant_count = null, reviewed_by = null, reviewed_at = null, override_note = null, reject_reason = null,
+      adjustments = coalesce(adjustments, '[]'::jsonb) || $6::jsonb where id = $1 returning *`,
+    [id, ig_url, tagged, answers ? JSON.stringify(answers) : null, marks ? JSON.stringify(marks) : null, JSON.stringify([e])]);
+    return subRow(row);
+  },
   // Super Admin / Challenge PIC: change the points of a validated submission, while the event is open or after
   // it closed. A reason is required; every change is kept on the submission and the group is told.
   async adjustScore({ db, me }, { id, score, note }) {

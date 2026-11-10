@@ -394,6 +394,27 @@ export function gameMethods({ load, save, delay, fail }) {
       s.submissions = s.submissions.filter((y) => !same(y));
       save(); return delay({ ids });
     },
+    // Same as editSubmission() on the server: Give and Grow only; back to pending with the new data.
+    async editSubmission(id, patch = {}) {
+      const s = load();
+      if (!canDemo(s, 'challenges.manage')) return fail('Hanya Super Admin dan Challenge PIC yang bisa mengedit submission.');
+      const i = s.submissions.findIndex((x) => x.id === id);
+      if (i < 0) return fail('Submission tidak ditemukan. Muat ulang antrean.');
+      const sub = s.submissions[i];
+      const c = s.challenges.find((x) => x.id === sub.challenge_id);
+      if (withDefaults(c?.scoring).type !== 'give_grow') return fail('Edit oleh panitia hanya untuk challenge Give and Grow.');
+      const link = (v) => String(v ?? '').trim().slice(0, 500) || null;
+      const ig_url = link(patch.ig_url);
+      if (!ig_url) return fail(sub.target_id ? 'Link Reels wajib diisi.' : 'Link video resmi wajib diisi.');
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      const e = { kind: 'edit', note: String(patch.note || '').trim() || null, by: me?.id, by_name: me?.full_name, by_role: me?.role_id, at: new Date(demoNow()).toISOString() };
+      const team = new Set(s.profiles.filter((p) => p.group_no === sub.group_no && isGamePlayer(p)).map((p) => p.id));
+      const marks = sub.marks ? Object.fromEntries(Object.entries(sub.marks).filter(([k]) => !['offline', 'online'].includes(k))) : null;
+      s.submissions[i] = { ...sub, ig_url, marks, status: 'submitted', score: null, participant_count: null, reviewed_by: null, reviewed_at: null, override_note: null, reject_reason: null,
+        ...(sub.target_id ? {} : { tagged_ids: [...new Set((patch.tagged_ids || sub.tagged_ids || []).filter((x) => team.has(x)))], answers: { ...(sub.answers || {}), answer: link(patch.bts) || '' } }),
+        adjustments: [...(sub.adjustments || []), e] };
+      save(); return delay(structuredClone(s.submissions[i]));
+    },
     // Same as adjustScore() on the server.
     async adjustScore(id, score, note) {
       const s = load();

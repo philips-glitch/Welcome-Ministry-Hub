@@ -68,6 +68,7 @@ export const serverApi = {
   reviewSubmission: (id, patch) => call('reviewSubmission', { id, patch }),
   reopenSubmission: (id) => call('reopenSubmission', { id }),
   deleteSubmission: (id) => call('deleteSubmission', { id }),
+  editSubmission: (id, patch) => call('editSubmission', { id, patch }),
   adjustScore: (id, score, note) => call('adjustScore', { id, score, note }),
   async mediaUrl(path) { return path ? `/api/media?path=${encodeURIComponent(path)}` : null; },
   groupScores: () => call('groupScores'),

@@ -316,6 +316,24 @@ await kapten.call('reviewSubmission', { id: reelKapten.id, patch: { status: 'val
 // team: 50 + (Ana offline + Budi online = 2 of 3) × 40 = 26.667 + 5 + 2 = 83.667 → 83.7
 assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r3.id).points, 83.7);
 ok('R3: leader submits video + BTS + offline; members submit own Reels; approved Reels count online (captains never)');
+// R3 edit by Super Admin / PIC only (also after the deadline): new links + offline members, back to pending.
+await rejects(leader.call('editSubmission', { id: s3.id, patch: { ig_url: 'https://x' } }), /Super Admin dan Challenge PIC/);
+await rejects(kapten.call('editSubmission', { id: s3.id, patch: { ig_url: 'https://x' } }), /Super Admin dan Challenge PIC/);
+await rejects(admin.call('editSubmission', { id: s2b.id, patch: { ig_url: 'https://x' } }), /Give and Grow/);
+await admin.call('saveChallenge', { c: { id: r3.id, deadline_at: new Date(Date.now() - 60e3).toISOString() } });
+const e3 = await admin.call('editSubmission', { id: s3.id, patch: { ig_url: ' https://video-fixed ', bts: 'https://drive/bts2', tagged_ids: [ids.ana, ids.budi, ids.dodi], note: 'link salah' } });
+assert.deepEqual([e3.status, e3.score, e3.ig_url, e3.answers.answer, e3.tagged_ids.sort().join()], ['submitted', null, 'https://video-fixed', 'https://drive/bts2', [ids.ana, ids.budi].sort().join()]);
+assert.equal(e3.marks.offline, undefined); assert.equal(e3.marks.fit, 20);
+assert.equal(e3.adjustments.at(-1).kind, 'edit');
+// the edited (pending) team video no longer counts — only Budi's approved Reels (1/3 × 40)
+assert.equal((await ana.call('groupScores')).find((x) => x.group_no === '01' && x.challenge_id === r3.id).points, 13.3);
+await rejects(admin.call('editSubmission', { id: s3.id, patch: { ig_url: '' } }), /wajib/);
+const e3r = await admin.call('editSubmission', { id: reelBudi.id, patch: { ig_url: 'https://instagram.com/reel/budi2' } });
+assert.deepEqual([e3r.status, e3r.ig_url], ['submitted', 'https://instagram.com/reel/budi2']);
+// Re-validated on the new data: Ana + Budi offline = 2 of 3 → 50 + 26.667 + 5 + 2
+assert.equal((await kapten.call('reviewSubmission', { id: s3.id, patch: { status: 'validated', checks: [true], marks: { ...marks, offline: [ids.ana, ids.budi] } } })).score, 83.667);
+await admin.call('saveChallenge', { c: { id: r3.id, deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
+ok('R3: Super Admin / PIC edit a submission (links, offline members, Reels) even after the deadline → back to pending');
 // R4: only the Group Leader submits; the validator confirms who is in the PDF; the server scores it.
 const r4c = ch.find((c) => c.code === 'R4');
 await admin.call('saveChallenge', { c: { id: r4c.id, status: 'live', open_at: new Date(Date.now() - 60e3).toISOString(), deadline_at: new Date(Date.now() + 7 * 864e5).toISOString() } });
