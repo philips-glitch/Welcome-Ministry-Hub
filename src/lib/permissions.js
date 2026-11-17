@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   { id: 'roles.manage', label: 'Ubah role & hak akses', category: 'Member' },
   { id: 'portal.view', label: 'Buka Game Portal', category: 'Portal' },
   { id: 'portal.submit', label: 'Submit challenge untuk grup', category: 'Portal' },
+  { id: 'attendance.manage', label: 'Kelola absensi acara (QR)', category: 'Admin' },
 ];
 
 export const ROLES = [
@@ -30,6 +31,9 @@ export const DEFAULT_GRANTS = {
   group_leader: ['portal.view', 'portal.submit'],
   member: ['portal.view'],
 };
+
+// Who checks in at the main event by scanning the QR code (Super Admins run it).
+export const ATTENDEE_ROLES = ['member', 'group_leader', 'captain', 'challenge_pic'];
 
 // Super Admin always keeps every permission, so nobody can lock the event out.
 export const LOCKED_ROLE = 'super_admin';

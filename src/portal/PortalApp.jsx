@@ -14,6 +14,7 @@ import Submit from './Submit.jsx';
 import Leaderboard from './Leaderboard.jsx';
 import MiniGames from './MiniGames.jsx';
 import Notifications from './Notifications.jsx';
+import CheckIn from './CheckIn.jsx';
 import useNotifications from './useNotifications.js';
 
 const ICONS = {
@@ -33,7 +34,7 @@ export const Leaf = ({ size = 24 }) => (
 
 // route → tab it belongs to
 const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['games', 'Mini Games', 'game'], ['me', 'Me', 'me']];
-const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', games: 'games', me: 'me', notifications: null };
+const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', games: 'games', me: 'me', notifications: null, checkin: null };
 
 export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
@@ -60,6 +61,7 @@ export default function PortalApp({ route }) {
   const me = {
     id: profile.id,
     first: (profile.full_name || profile.username || '').split(' ')[0],
+    name: profile.full_name || profile.username,
     roleName: roleName(profile.role_id),
     group: g && { no: g[0], name: g[1], color: g[2] },
     canSubmit: canSubmitFor(challenge),
@@ -85,7 +87,8 @@ export default function PortalApp({ route }) {
   }, [notif.unread]);
 
   let content;
-  if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
+  if (page === 'checkin') content = <CheckIn me={me} go={go} />;
+  else if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
   else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id, swap = null) => { setRiddleId(id); setReplaces(swap); go('submit'); }} />;

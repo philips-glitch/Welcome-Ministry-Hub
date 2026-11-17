@@ -1,13 +1,14 @@
 // The app's data API: POST /api/rpc { method, args } → { data } | { error }.
 // Method names and results match src/lib/demoStore.js / demoGame.js, so the screens work the same in both modes.
 // Every method checks the caller's permissions here (role → permissions in role_permissions).
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { hashPassword, verifyPassword, sessionSecret, signSession, readSession, parseCookies, sessionCookie, clearCookie, COOKIE } from './auth.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders } from './notify.js';
 import { normalizeUsername, usernameError, authEmail } from '../src/lib/username.js';
-import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts, submitPartParts } from '../src/lib/game.js';
+import { isConnect, unitKey, groupPoints, withDefaults, drawRiddles, itemMax, revalidateWindow, computeScore, giveGrowParts, submitPartParts, fmtWIB } from '../src/lib/game.js';
 import { isGamePlayer, validatesOnly, GAME_PLAYER_SQL } from '../src/lib/groups.js';
 import { randomPassword } from '../src/lib/roster.js';
+import { ATTENDEE_ROLES } from '../src/lib/permissions.js';
 import { setupPassword, setupUsers } from './schema.js';
 
 export class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -62,6 +63,15 @@ export async function loadCaller(db, req) {
 }
 
 const can = (me, p) => !!me?.perms.has(p);
+// The main event's attendance record, created on first use (21 Nov 2026, 06:00–23:59 WIB; admins can change it).
+const newToken = () => randomBytes(18).toString('base64url');
+async function attendanceEvent(db) {
+  const { rows: [e] } = await db.query('select * from attendance_events order by created_at limit 1');
+  if (e) return e;
+  await db.query('insert into attendance_events (name, token, opens_at, closes_at) select $1, $2, $3, $4 where not exists (select 1 from attendance_events)',
+    ['Acara Utama WM 2026', newToken(), '2026-11-20T23:00:00Z', '2026-11-21T16:59:00Z']);
+  return (await db.query('select * from attendance_events order by created_at limit 1')).rows[0];
+}
 const staff = (me) => can(me, 'submissions.validate') || can(me, 'scores.view');
 const needUser = (me) => { if (!me) throw new HttpError(401, 'Sesi berakhir. Silakan masuk lagi.'); };
 
@@ -603,6 +613,58 @@ const methods = {
       }
     }
     return out;
+  },
+
+  // ── Attendance (main event, 21 Nov): scan the QR → present ──
+  async getAttendance({ db, me }) {
+    needUser(me);
+    if (!can(me, 'attendance.manage')) deny();
+    const event = await attendanceEvent(db);
+    const { rows } = await db.query(`select p.id, p.full_name, p.username, p.role_id, p.group_no, a.checked_at, a.method, m.full_name as marked_by_name
+      from profiles p left join attendance a on a.profile_id = p.id and a.event_id = $1 left join profiles m on m.id = a.marked_by
+      where p.active and p.role_id = any($2) order by p.group_no nulls last, p.full_name`, [event.id, ATTENDEE_ROLES]);
+    return { event, rows };
+  },
+  async saveAttendanceEvent({ db, me }, { patch = {} }) {
+    needUser(me);
+    if (!can(me, 'attendance.manage')) deny();
+    const event = await attendanceEvent(db);
+    const name = String(patch.name ?? event.name).trim().slice(0, 120) || event.name;
+    const opens = patch.opens_at || null, closes = patch.closes_at || null;
+    if (opens && closes && new Date(closes) <= new Date(opens)) bad('Jam tutup harus setelah jam buka.');
+    return (await db.query('update attendance_events set name = $2, opens_at = $3, closes_at = $4 where id = $1 returning *', [event.id, name, opens, closes])).rows[0];
+  },
+  // A new QR: the old one stops working (e.g. a photo of it was shared).
+  async regenerateAttendanceToken({ db, me }) {
+    needUser(me);
+    if (!can(me, 'attendance.manage')) deny();
+    const event = await attendanceEvent(db);
+    return (await db.query('update attendance_events set token = $2 where id = $1 returning *', [event.id, newToken()])).rows[0];
+  },
+  async markAttendance({ db, me }, { profileId, present }) {
+    needUser(me);
+    if (!can(me, 'attendance.manage')) deny();
+    const event = await attendanceEvent(db);
+    if (!present) { await db.query('delete from attendance where event_id = $1 and profile_id = $2', [event.id, profileId]); return { ok: true }; }
+    const { rows: [p] } = await db.query('select id from profiles where id = $1 and active and role_id = any($2)', [profileId, ATTENDEE_ROLES]);
+    if (!p) bad('Orang ini tidak ada di daftar absensi.');
+    await db.query(`insert into attendance (event_id, profile_id, method, marked_by) values ($1, $2, 'manual', $3) on conflict do nothing`, [event.id, profileId, me.id]);
+    return { ok: true };
+  },
+  // The QR code opens the portal with its token; the signed-in person is marked present once (first scan counts).
+  async checkIn({ db, me }, { token }) {
+    needUser(me);
+    const { rows: [event] } = await db.query('select * from attendance_events where token = $1', [String(token || '')]);
+    if (!event) bad('QR code ini tidak berlaku (mungkin sudah diganti panitia). Scan QR yang sedang ditampilkan di acara.');
+    if (!me.active || !ATTENDEE_ROLES.includes(me.role_id)) bad('Absensi hanya untuk Member, Group Leader, Captain dan Challenge PIC.');
+    const mine = async () => (await db.query('select checked_at from attendance where event_id = $1 and profile_id = $2', [event.id, me.id])).rows[0];
+    const done = await mine();
+    if (done) return { event: event.name, checked_at: done.checked_at, already: true };
+    const now = Date.now();
+    if (event.opens_at && now < new Date(event.opens_at).getTime()) bad(`Absensi belum dibuka. Mulai ${fmtWIB(event.opens_at)}.`);
+    if (event.closes_at && now > new Date(event.closes_at).getTime()) bad('Absensi sudah ditutup. Hubungi panitia di meja registrasi.');
+    const { rows: [row] } = await db.query('insert into attendance (event_id, profile_id) values ($1, $2) on conflict do nothing returning checked_at', [event.id, me.id]);
+    return row ? { event: event.name, checked_at: row.checked_at, already: false } : { event: event.name, checked_at: (await mine()).checked_at, already: true };
   },
 
   // ── Notifications ──

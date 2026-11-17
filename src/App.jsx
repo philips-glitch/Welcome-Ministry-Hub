@@ -7,6 +7,7 @@ import ChallengeBuilder from './pages/ChallengeBuilder.jsx';
 import Scoring from './pages/Scoring.jsx';
 import Members from './pages/Members.jsx';
 import Roles from './pages/Roles.jsx';
+import Attendance from './pages/Attendance.jsx';
 import PortalApp from './portal/PortalApp.jsx';
 import Login from './auth/Login.jsx';
 import { useAuth } from './auth/AuthContext.jsx';
@@ -20,6 +21,7 @@ export const ADMIN_NAV = [
   ['challenges', 'Challenges', 'challenges.manage'],
   ['queue', 'Validation Queue', 'submissions.validate'],
   ['scoring', 'Scoring & Leaderboard', 'scores.view'],
+  ['attendance', 'Absensi', 'attendance.manage'],
   ['members', 'Members', 'members.view'],
   ['roles', 'Roles & Access', 'roles.manage'],
 ];
@@ -90,6 +92,7 @@ function AdminShell({ route: r, can }) {
   else if (r === 'scoring') content = <Scoring />;
   else if (r === 'members') content = <Members />;
   else if (r === 'roles') content = <Roles />;
+  else if (r === 'attendance') content = <Attendance />;
 
   return (
     <div className="shell">

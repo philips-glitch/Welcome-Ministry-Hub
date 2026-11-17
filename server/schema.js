@@ -147,6 +147,23 @@ create table if not exists notifications (
   dedupe_key text unique,
   created_at timestamptz not null default now()
 );
+-- Main event attendance: one QR (token) with active hours; one row per person who checked in.
+create table if not exists attendance_events (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  token text not null unique,
+  opens_at timestamptz,
+  closes_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create table if not exists attendance (
+  event_id uuid not null references attendance_events on delete cascade,
+  profile_id uuid not null references profiles on delete cascade,
+  checked_at timestamptz not null default now(),
+  method text not null default 'scan' check (method in ('scan', 'manual')),
+  marked_by uuid references profiles on delete set null,
+  primary key (event_id, profile_id)
+);
 create table if not exists notification_reads (
   user_id uuid not null references profiles on delete cascade,
   notification_id uuid not null references notifications on delete cascade,
@@ -161,7 +178,7 @@ const wib = (s) => (s ? new Date(s + ':00+07:00').toISOString() : null);
 // through a web API for its anon/authenticated roles: row-level security with no policies + revoked rights
 // shuts that door. The server connects as the tables' owner, which row-level security doesn't restrict.
 const TABLES = ['app_meta', 'roles', 'permissions', 'role_permissions', 'groups', 'profiles', 'profile_gtkm', 'login_attempts',
-  'challenges', 'riddles', 'riddle_draws', 'media', 'submissions', 'notifications', 'notification_reads'];
+  'challenges', 'riddles', 'riddle_draws', 'media', 'submissions', 'notifications', 'notification_reads', 'attendance_events', 'attendance'];
 const LOCKDOWN = `${TABLES.map((t) => `alter table ${t} enable row level security;`).join('\n')}
 do $$ declare r text; begin
   foreach r in array array['anon', 'authenticated'] loop
@@ -182,6 +199,7 @@ export async function migrate(db) {
   await r3Reels(db);
   await r4Form(db);
   await r4Guideline(db);
+  await addPermissions(db);
   await bootstrapAdmins(db);
 }
 
@@ -297,6 +315,13 @@ async function r4Guideline(db) {
       [c.id, JSON.stringify(R4.scoring), JSON.stringify(form), JSON.stringify(R4.sections), wib(R4.deadline), wib(R4.validate_by)]);
   }
   await db.query(`insert into app_meta values ('r4_guideline', $1) on conflict (key) do nothing`, [new Date().toISOString()]);
+}
+// Permissions added after the first seed (e.g. attendance.manage): registered, and Super Admin always has them.
+async function addPermissions(db) {
+  for (const [i, p] of PERMISSIONS.entries()) {
+    await db.query('insert into permissions (id, label, category, sort) values ($1,$2,$3,$4) on conflict (id) do nothing', [p.id, p.label, p.category, i + 1]);
+  }
+  await db.query(`insert into role_permissions select 'super_admin', id from permissions on conflict do nothing`);
 }
 async function updateTexts(db) {
   for (const [code, key, from, to] of TEXT_UPDATES) {

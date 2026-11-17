@@ -418,6 +418,42 @@ assert.equal(r4g.scoring.type, 'submit_participation'); assert.equal(new Date(r4
 assert.equal(r4g.form.photo_label, 'Cover'); assert.equal(r4g.form.link, 'required'); assert.ok(r4g.sections.rules.includes('PDF in a 16:9 format'));
 ok('the live R4 gets the guideline, scoring and 19 Nov 21:00 deadline once (admin form wording kept)');
 
+// 7c · attendance at the main event: QR token + active hours; first scan counts; admin can mark by hand
+{
+  await rejects(kapten.call('getAttendance'), /izin/);
+  const a0 = await admin.call('getAttendance');
+  assert.equal(a0.event.name, 'Acara Utama WM 2026');
+  assert.ok(a0.rows.some((r) => r.id === ids.budi) && a0.rows.some((r) => r.id === ids.kapten) && !a0.rows.some((r) => r.id === adminId));
+  const t0 = a0.event.token;
+  await rejects(budi.call('checkIn', { token: 'nope' }), /tidak berlaku/);
+  const at = (h) => new Date(Date.now() + h * 3600e3).toISOString();
+  await admin.call('saveAttendanceEvent', { patch: { opens_at: at(1), closes_at: at(5) } });
+  await rejects(budi.call('checkIn', { token: t0 }), /belum dibuka/);
+  await rejects(admin.call('saveAttendanceEvent', { patch: { opens_at: at(5), closes_at: at(1) } }), /setelah jam buka/);
+  await admin.call('saveAttendanceEvent', { patch: { name: 'Acara Utama · 21 Nov', opens_at: at(-1), closes_at: at(5) } });
+  const c1 = await budi.call('checkIn', { token: t0 });
+  assert.deepEqual([c1.already, c1.event], [false, 'Acara Utama · 21 Nov']);
+  const c2 = await budi.call('checkIn', { token: t0 });
+  assert.equal(c2.already, true); assert.equal(new Date(c2.checked_at).getTime(), new Date(c1.checked_at).getTime());
+  await rejects(admin.call('checkIn', { token: t0 }), /hanya untuk/);
+  // A new QR: the old one stops working.
+  const t1 = (await admin.call('regenerateAttendanceToken')).token;
+  assert.notEqual(t1, t0);
+  await rejects(leader.call('checkIn', { token: t0 }), /tidak berlaku/);
+  assert.equal((await leader.call('checkIn', { token: t1 })).already, false);
+  // By hand: Captain marked present by the admin; Budi's attendance cancelled.
+  await admin.call('markAttendance', { profileId: ids.kapten, present: true });
+  await admin.call('markAttendance', { profileId: ids.budi, present: false });
+  const a1 = (await admin.call('getAttendance')).rows;
+  const row = (id) => a1.find((r) => r.id === id);
+  assert.equal(row(ids.kapten).method, 'manual'); assert.ok(row(ids.kapten).marked_by_name);
+  assert.equal(row(ids.ana).method, 'scan'); assert.ok(row(ids.ana).checked_at);
+  assert.equal(row(ids.budi).checked_at, null);
+  await admin.call('saveAttendanceEvent', { patch: { opens_at: at(-5), closes_at: at(-1) } });
+  await rejects(budi.call('checkIn', { token: t1 }), /sudah ditutup/);
+}
+ok('attendance: QR token + active hours, first scan counts, new QR voids the old one, admin marks by hand; admins only');
+
 // 8 · passwords: reset signs the person out; super admin protected
 await admin.call('setPassword', { id: ids.budi, password: 'NewPass88' });
 await rejects(budi.call('listProfiles'), /Sesi berakhir/);

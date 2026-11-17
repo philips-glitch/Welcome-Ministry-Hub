@@ -5,6 +5,7 @@ import { isConnect, marksScore, unitKey, groupPoints, withDefaults, drawRiddles,
 import { isPlayer, isGamePlayer, validatesOnly, playsWithoutPoints } from './groups.js';
 import { notifyReview, notifyReopen, notifyAdjust, notifyChallenge, syncReminders, seedNotifications, demoNow } from './demoNotify.js';
 import { putMedia, mediaObjectUrl } from './demoMedia.js';
+import { ATTENDEE_ROLES } from './permissions.js';
 
 // A submission plus who reviewed it (name + role), like the server returns it.
 const withReviewer = (s, x) => {
@@ -91,6 +92,14 @@ export function seedGame(profiles) {
   const groups = GROUPS.map(([no, name, color], i) => ({ no, name, color, min_size: 13, max_size: 14, sort: i + 1, locked_at: null, locked_by: null }));
   return { groups, challenges, riddles, draws, submissions, gtkm };
 }
+
+// The demo's main-event attendance (created on first use).
+const attToken = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(16).padStart(2, '0')).join('');
+const attEvent = (s) => {
+  if (!s.attendance) s.attendance = [];
+  if (!s.attendanceEvent) s.attendanceEvent = { id: 'att-main', name: 'Acara Utama WM 2026', token: attToken(), opens_at: null, closes_at: null };
+  return s.attendanceEvent;
+};
 
 // Game methods over the demo state. `ctx` = { load, save, delay, fail }.
 export function gameMethods({ load, save, delay, fail }) {
@@ -381,6 +390,54 @@ export function gameMethods({ load, save, delay, fail }) {
       s.submissions[i] = { ...s.submissions[i], status: 'submitted', score: null, reviewed_by: null, reviewed_at: null, override_note: null, reject_reason: null, reopened_at: new Date(demoNow()).toISOString() };
       notifs(s); notifyReopen(s, s.submissions[i]);
       save(); return delay(structuredClone(s.submissions[i]));
+    },
+    // ── Attendance: same as the server (the demo event has no active hours, so it can be tried any time) ──
+    async getAttendance() {
+      const s = load();
+      if (!canDemo(s, 'attendance.manage')) return fail('Tidak punya izin untuk ini.');
+      const event = attEvent(s);
+      const name = (id) => s.profiles.find((p) => p.id === id)?.full_name ?? null;
+      const rows = s.profiles.filter((p) => p.active && ATTENDEE_ROLES.includes(p.role_id))
+        .map((p) => { const a = s.attendance.find((x) => x.profile_id === p.id); return { id: p.id, full_name: p.full_name, username: p.username, role_id: p.role_id, group_no: p.group_no, checked_at: a?.checked_at ?? null, method: a?.method ?? null, marked_by_name: a ? name(a.marked_by) : null }; })
+        .sort((a, b) => String(a.group_no ?? 'zz').localeCompare(String(b.group_no ?? 'zz')) || String(a.full_name).localeCompare(String(b.full_name)));
+      save(); return delay(structuredClone({ event, rows }));
+    },
+    async saveAttendanceEvent(patch = {}) {
+      const s = load();
+      if (!canDemo(s, 'attendance.manage')) return fail('Tidak punya izin untuk ini.');
+      const e = attEvent(s);
+      if (patch.opens_at && patch.closes_at && new Date(patch.closes_at) <= new Date(patch.opens_at)) return fail('Jam tutup harus setelah jam buka.');
+      Object.assign(e, { name: String(patch.name ?? e.name).trim() || e.name, opens_at: patch.opens_at || null, closes_at: patch.closes_at || null });
+      save(); return delay(structuredClone(e));
+    },
+    async regenerateAttendanceToken() {
+      const s = load();
+      if (!canDemo(s, 'attendance.manage')) return fail('Tidak punya izin untuk ini.');
+      const e = attEvent(s); e.token = attToken();
+      save(); return delay(structuredClone(e));
+    },
+    async markAttendance(profileId, present) {
+      const s = load();
+      if (!canDemo(s, 'attendance.manage')) return fail('Tidak punya izin untuk ini.');
+      attEvent(s);
+      if (!present) s.attendance = s.attendance.filter((a) => a.profile_id !== profileId);
+      else if (!s.attendance.some((a) => a.profile_id === profileId)) s.attendance.push({ profile_id: profileId, checked_at: new Date().toISOString(), method: 'manual', marked_by: s.sessionId });
+      save(); return delay({ ok: true });
+    },
+    async checkIn(token) {
+      const s = load();
+      const e = attEvent(s);
+      if (!token || token !== e.token) return fail('QR code ini tidak berlaku (mungkin sudah diganti panitia). Scan QR yang sedang ditampilkan di acara.');
+      const me = s.profiles.find((p) => p.id === s.sessionId);
+      if (!me?.active || !ATTENDEE_ROLES.includes(me.role_id)) return fail('Absensi hanya untuk Member, Group Leader, Captain dan Challenge PIC.');
+      const done = s.attendance.find((a) => a.profile_id === me.id);
+      if (done) return delay({ event: e.name, checked_at: done.checked_at, already: true });
+      const now = Date.now();
+      if (e.opens_at && now < new Date(e.opens_at).getTime()) return fail('Absensi belum dibuka.');
+      if (e.closes_at && now > new Date(e.closes_at).getTime()) return fail('Absensi sudah ditutup. Hubungi panitia di meja registrasi.');
+      const row = { profile_id: me.id, checked_at: new Date().toISOString(), method: 'scan', marked_by: null };
+      s.attendance.push(row);
+      save(); return delay({ event: e.name, checked_at: row.checked_at, already: false });
     },
     // Same as deleteSubmission() on the server: the submission and all its earlier versions go.
     async deleteSubmission(id) {

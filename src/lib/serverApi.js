@@ -73,6 +73,12 @@ export const serverApi = {
   async mediaUrl(path) { return path ? `/api/media?path=${encodeURIComponent(path)}` : null; },
   groupScores: () => call('groupScores'),
 
+  getAttendance: () => call('getAttendance'),
+  saveAttendanceEvent: (patch) => call('saveAttendanceEvent', { patch }),
+  regenerateAttendanceToken: () => call('regenerateAttendanceToken'),
+  markAttendance: (profileId, present) => call('markAttendance', { profileId, present }),
+  checkIn: (token) => call('checkIn', { token }),
+
   listNotifications: () => call('listNotifications'),
   markNotificationsRead: (ids) => (ids?.length ? call('markNotificationsRead', { ids }) : Promise.resolve()),
 

@@ -1,7 +1,7 @@
 // In-browser stand-in for Supabase, used when VITE_SUPABASE_URL is not set.
 // Persists to localStorage (per browser only) — for demos and local dev, not security.
 import { MEMBERS, TEAMS, GROUPS, CAPTAINS, initialGroups } from '../data.js';
-import { DEFAULT_GRANTS } from './permissions.js';
+import { DEFAULT_GRANTS, PERMISSIONS } from './permissions.js';
 import { seedGame, gameMethods } from './demoGame.js';
 import { normalizeUsername, usernameError, authEmail } from './username.js';
 
@@ -49,6 +49,7 @@ function load() {
   if (state) return state;
   try { state = JSON.parse(localStorage.getItem(KEY)) || seed(); } catch { state = seed(); }
   ensureUsernames(state);
+  if (state.grants) state.grants.super_admin = PERMISSIONS.map((p) => p.id);
   return state;
 }
 // Every profile gets a username (from its email's local part, de-duplicated) — also upgrades
