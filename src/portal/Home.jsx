@@ -7,7 +7,7 @@ import { CountUp, urgency } from './motion.jsx';
 const nowMs = () => (api.mode === 'demo' ? DEMO_NOW : Date.now());
 const short = (iso) => fmtWIB(iso, { hour: undefined, minute: undefined, month: undefined }).replace(' WIB', '').toUpperCase();
 
-export default function Home({ go, me, standings, focus, challenges, data, openChallenge }) {
+export default function Home({ go, me, standings, showRank = true, focus, challenges, data, openChallenge }) {
   const cd = useCountdown(focus?.deadline_at ? new Date(focus.deadline_at).getTime() : 0);
   const u = focus?.status === 'live' ? urgency(focus.deadline_at) : 'calm';
   const idx = me.group ? standings.findIndex((g) => g.no === me.group.no) : -1;
@@ -104,7 +104,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
             </div>
           </div>
         )}
-        <button className="p-card p-row-link" onClick={() => go('leaderboard')}>
+        {showRank && <button className="p-card p-row-link" onClick={() => go('leaderboard')}>
           <div style={{ width: 56, height: 56, borderRadius: 18, background: '#F8E9C4', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
             <span style={{ fontSize: 10, fontWeight: 800, color: '#7A5410' }}>RANK</span>
             <span style={{ font: "800 24px/1 'Bricolage Grotesque'" }}>{mine ? '#' + mine.rank : '—'}</span>
@@ -114,7 +114,7 @@ export default function Home({ go, me, standings, focus, challenges, data, openC
             <span className="muted" style={{ fontSize: 13 }}>{rankHint}</span>
           </div>
           <span style={{ fontSize: 20, color: '#1F4D3A' }}>›</span>
-        </button>
+        </button>}
       </div>
     </div>
   );

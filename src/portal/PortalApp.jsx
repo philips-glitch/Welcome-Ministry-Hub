@@ -33,14 +33,17 @@ export const Leaf = ({ size = 24 }) => (
 );
 
 // route → tab it belongs to
-const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['games', 'Mini Games', 'game'], ['me', 'Me', 'me']];
+// The Leaderboard is hidden from the portal for now (scores stay on the admin Scoring page). Set to true to bring it back.
+const SHOW_LEADERBOARD = false;
+const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['games', 'Mini Games', 'game'], ['me', 'Me', 'me']]
+  .filter(([r]) => SHOW_LEADERBOARD || r !== 'leaderboard');
 const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', games: 'games', me: 'me', notifications: null, checkin: null };
 
 export default function PortalApp({ route }) {
   const { profile, can, signOut } = useAuth();
   const game = useGame();
   const go = (r) => { window.location.hash = '/portal/' + r; window.scrollTo(0, 0); };
-  const page = route in TAB_OF ? route : 'home';
+  const page = route in TAB_OF && (SHOW_LEADERBOARD || route !== 'leaderboard') ? route : 'home';
   const activeTab = TAB_OF[page];
   const standings = useMemo(() => buildStandings(game.scores, game.challenges || [], {}, game.groups || []), [game.scores, game.challenges, game.groups]);
 
@@ -89,7 +92,7 @@ export default function PortalApp({ route }) {
   let content;
   if (page === 'checkin') content = <CheckIn me={me} go={go} />;
   else if (!game.challenges) content = <div className="muted" style={{ padding: 16 }}>Memuat…</div>;
-  else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
+  else if (page === 'home') content = <Home go={go} me={me} standings={standings.rows} showRank={SHOW_LEADERBOARD} focus={game.focus} challenges={visible} data={game.focus && challenge?.id === game.focus.id ? data : null} openChallenge={openChallenge} />;
   else if (page === 'challenges') content = <ChallengeList me={me} challenges={visible} openChallenge={openChallenge} />;
   else if (page === 'challenge') content = <ChallengeDetail go={go} me={me} challenge={challenge} data={data} justSent={justSent} pickRiddle={(id, swap = null) => { setRiddleId(id); setReplaces(swap); go('submit'); }} />;
   else if (page === 'submit') content = me.canSubmit || (riddleId === 'reel' && me.canReel) ? <Submit key={challenge?.id + ':' + riddleId + ':' + replaces} go={go} me={me} challenge={challenge} data={data} riddleId={riddleId} replaces={replaces} onSubmitted={onSubmitted} /> : <NoSubmit go={go} connect={isConnect(challenge)} />;
