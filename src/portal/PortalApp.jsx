@@ -33,8 +33,8 @@ export const Leaf = ({ size = 24 }) => (
 );
 
 // route → tab it belongs to
-// The Leaderboard is hidden from the portal for now (scores stay on the admin Scoring page). Set to true to bring it back.
-const SHOW_LEADERBOARD = false;
+// Leaderboard tab + rank card on Home. Set to false to hide them from the portal (scores stay on the admin Scoring page).
+const SHOW_LEADERBOARD = true;
 const TABS = [['home', 'Home', 'home'], ['challenges', 'Challenges', 'flag'], ['group', 'Group', 'users'], ['leaderboard', 'Leaderboard', 'trophy'], ['games', 'Mini Games', 'game'], ['me', 'Me', 'me']]
   .filter(([r]) => SHOW_LEADERBOARD || r !== 'leaderboard');
 const TAB_OF = { home: 'home', challenges: 'challenges', challenge: 'challenges', submit: 'challenges', group: 'group', leaderboard: 'leaderboard', games: 'games', me: 'me', notifications: null, checkin: null };
